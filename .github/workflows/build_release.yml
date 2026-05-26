@@ -114,9 +114,9 @@ jobs:
           echo "Type=Application" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Categories=Utility;Office;" >> pkg_root/usr/share/applications/kayposfnb.desktop
           
-          # Copy App Icon for Desktop Shortcut
+          # Copy App Icon for Desktop Shortcut (using icon-512.png because KFNB.png isn't committed)
           mkdir -p pkg_root/usr/share/pixmaps
-          cp ../../../../../assets/KFNB.png pkg_root/usr/share/pixmaps/kayposfnb.png
+          cp ../../../../../assets/icon-512.png pkg_root/usr/share/pixmaps/kayposfnb.png
           
           # Create symbolic link for terminal launch
           mkdir -p pkg_root/usr/bin
