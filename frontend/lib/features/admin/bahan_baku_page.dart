@@ -123,6 +123,8 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
         final minAlert = (m['min_stock_alert'] as num?)?.toDouble() ?? 0;
         final isLow = minAlert > 0 && stock <= minAlert;
 
+        final costPrice = (m['cost_price'] as num?)?.toDouble() ?? 0;
+
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -148,10 +150,10 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                 ),
                 const SizedBox(width: 8),
                 Text('Stok: ', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-                Text('${_fmtNum(stock)} ${m['unit']}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isLow ? cs.error : cs.onSurface)),
+                Text(_formatStock(stock, m['unit'] ?? ''), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isLow ? cs.error : cs.onSurface)),
               ]),
               const SizedBox(height: 2),
-              Text('HPP: ${fmtPrice((m['cost_price'] as num?)?.toDouble() ?? 0)}/${m['unit']}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+              Text('Total Aset / Modal: ${fmtPrice(stock * costPrice)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
             ])),
             PopupMenuButton(
               icon: const Icon(Icons.more_vert),
@@ -183,7 +185,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
               DataColumn(label: Text('Nama Bahan', style: TextStyle(fontWeight: FontWeight.bold))),
               DataColumn(label: Text('Satuan')),
               DataColumn(label: Text('Stok'), numeric: true),
-              DataColumn(label: Text('Harga Beli / Unit'), numeric: true),
+              DataColumn(label: Text('Total Aset / Modal'), numeric: true),
               DataColumn(label: Text('Min. Alert'), numeric: true),
               DataColumn(label: Text('')),
             ],
@@ -210,8 +212,8 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                     decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(6)),
                     child: Text(m['unit'] ?? '', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSecondaryContainer)),
                   )),
-                  DataCell(Text('${_fmtNum(stock)} ${m['unit']}', style: TextStyle(fontWeight: FontWeight.w900, color: isLow ? cs.error : cs.onSurface))),
-                  DataCell(Text(fmtPrice(costPrice))),
+                  DataCell(Text(_formatStock(stock, m['unit'] ?? ''), style: TextStyle(fontWeight: FontWeight.w900, color: isLow ? cs.error : cs.onSurface))),
+                  DataCell(Text(fmtPrice(stock * costPrice))),
                   DataCell(Text(_fmtNum(minAlert), style: TextStyle(color: cs.onSurfaceVariant))),
                   DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
                     IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: () => _openForm(m), tooltip: 'Edit'),
@@ -229,6 +231,15 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
   String _fmtNum(double n) {
     if (n == n.roundToDouble()) return n.round().toString();
     return n.toStringAsFixed(2);
+  }
+
+  String _formatStock(double stock, String unit) {
+    if (unit == 'gram' && stock >= 1000) {
+      return '${_fmtNum(stock)} $unit (${_fmtNum(stock / 1000)} Kg)';
+    } else if (unit == 'ml' && stock >= 1000) {
+      return '${_fmtNum(stock)} $unit (${_fmtNum(stock / 1000)} Liter)';
+    }
+    return '${_fmtNum(stock)} $unit';
   }
 }
 
@@ -249,19 +260,25 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
   String _selectedUnit = 'gram';
   bool _isSaving = false;
 
-  static const _units = ['gram', 'ml', 'pcs', 'lembar'];
+  static const _units = ['Kg', 'gram', 'Liter', 'ml', 'pcs'];
 
   @override
   void initState() {
     super.initState();
     final m = widget.item;
     _nameCtrl = TextEditingController(text: (m?['name'] ?? '').toString());
-    _stockCtrl = TextEditingController(text: m != null ? _fmtInit((m['stock'] as num?)?.toDouble() ?? 0) : '');
-    _costCtrl = TextEditingController(text: m != null ? _fmtInit((m['cost_price'] as num?)?.toDouble() ?? 0) : '');
+    
+    final stock = m != null ? (m['stock'] as num?)?.toDouble() ?? 0 : 0.0;
+    final costPrice = m != null ? (m['cost_price'] as num?)?.toDouble() ?? 0 : 0.0;
+    
+    _stockCtrl = TextEditingController(text: m != null ? _fmtInit(stock) : '');
+    _costCtrl = TextEditingController(text: m != null ? _fmtInit(stock * costPrice) : '');
     _minAlertCtrl = TextEditingController(text: m != null ? _fmtInit((m['min_stock_alert'] as num?)?.toDouble() ?? 0) : '');
 
     if (m != null && _units.contains(m['unit'])) {
       _selectedUnit = m['unit'];
+    } else if (m == null) {
+      _selectedUnit = 'Kg';
     }
   }
 
@@ -275,12 +292,31 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
+    final qtyBeliStr = _stockCtrl.text.replaceAll(',', '.');
+    final totalHargaStr = _costCtrl.text.replaceAll(',', '.');
+    
+    final qtyBeli = double.tryParse(qtyBeliStr) ?? 0;
+    final totalHarga = double.tryParse(totalHargaStr) ?? 0;
+    
+    String baseUnit = _selectedUnit;
+    double totalBaseQty = qtyBeli;
+    
+    if (_selectedUnit == 'Kg') {
+      baseUnit = 'gram';
+      totalBaseQty = qtyBeli * 1000;
+    } else if (_selectedUnit == 'Liter') {
+      baseUnit = 'ml';
+      totalBaseQty = qtyBeli * 1000;
+    }
+    
+    final pricePerBaseUnit = totalBaseQty > 0 ? totalHarga / totalBaseQty : 0.0;
+
     final data = {
       'name': toTitleCase(_nameCtrl.text.trim()),
-      'unit': _selectedUnit,
-      'stock': double.tryParse(_stockCtrl.text) ?? 0,
-      'cost_price': double.tryParse(_costCtrl.text) ?? 0,
-      'min_stock_alert': double.tryParse(_minAlertCtrl.text) ?? 0,
+      'unit': baseUnit,
+      'stock': totalBaseQty,
+      'cost_price': pricePerBaseUnit,
+      'min_stock_alert': double.tryParse(_minAlertCtrl.text.replaceAll(',', '.')) ?? 0,
     };
 
     try {
@@ -356,25 +392,25 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
               isMobile ? Column(children: [
                 TextFormField(
                   controller: _stockCtrl,
-                  decoration: InputDecoration(labelText: 'Stok Awal', isDense: true, prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20), suffixText: _selectedUnit),
+                  decoration: InputDecoration(labelText: 'Jumlah Beli', isDense: true, prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20), suffixText: _selectedUnit),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Harga Beli per 1 $_selectedUnit', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
+                  decoration: const InputDecoration(labelText: 'Total Harga Beli', isDense: true, prefixText: 'Rp ', prefixIcon: Icon(Icons.payments_outlined, size: 20)),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
               ]) : Row(children: [
                 Expanded(child: TextFormField(
                   controller: _stockCtrl,
-                  decoration: InputDecoration(labelText: 'Stok Awal', isDense: true, suffixText: _selectedUnit),
+                  decoration: InputDecoration(labelText: 'Jumlah Beli', isDense: true, suffixText: _selectedUnit),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
                 const SizedBox(width: 12),
                 Expanded(child: TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Harga Beli / 1 $_selectedUnit', isDense: true, prefixText: 'Rp '),
+                  decoration: const InputDecoration(labelText: 'Total Harga Beli', isDense: true, prefixText: 'Rp '),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
               ]),

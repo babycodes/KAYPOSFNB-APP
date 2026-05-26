@@ -37,8 +37,6 @@ class _KasirScreenState extends State<KasirScreen> {
   bool showHeldCarts = false;
 
   String? activeCartLabel;
-  bool showLowStock = false;
-  String stockTab = 'empty';
   String profileMsg = '';
   final _nameCtrl = TextEditingController();
   final _oldPasswordCtrl = TextEditingController();
@@ -50,8 +48,6 @@ class _KasirScreenState extends State<KasirScreen> {
   Map<String, dynamic> todayStats = {'total_transactions': 0, 'total_sales': 0, 'avg_transaction': 0};
   List<dynamic> txHistory = [];
   List<dynamic> heldCarts = [];
-  List<dynamic> lowStockItems = [];
-  List<dynamic> outOfStockItems = [];
   int _mobileNavIndex = 0;
 
   // === SAFE PARSERS — used everywhere, crash-proof ===
@@ -114,7 +110,7 @@ class _KasirScreenState extends State<KasirScreen> {
 
   void _closeAllModals() {
     showDashboard = false; showHistory = false; showProfile = false;
-    showHeldCarts = false; showLowStock = false; cartOpen = false; showSearch = false;
+    showHeldCarts = false; cartOpen = false; showSearch = false;
     searchQuery = '';
   }
 
@@ -130,7 +126,6 @@ class _KasirScreenState extends State<KasirScreen> {
         
         activeDiscounts = allDiscounts.where((d) => d['is_active'] == 1).toList();
       });
-      _loadLowStock();
     } catch (_) {}
   }
 
@@ -143,13 +138,6 @@ class _KasirScreenState extends State<KasirScreen> {
 
   Future<void> _loadHeldCarts() async {
     try { final r = await Api.get('/held-carts'); if (mounted) setState(() => heldCarts = r as List); } catch (_) {}
-  }
-
-  Future<void> _loadLowStock() async {
-    try {
-      final results = await Future.wait([Api.get('/inventory/low-stock'), Api.get('/inventory/out-of-stock')]);
-      setState(() { lowStockItems = results[0] as List; outOfStockItems = results[1] as List; });
-    } catch (_) {}
   }
 
   Future<void> _loadHistory() async {
@@ -228,11 +216,7 @@ class _KasirScreenState extends State<KasirScreen> {
   }
 
   double _calcUnitPrice(dynamic product, String unitName) {
-    final units = (product is Map ? product['units'] : null);
-    if (units == null || units is! List) return 0;
-    final unit = _findUnit(units, unitName);
-    if (unit == null) return 0;
-    return _safeNum(unit['price']);
+    return _safeNum(product['price']);
   }
 
   double _getHeldQty(int productId) {
@@ -360,18 +344,7 @@ class _KasirScreenState extends State<KasirScreen> {
   }
 
   void _handleProductSelect(dynamic product) {
-    final units = (product['units'] is List) ? product['units'] as List : [];
-    final booked = _getBookedStock(product['id']);
-    final held = _getHeldQty(product['id']);
-    final availableStock = _safeNum(product['stock_quantity'], double.infinity);
-    final trueAvailable = availableStock == double.infinity ? double.infinity : availableStock - booked - held;
-    
-    if (units.length > 1) {
-      showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-        builder: (_) => UnitSelectorDialog(product: product, availableStock: trueAvailable, onConfirm: _addToCart));
-    } else {
-      _addToCart(product, units.isNotEmpty ? (units[0]['unit_name']?.toString() ?? '') : '', 1);
-    }
+    _addToCart(product, 'pcs', 1);
   }
 
   void _addToCart(dynamic product, String unitName, num quantity) {
@@ -396,47 +369,9 @@ class _KasirScreenState extends State<KasirScreen> {
   
   void _setItemQuantity(int i, double qty) {
     if (qty < 0) qty = 0;
-    final item = cart[i];
-    final product = item['product'];
-    final unitName = item['selected_unit']?.toString() ?? 'pcs';
-    
-    final realStock = _safeNum(product['stock_quantity'], double.infinity);
-    if (realStock == double.infinity) {
-      setState(() { 
-        cart[i]['quantity'] = qty;
-        _consolidateProductCart(product);
-      });
-      return;
-    }
-    
-    final held = _getHeldQty(product['id']);
-    final availableStock = realStock - held;
-
-    final units = (product['units'] is List) ? product['units'] as List : [];
-    final unit = _findUnit(units, unitName);
-    final qtyPerUnit = _safeNum(unit?['qty_per_unit'], 1.0);
-
-    double otherCartQtyInBaseUnit = 0;
-    for (int j = 0; j < cart.length; j++) {
-      if (j != i && cart[j]['product'] is Map && cart[j]['product']['id'] == product['id']) {
-        final cUnit = _findUnit(units, cart[j]['selected_unit']?.toString() ?? '');
-        final cQtyPerUnit = _safeNum(cUnit?['qty_per_unit'], 1.0);
-        otherCartQtyInBaseUnit += _safeNum(cart[j]['quantity']) * cQtyPerUnit;
-      }
-    }
-    
-    final requestedInBaseUnit = qty * qtyPerUnit;
-    
-    if (otherCartQtyInBaseUnit + requestedInBaseUnit > availableStock) {
-      final allowedInBaseUnit = availableStock - otherCartQtyInBaseUnit;
-      qty = allowedInBaseUnit / qtyPerUnit;
-      if (qty < 0) qty = 0;
-      showToast(context, 'Stok maksimal: ${qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 2)} $unitName');
-    }
     
     setState(() {
       cart[i]['quantity'] = qty;
-      _consolidateProductCart(product);
     });
   }
 
@@ -561,15 +496,6 @@ class _KasirScreenState extends State<KasirScreen> {
                       const SizedBox(width: 4),
                       _toolbarBtn(Icons.print, 'Printer', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
                     ],
-                    // Stock button (Always visible)
-                    const SizedBox(width: 4),
-                    _toolbarBtn(
-                      Icons.inventory_2, 
-                      isMobile ? 'Stok' : 'Stok',
-                      color: outOfStockItems.isNotEmpty ? cs.errorContainer : (lowStockItems.isNotEmpty ? const Color(0xFFFEF3C7) : cs.surfaceContainer),
-                      textColor: outOfStockItems.isNotEmpty ? cs.error : (lowStockItems.isNotEmpty ? const Color(0xFFB45309) : cs.onSurfaceVariant),
-                      onTap: () => setState(() { _closeAllModals(); showLowStock = true; stockTab = outOfStockItems.isNotEmpty ? 'empty' : (lowStockItems.isNotEmpty ? 'low' : 'empty'); })
-                    ),
                     // Held carts indicator
                     if (heldCarts.isNotEmpty) ...[
                       const SizedBox(width: 4),
@@ -849,37 +775,6 @@ class _KasirScreenState extends State<KasirScreen> {
                 const SizedBox(height: 8),
                 SizedBox(width: double.infinity, height: 56, child: FilledButton(onPressed: cart.isEmpty ? null : _showPayment, style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: cs.onPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 1),
                   child: const Text('💳 BAYAR SEKARANG', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)))),
-              ])),
-            ]))))],
-      // Low stock overlay
-      if (showLowStock) ...[_overlay(() => setState(() => showLowStock = false)),
-        Center(child: Material(elevation: 8, borderRadius: BorderRadius.circular(16), color: cs.surfaceBright,
-          child: ConstrainedBox(constraints: BoxConstraints(maxWidth: 440, maxHeight: MediaQuery.sizeOf(context).height * 0.8),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Padding(padding: const EdgeInsets.all(16), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text('📦 Status Stok', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                InkWell(onTap: () => setState(() => showLowStock = false), child: Container(width: 32, height: 32, decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(8)), child: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant)))])),
-              // Tabs
-              Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Row(children: [
-                Expanded(child: InkWell(onTap: () => setState(() => stockTab = 'empty'), child: Container(padding: const EdgeInsets.symmetric(vertical: 8), decoration: BoxDecoration(color: stockTab == 'empty' ? cs.error : cs.surfaceContainer, borderRadius: BorderRadius.circular(12)),
-                  child: Center(child: Text('🚫 Habis (${outOfStockItems.length})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: stockTab == 'empty' ? cs.onError : cs.onSurfaceVariant)))))),
-                const SizedBox(width: 8),
-                Expanded(child: InkWell(onTap: () => setState(() => stockTab = 'low'), child: Container(padding: const EdgeInsets.symmetric(vertical: 8), decoration: BoxDecoration(color: stockTab == 'low' ? Colors.amber : cs.surfaceContainer, borderRadius: BorderRadius.circular(12)),
-                  child: Center(child: Text('⚠️ Rendah (${lowStockItems.length})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: stockTab == 'low' ? Colors.white : cs.onSurfaceVariant)))))),
-              ])),
-              const SizedBox(height: 8),
-              Flexible(child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(16), children: [
-                if (stockTab == 'empty') ...(outOfStockItems.isEmpty ? [const Center(child: Padding(padding: EdgeInsets.all(16), child: Text('Tidak ada stok habis 👍')))] : outOfStockItems.map((item) => Container(margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: cs.errorContainer.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.error.withValues(alpha: 0.2))),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)), Text(item['category_name'] ?? '-', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant))]),
-                    Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: cs.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                      child: Text('HABIS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: cs.error)))]))).toList()),
-                if (stockTab == 'low') ...(lowStockItems.isEmpty ? [const Center(child: Padding(padding: EdgeInsets.all(16), child: Text('Semua stok aman 👍')))] : lowStockItems.map((item) => Container(margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber.withValues(alpha: 0.3))),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)), Text('${item['category_name'] ?? '-'} · Min: ${item['min_stock_alert'] ?? 0}', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant))]),
-                    Text('${_safeNum(item['stock_quantity']).round()}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.amber[700]))]))).toList()),
               ])),
             ]))))],
       ]),

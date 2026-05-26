@@ -205,7 +205,13 @@ class _ProdukPageState extends State<ProdukPage> {
                           ]),
                         ])),
                         const SizedBox(width: 12),
-                        Text(fmtPrice((p['price'] as num?)?.toDouble() ?? 0), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: p['is_active'] == 1 ? cs.primary : cs.onSurfaceVariant)),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(fmtPrice((p['price'] as num?)?.toDouble() ?? 0), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: p['is_active'] == 1 ? cs.primary : cs.onSurfaceVariant)),
+                            Text('HPP: ${fmtPrice((p['total_hpp'] as num?)?.toDouble() ?? 0)}', style: TextStyle(fontSize: 12, color: cs.error)),
+                          ],
+                        ),
                         const SizedBox(width: 16),
                         ElevatedButton.icon(
                           onPressed: () => _openRecipe(p),
@@ -474,6 +480,19 @@ class _RecipeModalState extends State<RecipeModal> {
   }
 
   void _deleteIngredient(int id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Konfirmasi'),
+        content: const Text('Hapus bahan ini dari resep?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Ya, Hapus')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     try {
       await Api.delete('/resep/$id');
       _loadData();

@@ -75,7 +75,8 @@ class Api {
             p.barcode,
             c.name as category_name, 
             c.icon as category_icon,
-            p.is_active
+            p.is_active,
+            IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0) as total_hpp
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
           $activeFilter
@@ -112,7 +113,8 @@ class Api {
             p.barcode,
             c.name as category_name, 
             c.icon as category_icon,
-            p.is_active
+            p.is_active,
+            IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0) as total_hpp
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
           WHERE p.id = ?
