@@ -43,9 +43,6 @@ class Api {
           GROUP BY c.id
           ORDER BY c.name ASC
         ''');
-        List<Map<String, dynamic>> allUnits = [];
-        try { allUnits = await db.query('category_units'); } catch (_) {}
-        
         final List<Map<String, dynamic>> result = [];
         for (final c in rows) {
           try {
@@ -55,7 +52,6 @@ class Api {
               'icon': (c['icon'] ?? '📦').toString(),
               'sort_order': c['sort_order'] ?? 0,
               'total_products': (c['total_products'] as num?)?.toInt() ?? 0,
-              'units': allUnits.where((u) => u['category_id'] == c['id']).map((u) => Map<String, dynamic>.from(u)).toList(),
             });
           } catch (e) {
             debugPrint('CATEGORY MAPPING ERROR: $e');
@@ -525,19 +521,11 @@ class Api {
         
         try {
           await db.transaction((txn) async {
-            final catId = await txn.insert('categories', {
+            await txn.insert('categories', {
               'name': name,
               'icon': icon,
               'sort_order': sortOrder,
             });
-            
-            for (int i = 0; i < unitsList.length; i++) {
-              await txn.insert('category_units', {
-                'category_id': catId,
-                'unit_name': unitsList[i].toString().trim().toLowerCase(),
-                'sort_order': i,
-              });
-            }
           });
           return {'success': true};
         } catch (e) {
@@ -937,19 +925,6 @@ class Api {
             if (data.isNotEmpty) {
               await txn.update('categories', data, where: 'id = ?', whereArgs: [id]);
             }
-            
-            // Replace units if provided
-            final unitsList = body?['units'] as List?;
-            if (unitsList != null) {
-              await txn.delete('category_units', where: 'category_id = ?', whereArgs: [id]);
-              for (int i = 0; i < unitsList.length; i++) {
-                await txn.insert('category_units', {
-                  'category_id': id,
-                  'unit_name': unitsList[i].toString().trim().toLowerCase(),
-                  'sort_order': i,
-                });
-              }
-            }
           });
           return {'success': true};
         } catch (e) {
@@ -1075,7 +1050,6 @@ class Api {
         final rawId = path.split('/').last.split('?').first; // strip query params like ?force=1
         final id = int.tryParse(rawId);
         if (id == null) throw Exception('ID Kategori tidak valid');
-        await db.delete('category_units', where: 'category_id = ?', whereArgs: [id]);
         await db.delete('categories', where: 'id = ?', whereArgs: [id]);
         return {'success': true};
       }

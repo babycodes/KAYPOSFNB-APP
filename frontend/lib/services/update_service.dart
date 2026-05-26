@@ -23,7 +23,7 @@ class UpdateInfo {
 
 class UpdateService {
   static const String _repoOwner = 'babycodes';
-  static const String _repoName = 'KAYPOS-OFFLINE-APP';
+  static const String _repoName = 'KAYPOSFNB-APP';
   
   http.Client? _httpClient;
   bool _cancelled = false;
@@ -88,7 +88,7 @@ class UpdateService {
         final assets = data['assets'] as List? ?? [];
         
         String downloadUrl = data['html_url'] ?? '';
-        String fileName = 'kaypos_update$targetExt';
+        String fileName = 'kayposfnb_update$targetExt';
 
         // Find the matching asset for this OS
         for (var asset in assets) {

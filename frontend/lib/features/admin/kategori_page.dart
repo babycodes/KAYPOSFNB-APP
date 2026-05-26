@@ -125,7 +125,6 @@ class _KategoriPageState extends State<KategoriPage> {
   }
 
   Widget _buildCategoryItem(dynamic cat, ColorScheme cs) {
-    final units = (cat['units'] is List) ? cat['units'] as List : [];
     return Card(
       elevation: 0,
       color: cs.surfaceContainer,
@@ -164,16 +163,6 @@ class _KategoriPageState extends State<KategoriPage> {
                   },
                 ),
               ],
-            ),
-            const Spacer(),
-            Wrap(
-              spacing: 4, runSpacing: 4,
-              children: units.map<Widget>((u) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(6)),
-                child: Text(u['unit_name']?.toString() ?? '', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: cs.onSecondaryContainer)),
-              )).toList(),
-            ),
           ],
         ),
       ),
@@ -195,8 +184,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog> {
   late TextEditingController _nameCtrl;
   String _selectedIcon = '📦';
   late TextEditingController _sortCtrl;
-  late TextEditingController _unitCtrl;
-  List<String> units = [];
   bool isSaving = false;
 
   @override
@@ -207,14 +194,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog> {
     _sortCtrl = TextEditingController(
       text: (widget.category?['sort_order'] ?? 0).toString(),
     );
-    _unitCtrl = TextEditingController();
-
-    if (widget.category != null) {
-      final uList = widget.category['units'] as List? ?? [];
-      units = uList.map((u) => u['unit_name'].toString()).toList();
-    } else {
-      units = ['pcs'];
-    }
   }
 
   @override
@@ -222,7 +201,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog> {
     _nameCtrl.dispose();
 
     _sortCtrl.dispose();
-    _unitCtrl.dispose();
     super.dispose();
   }
 
@@ -289,16 +267,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog> {
     );
   }
 
-  void _addUnit() {
-    final u = _unitCtrl.text.trim().toLowerCase();
-    if (u.isNotEmpty && !units.contains(u)) {
-      setState(() {
-        units.add(u);
-        _unitCtrl.clear();
-      });
-    }
-  }
-
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => isSaving = true);
@@ -307,7 +275,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog> {
       'name': _nameCtrl.text.trim(),
       'icon': _selectedIcon,
       'sort_order': int.tryParse(_sortCtrl.text) ?? 0,
-      'units': units,
     };
 
     try {
@@ -395,60 +362,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog> {
                 ),
                 keyboardType: TextInputType.number,
               ),
-              const SizedBox(height: 24),
-
-              const Text(
-                'Satuan Produk (Units)',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: cs.outlineVariant),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: units.map((u) {
-                        return Chip(
-                          label: Text(u, style: const TextStyle(fontSize: 12)),
-                          deleteIcon: const Icon(Icons.close, size: 16),
-                          onDeleted: () => setState(() => units.remove(u)),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                        );
-                      }).toList(),
-                    ),
-                    if (units.isNotEmpty) const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _unitCtrl,
-                            decoration: const InputDecoration(
-                              hintText: 'Tambah satuan (cth: lusin)',
-                              isDense: true,
-                            ),
-                            onSubmitted: (_) => _addUnit(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filledTonal(
-                          onPressed: _addUnit,
-                          icon: const Icon(Icons.add),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
