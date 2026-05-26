@@ -775,50 +775,18 @@ class Api {
         final name = body?['name']?.toString() ?? 'Produk Baru';
         final categoryId = body?['category_id'] as int?;
         final barcode = body?['barcode']?.toString() ?? '';
-        final purchasePrice = (body?['purchase_price'] as num?)?.toDouble() ?? 0.0;
-        final stockQuantity = (body?['stock'] as num?)?.toDouble() ?? 0.0;
-        final minStockAlert = (body?['min_stock'] as num?)?.toDouble() ?? 0.0;
-        final baseUnit = body?['base_unit']?.toString() ?? 'pcs';
-        final purchaseUnit = body?['purchase_unit']?.toString() ?? '';
-        final stockUnit = body?['stock_unit']?.toString() ?? '';
-        final unitPrices = body?['unit_prices'] as List<dynamic>? ?? [];
+        final price = (body?['price'] as num?)?.toDouble() ?? 0.0;
+        final description = body?['description']?.toString() ?? '';
         
-        await db.transaction((txn) async {
-          final productId = await txn.insert('products', {
-            'name': name,
-            'category_id': categoryId,
-            'barcode': barcode.isEmpty ? null : barcode,
-            'purchase_price': purchasePrice,
-            'purchase_unit': purchaseUnit,
-            'base_unit': baseUnit,
-            'is_active': 1,
-          });
-          
-          await txn.insert('inventory', {
-            'product_id': productId,
-            'stock_quantity': stockQuantity,
-            'min_stock_alert': minStockAlert,
-            'stock_unit': stockUnit,
-          });
-          
-          if (unitPrices.isEmpty) {
-            await txn.insert('product_units', {
-              'product_id': productId,
-              'unit_name': baseUnit,
-              'qty_per_unit': 1.0,
-              'price': 0.0,
-            });
-          } else {
-            for (var u in unitPrices) {
-              await txn.insert('product_units', {
-                'product_id': productId,
-                'unit_name': u['unit_name']?.toString() ?? 'pcs',
-                'qty_per_unit': (u['qty_per_unit'] as num?)?.toDouble() ?? 1.0,
-                'price': (u['price'] as num?)?.toDouble() ?? 0.0,
-              });
-            }
-          }
+        await db.insert('products', {
+          'name': name,
+          'category_id': categoryId,
+          'barcode': barcode.isEmpty ? null : barcode,
+          'price': price,
+          'description': description,
+          'is_active': 1,
         });
+        
         return {'success': true};
       }
 
@@ -950,52 +918,20 @@ class Api {
         final name = body?['name']?.toString();
         final categoryId = body?['category_id'] as int?;
         final barcode = body?['barcode']?.toString();
-        final purchasePrice = (body?['purchase_price'] as num?)?.toDouble();
-        final purchaseUnit = body?['purchase_unit']?.toString();
-        final baseUnit = body?['base_unit']?.toString();
-        final stockUnit = body?['stock_unit']?.toString();
-        final stockQuantity = (body?['stock'] as num?)?.toDouble();
-        final minStockAlert = (body?['min_stock'] as num?)?.toDouble();
-        final unitPrices = body?['unit_prices'] as List<dynamic>?;
+        final price = (body?['price'] as num?)?.toDouble();
+        final description = body?['description']?.toString();
         
-        await db.transaction((txn) async {
-          Map<String, dynamic> pData = {};
-          if (name != null) pData['name'] = name;
-          if (categoryId != null) pData['category_id'] = categoryId;
-          if (barcode != null) pData['barcode'] = barcode.isEmpty ? null : barcode;
-          if (purchasePrice != null) pData['purchase_price'] = purchasePrice;
-          if (purchaseUnit != null) pData['purchase_unit'] = purchaseUnit;
-          if (baseUnit != null) pData['base_unit'] = baseUnit;
-          if (pData.isNotEmpty) await txn.update('products', pData, where: 'id = ?', whereArgs: [id]);
-          
-          if (stockQuantity != null || minStockAlert != null || stockUnit != null) {
-            Map<String, dynamic> iData = {};
-            if (stockQuantity != null) iData['stock_quantity'] = stockQuantity;
-            if (minStockAlert != null) iData['min_stock_alert'] = minStockAlert;
-            if (stockUnit != null) iData['stock_unit'] = stockUnit;
-            final count = await txn.update('inventory', iData, where: 'product_id = ?', whereArgs: [id]);
-            if (count == 0) {
-              await txn.insert('inventory', {
-                'product_id': id,
-                'stock_quantity': stockQuantity ?? 0,
-                'min_stock_alert': minStockAlert ?? 0,
-                'stock_unit': stockUnit ?? '',
-              });
-            }
-          }
-
-          if (unitPrices != null && unitPrices.isNotEmpty) {
-            await txn.delete('product_units', where: 'product_id = ?', whereArgs: [id]);
-            for (var u in unitPrices) {
-              await txn.insert('product_units', {
-                'product_id': id,
-                'unit_name': u['unit_name']?.toString() ?? 'pcs',
-                'qty_per_unit': (u['qty_per_unit'] as num?)?.toDouble() ?? 1.0,
-                'price': (u['price'] as num?)?.toDouble() ?? 0.0,
-              });
-            }
-          }
-        });
+        Map<String, dynamic> pData = {};
+        if (name != null) pData['name'] = name;
+        if (categoryId != null) pData['category_id'] = categoryId;
+        if (barcode != null) pData['barcode'] = barcode.isEmpty ? null : barcode;
+        if (price != null) pData['price'] = price;
+        if (description != null) pData['description'] = description;
+        
+        if (pData.isNotEmpty) {
+          await db.update('products', pData, where: 'id = ?', whereArgs: [id]);
+        }
+        
         return {'success': true};
       }
       // --- DISCOUNTS ---
