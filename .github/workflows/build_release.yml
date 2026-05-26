@@ -1,9 +1,9 @@
-name: Build and Release
+name: Build and Release v1.0.0
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
-  repository_dispatch:
-    types: [trigger-fnb-build]
 
 jobs:
   build:
@@ -40,17 +40,19 @@ jobs:
         shell: bash
 
       - name: Install Dependencies
+        working-directory: frontend
         run: flutter pub get
 
       - name: Build APK Release
+        working-directory: frontend
         run: flutter build apk --release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/app/outputs/flutter-apk/app-release.apk
-          tag_name: v1.0.${{ github.run_number }}
-          name: Release v1.0.${{ github.run_number }}
+          files: frontend/build/app/outputs/flutter-apk/app-release.apk
+          tag_name: v1.0.0
+          name: Release v1.0.0
           draft: false
           prerelease: false
         env:
