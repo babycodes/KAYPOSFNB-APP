@@ -1,0 +1,10 @@
+# Sensitive credentials
+keystore_base64.txt
+frontend/android/key.properties
+frontend/android/app/upload-keystore.jks
+frontend/android/app/upload-keystore.jks.bak
+frontend/android/app/upload-keystore.base64
+frontend/android/local.properties
+
+# Build artifacts
+frontend/build/
