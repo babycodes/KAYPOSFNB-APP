@@ -32,7 +32,7 @@ class LocalDb {
 
     final dbPath = await getDatabasesPath();
     _cachedDbDir = dbPath;
-    final path = join(dbPath, 'kaypos_offline.db');
+    final path = join(dbPath, 'kayposfnb.db');
 
     // Check for pending restore (staged before app exit)
     await _applyPendingRestore(dbPath, path);
