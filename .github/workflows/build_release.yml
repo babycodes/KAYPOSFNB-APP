@@ -108,7 +108,7 @@ jobs:
           echo "Version=1.0" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Name=KayPOS FNB" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Comment=Food & Beverage POS System" >> pkg_root/usr/share/applications/kayposfnb.desktop
-          echo "Exec=/opt/kayposfnb/Kaypos" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Exec=/opt/kayposfnb/kayposfnb" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Icon=kayposfnb" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Terminal=false" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Type=Application" >> pkg_root/usr/share/applications/kayposfnb.desktop
@@ -120,7 +120,7 @@ jobs:
           
           # Create symbolic link for terminal launch
           mkdir -p pkg_root/usr/bin
-          ln -s /opt/kayposfnb/Kaypos pkg_root/usr/bin/kayposfnb
+          ln -s /opt/kayposfnb/kayposfnb pkg_root/usr/bin/kayposfnb
           
           # Build DEB
           fpm -s dir -t deb -n kayposfnb -v 1.0.${{ github.run_number }} -p ../../../../../kayposfnb-v1.0.${{ github.run_number }}.deb -C pkg_root usr opt
@@ -179,8 +179,8 @@ jobs:
           [Files]
           Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
           [Icons]
-          Name: "{autoprograms}\KAYPOSFNB"; Filename: "{app}\frontend.exe"
-          Name: "{autodesktop}\KAYPOSFNB"; Filename: "{app}\frontend.exe"
+          Name: "{autoprograms}\KAYPOSFNB"; Filename: "{app}\kayposfnb.exe"
+          Name: "{autodesktop}\KAYPOSFNB"; Filename: "{app}\kayposfnb.exe"
           "@
           Set-Content -Path installer.iss -Value $SetupScript
           & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" installer.iss
