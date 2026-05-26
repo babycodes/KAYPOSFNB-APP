@@ -108,8 +108,8 @@ class _KategoriPageState extends State<KategoriPage> {
             : GridView.builder(
               padding: const EdgeInsets.only(bottom: 80),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 400,
-                mainAxisExtent: 140,
+                maxCrossAxisExtent: 280,
+                mainAxisExtent: 90,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),

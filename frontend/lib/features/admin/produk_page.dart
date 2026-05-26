@@ -196,7 +196,7 @@ class _ProdukPageState extends State<ProdukPage> {
                         const SizedBox(width: 12),
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Row(children: [
-                            Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: p['is_active'] == 1 ? cs.onSurface : cs.onSurfaceVariant))),
+                            Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: p['is_active'] == 1 ? cs.onSurface : cs.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis)),
                             if (p['is_active'] != 1) ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(4)), child: Text('NON-AKTIF', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onErrorContainer)))],
                           ]),
                           Row(children: [
@@ -483,6 +483,77 @@ class _RecipeModalState extends State<RecipeModal> {
     }
   }
 
+  void _showBahanPicker(BuildContext parentContext) {
+    showModalBottomSheet(
+      context: parentContext,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) {
+        String search = '';
+        return StatefulBuilder(builder: (ctx, setSheetState) {
+          final filteredBahan = _availableBahan.where((b) {
+            if (search.isEmpty) return true;
+            final q = search.toLowerCase();
+            return (b['name'] ?? '').toString().toLowerCase().contains(q);
+          }).toList();
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            maxChildSize: 0.9,
+            minChildSize: 0.4,
+            expand: false,
+            builder: (_, scrollController) => Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('Pilih Bahan Baku', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ]),
+                  const SizedBox(height: 8),
+                  TextField(
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'Cari bahan baku...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                    ),
+                    onChanged: (v) => setSheetState(() => search = v),
+                  ),
+                ]),
+              ),
+              const Divider(),
+              Expanded(
+                child: filteredBahan.isEmpty
+                    ? Center(child: Text('Tidak ditemukan', style: TextStyle(color: Theme.of(ctx).colorScheme.onSurfaceVariant)))
+                    : ListView.builder(
+                        controller: scrollController,
+                        itemCount: filteredBahan.length,
+                        itemBuilder: (_, i) {
+                          final b = filteredBahan[i];
+                          final isSelected = _selectedBahanId == b['id'];
+                          return ListTile(
+                            leading: Icon(Icons.science, color: isSelected ? Theme.of(ctx).colorScheme.primary : null),
+                            title: Text(b['name']?.toString() ?? '', style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                            subtitle: Text('${b['unit']} • Stok: ${(b['stock'] as num?)?.toStringAsFixed(0) ?? '0'}'),
+                            trailing: isSelected ? Icon(Icons.check_circle, color: Theme.of(ctx).colorScheme.primary) : null,
+                            onTap: () {
+                              setState(() => _selectedBahanId = b['id'] as int);
+                              Navigator.pop(ctx);
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ]),
+          );
+        });
+      },
+    );
+  }
+
   void _deleteIngredient(int id) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -580,47 +651,68 @@ class _RecipeModalState extends State<RecipeModal> {
           const SizedBox(height: 12),
           Form(
             key: _formKey,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: DropdownButtonFormField<int>(
-                    value: _selectedBahanId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Pilih Bahan Baku', isDense: true),
-                    items: _availableBahan.map((b) => DropdownMenuItem<int>(
-                      value: b['id'] as int,
-                      child: Text('${b['name']} (${b['unit']})'),
-                    )).toList(),
-                    onChanged: (v) => setState(() => _selectedBahanId = v),
-                    validator: (v) => v == null ? 'Wajib' : null,
+            child: Builder(builder: (context) {
+              final isMobile = MediaQuery.sizeOf(context).width < 600;
+
+              // Find selected bahan name for display
+              String selectedBahanLabel = 'Pilih Bahan Baku';
+              if (_selectedBahanId != null) {
+                try {
+                  final b = _availableBahan.firstWhere((e) => e['id'] == _selectedBahanId);
+                  selectedBahanLabel = '${b['name']} (${b['unit']})';
+                } catch (_) {}
+              }
+
+              final bahanSelector = InkWell(
+                onTap: () => _showBahanPicker(context),
+                borderRadius: BorderRadius.circular(12),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Bahan Baku *',
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.science, size: 20),
+                    suffixIcon: const Icon(Icons.arrow_drop_down),
+                    errorText: _selectedBahanId == null && _formKey.currentState?.validate() == false ? 'Wajib' : null,
                   ),
+                  child: Text(selectedBahanLabel, overflow: TextOverflow.ellipsis),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _qtyCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Qty Dibutuhkan', 
-                      isDense: true,
-                      suffixText: selectedUnit.isNotEmpty ? selectedUnit : null,
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    validator: (v) => v == null || v.isEmpty ? 'Wajib' : null,
-                  ),
+              );
+
+              final qtyField = TextFormField(
+                controller: _qtyCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Qty Dibutuhkan',
+                  isDense: true,
+                  suffixText: selectedUnit.isNotEmpty ? selectedUnit : null,
                 ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) => v == null || v.isEmpty ? 'Wajib' : null,
+              );
+
+              final addBtn = FilledButton.icon(
+                onPressed: _addIngredient,
+                icon: const Icon(Icons.add),
+                label: const Text('Tambah'),
+              );
+
+              if (isMobile) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  bahanSelector,
+                  const SizedBox(height: 12),
+                  qtyField,
+                  const SizedBox(height: 12),
+                  addBtn,
+                ]);
+              }
+
+              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 2, child: bahanSelector),
                 const SizedBox(width: 12),
-                Container(
-                  margin: const EdgeInsets.only(top: 4),
-                  child: FilledButton.icon(
-                    onPressed: _addIngredient,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Tambah'),
-                  ),
-                )
-              ],
-            ),
+                Expanded(child: qtyField),
+                const SizedBox(width: 12),
+                Container(margin: const EdgeInsets.only(top: 4), child: addBtn),
+              ]);
+            }),
           ),
           const SizedBox(height: 24),
           const Text('Bahan Baku Terdaftar:', style: TextStyle(fontWeight: FontWeight.bold)),

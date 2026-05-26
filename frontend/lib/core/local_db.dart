@@ -55,6 +55,35 @@ class LocalDb {
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN discount_amount REAL DEFAULT 0'); } catch (_) {}
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN addon_summary TEXT DEFAULT "[]"'); } catch (_) {}
         try { await db.execute('ALTER TABLE bahan_baku ADD COLUMN kategori TEXT DEFAULT "Lainnya"'); } catch (_) {}
+        // Module: kategori_bahan table
+        try {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS kategori_bahan (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL UNIQUE
+            )
+          ''');
+          // Seed default categories if table is empty
+          final countResult = await db.rawQuery('SELECT COUNT(*) as c FROM kategori_bahan');
+          final count = (countResult.first['c'] as num?)?.toInt() ?? 0;
+          if (count == 0) {
+            for (final k in ['Daging/Protein', 'Sayur/Buah', 'Bumbu', 'Kemasan', 'Lainnya']) {
+              await db.insert('kategori_bahan', {'name': k}, conflictAlgorithm: ConflictAlgorithm.ignore);
+            }
+          }
+        } catch (_) {}
+        try { await db.execute('ALTER TABLE bahan_baku ADD COLUMN kategori_bahan_id INTEGER DEFAULT 0'); } catch (_) {}
+        // Migrate old string kategori to kategori_bahan_id
+        try {
+          final rows = await db.rawQuery("SELECT id, kategori FROM bahan_baku WHERE kategori_bahan_id = 0 AND kategori IS NOT NULL AND kategori != ''");
+          for (final row in rows) {
+            final kName = row['kategori']?.toString() ?? 'Lainnya';
+            final kRows = await db.query('kategori_bahan', where: 'name = ?', whereArgs: [kName]);
+            if (kRows.isNotEmpty) {
+              await db.update('bahan_baku', {'kategori_bahan_id': kRows.first['id']}, where: 'id = ?', whereArgs: [row['id']]);
+            }
+          }
+        } catch (_) {}
       },
       onCreate: (db, version) async {
         // ──────────────────────────────────────────────────
@@ -90,7 +119,20 @@ class LocalDb {
         ''');
 
         // ──────────────────────────────────────────────────
-        // 3. Bahan Baku (Raw Materials / Ingredients)
+        // 3a. Kategori Bahan (Raw Material Categories)
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS kategori_bahan (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+          )
+        ''');
+        for (final k in ['Daging/Protein', 'Sayur/Buah', 'Bumbu', 'Kemasan', 'Lainnya']) {
+          await db.insert('kategori_bahan', {'name': k}, conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+
+        // ──────────────────────────────────────────────────
+        // 3b. Bahan Baku (Raw Materials / Ingredients)
         //    Central stock is tracked here, NOT on products.
         // ──────────────────────────────────────────────────
         await db.execute('''
@@ -102,6 +144,7 @@ class LocalDb {
             cost_price REAL NOT NULL DEFAULT 0,
             min_stock_alert REAL DEFAULT 0,
             kategori TEXT DEFAULT 'Lainnya',
+            kategori_bahan_id INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now','localtime')),
             updated_at TEXT DEFAULT (datetime('now','localtime'))
           )

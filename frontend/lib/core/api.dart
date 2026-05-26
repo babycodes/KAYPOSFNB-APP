@@ -129,10 +129,25 @@ class Api {
         };
       }
 
+      // --- KATEGORI BAHAN ---
+      if (path == '/kategori-bahan') {
+        final rows = await db.rawQuery('''
+          SELECT kb.*, (SELECT COUNT(id) FROM bahan_baku WHERE kategori_bahan_id = kb.id) as item_count
+          FROM kategori_bahan kb
+          ORDER BY kb.name ASC
+        ''');
+        return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+      }
+
       // --- BAHAN BAKU ---
       if (path == '/bahan-baku') {
-        final rows = await db.query('bahan_baku', orderBy: 'name ASC');
-        return rows;
+        final rows = await db.rawQuery('''
+          SELECT b.*, COALESCE(kb.name, b.kategori, 'Lainnya') as kategori_name
+          FROM bahan_baku b
+          LEFT JOIN kategori_bahan kb ON b.kategori_bahan_id = kb.id
+          ORDER BY b.name ASC
+        ''');
+        return rows.map((r) => Map<String, dynamic>.from(r)).toList();
       }
 
       // --- RESEP (By Product ID) ---
@@ -571,6 +586,14 @@ class Api {
         }
       }
 
+      // --- KATEGORI BAHAN ---
+      if (path == '/kategori-bahan') {
+        final name = body?['name']?.toString().trim() ?? '';
+        if (name.isEmpty) throw Exception('Nama kategori wajib diisi');
+        await db.insert('kategori_bahan', {'name': name});
+        return {'success': true};
+      }
+
       // --- TRANSACTIONS: PARK / HOLD CART (alias: /transactions/held OR /held-carts) ---
       if (path == '/transactions/held' || path == '/held-carts') {
         final label = body?['label']?.toString() ?? 'Draft';
@@ -834,6 +857,7 @@ class Api {
           'cost_price': (body?['cost_price'] as num?)?.toDouble() ?? 0,
           'min_stock_alert': (body?['min_stock_alert'] as num?)?.toDouble() ?? 0,
           'kategori': body?['kategori']?.toString() ?? 'Lainnya',
+          'kategori_bahan_id': (body?['kategori_bahan_id'] as num?)?.toInt() ?? 0,
         });
         return {'success': true};
       }
@@ -1013,6 +1037,16 @@ class Api {
         return {'success': true};
       }
 
+      // --- KATEGORI BAHAN ---
+      if (path.startsWith('/kategori-bahan/')) {
+        final id = int.tryParse(path.split('/').last);
+        if (id == null) throw Exception('ID Kategori Bahan tidak valid');
+        final name = body?['name']?.toString().trim() ?? '';
+        if (name.isEmpty) throw Exception('Nama kategori wajib diisi');
+        await db.update('kategori_bahan', {'name': name}, where: 'id = ?', whereArgs: [id]);
+        return {'success': true};
+      }
+
       // --- BAHAN BAKU ---
       if (path.startsWith('/bahan-baku/')) {
         final id = int.tryParse(path.split('/').last);
@@ -1025,6 +1059,7 @@ class Api {
         if (body?['cost_price'] != null) data['cost_price'] = (body!['cost_price'] as num?)?.toDouble() ?? 0;
         if (body?['min_stock_alert'] != null) data['min_stock_alert'] = (body!['min_stock_alert'] as num?)?.toDouble() ?? 0;
         if (body?['kategori'] != null) data['kategori'] = body!['kategori']?.toString() ?? 'Lainnya';
+        if (body?['kategori_bahan_id'] != null) data['kategori_bahan_id'] = (body!['kategori_bahan_id'] as num?)?.toInt() ?? 0;
         
         if (data.isNotEmpty) {
           await db.update('bahan_baku', data, where: 'id = ?', whereArgs: [id]);
@@ -1074,6 +1109,12 @@ class Api {
         final rawId = path.split('/').last.split('?').first; // strip query params like ?force=1
         final id = int.tryParse(rawId);
         if (id == null) throw Exception('ID Kategori tidak valid');
+        // Cascade: delete all products in this category and their recipes
+        final products = await db.query('products', columns: ['id'], where: 'category_id = ?', whereArgs: [id]);
+        for (final p in products) {
+          await db.delete('resep', where: 'product_id = ?', whereArgs: [p['id']]);
+        }
+        await db.delete('products', where: 'category_id = ?', whereArgs: [id]);
         await db.delete('categories', where: 'id = ?', whereArgs: [id]);
         return {'success': true};
       }
@@ -1099,6 +1140,16 @@ class Api {
         final id = int.tryParse(path.split('/').last);
         if (id == null) throw Exception('ID Bahan Baku tidak valid');
         await db.delete('bahan_baku', where: 'id = ?', whereArgs: [id]);
+        return {'success': true};
+      }
+
+      // --- KATEGORI BAHAN ---
+      if (path.startsWith('/kategori-bahan/')) {
+        final id = int.tryParse(path.split('/').last);
+        if (id == null) throw Exception('ID Kategori Bahan tidak valid');
+        // Cascade: delete all bahan_baku in this category
+        await db.delete('bahan_baku', where: 'kategori_bahan_id = ?', whereArgs: [id]);
+        await db.delete('kategori_bahan', where: 'id = ?', whereArgs: [id]);
         return {'success': true};
       }
 

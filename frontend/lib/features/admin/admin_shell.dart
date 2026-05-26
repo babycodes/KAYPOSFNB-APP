@@ -17,7 +17,8 @@ class _AdminShellState extends State<AdminShell> {
   final navItems = [
     {'href': '/admin', 'label': 'Dashboard', 'icon': Icons.dashboard},
     {'href': '/admin/produk', 'label': 'Produk', 'icon': Icons.inventory_2},
-    {'href': '/admin/kategori', 'label': 'Kategori', 'icon': Icons.label},
+    {'href': '/admin/kategori', 'label': 'Kategori Produk', 'icon': Icons.label},
+    {'href': '/admin/kategori-bahan', 'label': 'Kategori Bahan', 'icon': Icons.category},
     {'href': '/admin/bahan-baku', 'label': 'Bahan Baku', 'icon': Icons.inventory_2},
     {'href': '/admin/laporan', 'label': 'Laporan', 'icon': Icons.bar_chart},
     {'href': '/admin/karyawan', 'label': 'Karyawan', 'icon': Icons.people},
