@@ -45,9 +45,7 @@ class LocalDb {
         await db.execute('PRAGMA foreign_keys = ON;');
       },
       onOpen: (db) async {
-        // Safety migration for new columns added in v1.0.35 without bumping version
-        try { await db.execute('ALTER TABLE products ADD COLUMN base_unit TEXT DEFAULT ""'); } catch (_) {}
-        try { await db.execute('ALTER TABLE inventory ADD COLUMN stock_unit TEXT DEFAULT ""'); } catch (_) {}
+        // Safety migrations for columns that may not exist on older databases
         try { await db.execute('ALTER TABLE transactions ADD COLUMN discount_total REAL DEFAULT 0'); } catch (_) {}
         try { await db.execute('ALTER TABLE transactions ADD COLUMN discount_type TEXT DEFAULT "system"'); } catch (_) {}
         try { await db.execute('ALTER TABLE transactions ADD COLUMN discount_by TEXT DEFAULT "system"'); } catch (_) {}
@@ -55,9 +53,12 @@ class LocalDb {
         try { await db.execute('ALTER TABLE discounts ADD COLUMN target_products TEXT DEFAULT "[]"'); } catch (_) {}
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN discount_percent REAL DEFAULT 0'); } catch (_) {}
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN discount_amount REAL DEFAULT 0'); } catch (_) {}
+        try { await db.execute('ALTER TABLE transaction_details ADD COLUMN addon_summary TEXT DEFAULT "[]"'); } catch (_) {}
       },
       onCreate: (db, version) async {
-        // 1. Categories
+        // ──────────────────────────────────────────────────
+        // 1. Categories (Menu groupings: Makanan, Minuman, etc.)
+        // ──────────────────────────────────────────────────
         await db.execute('''
           CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +69,118 @@ class LocalDb {
           )
         ''');
 
-        // Discounts
+        // ──────────────────────────────────────────────────
+        // 2. Products (Menu Items — NO standalone stock column)
+        //    Stock capacity is dynamically calculated from bahan_baku via resep.
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+            barcode TEXT UNIQUE,
+            price REAL NOT NULL DEFAULT 0,
+            image_url TEXT DEFAULT '',
+            description TEXT DEFAULT '',
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+          )
+        ''');
+
+        // ──────────────────────────────────────────────────
+        // 3. Bahan Baku (Raw Materials / Ingredients)
+        //    Central stock is tracked here, NOT on products.
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS bahan_baku (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            unit TEXT NOT NULL DEFAULT 'gram',
+            stock REAL NOT NULL DEFAULT 0,
+            cost_price REAL NOT NULL DEFAULT 0,
+            min_stock_alert REAL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+          )
+        ''');
+
+        // ──────────────────────────────────────────────────
+        // 4. Resep (Recipe / Bill of Materials Mapping)
+        //    Links a menu product to the raw materials it consumes.
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS resep (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            bahan_baku_id INTEGER NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
+            qty_needed REAL NOT NULL DEFAULT 0,
+            UNIQUE(product_id, bahan_baku_id)
+          )
+        ''');
+
+        // ──────────────────────────────────────────────────
+        // 5. Add-on Categories (Modifier groups: Topping, Level Pedas, etc.)
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS addon_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            is_required INTEGER DEFAULT 0,
+            max_choices INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+          )
+        ''');
+
+        // ──────────────────────────────────────────────────
+        // 6. Addons (Individual modifiers within a category)
+        //    Optionally linked to bahan_baku for raw-material deduction.
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS addons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_id INTEGER NOT NULL REFERENCES addon_categories(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            additional_price REAL NOT NULL DEFAULT 0,
+            bahan_baku_id INTEGER REFERENCES bahan_baku(id) ON DELETE SET NULL,
+            qty_needed REAL DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+          )
+        ''');
+
+        // ──────────────────────────────────────────────────
+        // 7. Product–Addon Category Link (which addon groups apply to which menu items)
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS product_addon_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            addon_category_id INTEGER NOT NULL REFERENCES addon_categories(id) ON DELETE CASCADE,
+            UNIQUE(product_id, addon_category_id)
+          )
+        ''');
+
+        // ──────────────────────────────────────────────────
+        // 8. Restock History (Raw Material restocking log)
+        //    Tracks bahan_baku restocking, NOT product-level restocking.
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS restock_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bahan_baku_id INTEGER NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
+            added_stock REAL NOT NULL,
+            total_cost REAL NOT NULL,
+            old_cost_price REAL NOT NULL,
+            new_cost_price REAL NOT NULL,
+            timestamp TEXT DEFAULT (datetime('now','localtime'))
+          )
+        ''');
+
+        // ──────────────────────────────────────────────────
+        // 9. Discounts
+        // ──────────────────────────────────────────────────
         await db.execute('''
           CREATE TABLE IF NOT EXISTS discounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,68 +194,9 @@ class LocalDb {
           )
         ''');
 
-        // 2. Category Units
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS category_units (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
-            unit_name TEXT NOT NULL,
-            sort_order INTEGER DEFAULT 0,
-            UNIQUE(category_id, unit_name)
-          )
-        ''');
-
-        // 3. Products
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
-            barcode TEXT UNIQUE,
-            purchase_price REAL DEFAULT 0,
-            purchase_unit TEXT DEFAULT '',
-            is_active INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT (datetime('now','localtime')),
-            updated_at TEXT DEFAULT (datetime('now','localtime'))
-          )
-        ''');
-
-        // 4. Product Units
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS product_units (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-            unit_name TEXT NOT NULL,
-            qty_per_unit REAL NOT NULL DEFAULT 1,
-            price REAL NOT NULL,
-            UNIQUE(product_id, unit_name)
-          )
-        ''');
-
-        // 5. Inventory
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS inventory (
-            product_id INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
-            stock_quantity REAL NOT NULL DEFAULT 0,
-            min_stock_alert REAL DEFAULT 0,
-            updated_at TEXT DEFAULT (datetime('now','localtime'))
-          )
-        ''');
-
-        // 6. Restock History
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS restock_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-            added_base_stock REAL NOT NULL,
-            total_cost REAL NOT NULL,
-            old_purchase_price REAL NOT NULL,
-            new_purchase_price REAL NOT NULL,
-            timestamp TEXT DEFAULT (datetime('now','localtime'))
-          )
-        ''');
-
-        // 7. Users
+        // ──────────────────────────────────────────────────
+        // 10. Users
+        // ──────────────────────────────────────────────────
         await db.execute('''
           CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,7 +210,9 @@ class LocalDb {
           )
         ''');
 
-        // 8. Transactions
+        // ──────────────────────────────────────────────────
+        // 11. Transactions
+        // ──────────────────────────────────────────────────
         await db.execute('''
           CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,7 +230,9 @@ class LocalDb {
           )
         ''');
 
-        // 9. Transaction Details
+        // ──────────────────────────────────────────────────
+        // 12. Transaction Details (includes addon_summary JSON)
+        // ──────────────────────────────────────────────────
         await db.execute('''
           CREATE TABLE IF NOT EXISTS transaction_details (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,16 +240,17 @@ class LocalDb {
             product_id INTEGER NOT NULL,
             product_name TEXT NOT NULL,
             sold_price REAL NOT NULL,
-            purchase_price REAL DEFAULT 0,
             quantity REAL NOT NULL,
-            unit_used TEXT NOT NULL,
             subtotal REAL NOT NULL,
+            addon_summary TEXT DEFAULT '[]',
             discount_percent REAL DEFAULT 0,
             discount_amount REAL DEFAULT 0
           )
         ''');
 
-        // 10. Held Carts (Offline Parked Transactions)
+        // ──────────────────────────────────────────────────
+        // 13. Held Carts (Offline Parked Transactions)
+        // ──────────────────────────────────────────────────
         await db.execute('''
           CREATE TABLE IF NOT EXISTS held_carts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,7 +263,9 @@ class LocalDb {
           )
         ''');
 
-        // 11. Settings
+        // ──────────────────────────────────────────────────
+        // 14. Settings
+        // ──────────────────────────────────────────────────
         await db.execute('''
           CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
@@ -213,7 +273,10 @@ class LocalDb {
           )
         ''');
 
+        // ══════════════════════════════════════════════════
         // SEEDING DEFAULT DATA
+        // ══════════════════════════════════════════════════
+
         // Default Admin User
         await db.insert('users', {
           'username': 'admin',
@@ -234,7 +297,7 @@ class LocalDb {
 
         // Default Settings
         final batch = db.batch();
-        batch.insert('settings', {'key': 'store_name', 'value': 'KAYPOS Offline Store'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+        batch.insert('settings', {'key': 'store_name', 'value': 'KAYPOS FNB Store'}, conflictAlgorithm: ConflictAlgorithm.ignore);
         batch.insert('settings', {'key': 'store_address', 'value': ''}, conflictAlgorithm: ConflictAlgorithm.ignore);
         batch.insert('settings', {'key': 'store_phone', 'value': ''}, conflictAlgorithm: ConflictAlgorithm.ignore);
         batch.insert('settings', {'key': 'printer_port', 'value': '/dev/usb/lp0'}, conflictAlgorithm: ConflictAlgorithm.ignore);
