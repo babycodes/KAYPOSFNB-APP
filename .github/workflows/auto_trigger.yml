@@ -1,0 +1,18 @@
+name: Auto Trigger Public Build
+
+on:
+  push:
+    branches: [ master, main ]
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Public Repo via Repository Dispatch
+        run: |
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.PUBLIC_REPO_PAT }}" \
+            https://api.github.com/repos/babycodes/KAYPOSFNB-APP/dispatches \
+            -d '{"event_type": "trigger-fnb-build"}'
