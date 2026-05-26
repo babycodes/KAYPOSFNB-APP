@@ -429,7 +429,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: _logoPath != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(11),
-                      child: Image.file(File(_logoPath!), fit: BoxFit.contain, errorBuilder: (_, _, _) => Icon(Icons.broken_image, size: 32, color: cs.onSurfaceVariant)),
+                      child: Image.file(File(_logoPath!), fit: BoxFit.contain, errorBuilder: (ctx, err, stack) => Icon(Icons.broken_image, size: 32, color: cs.onSurfaceVariant)),
                     )
                   : Icon(Icons.add_photo_alternate_outlined, size: 32, color: cs.onSurfaceVariant),
               ),
@@ -546,7 +546,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(width: 8),
             Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ]),
-          ?action,
+          if (action != null) action,
         ]),
         const SizedBox(height: 20),
         ...children,

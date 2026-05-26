@@ -163,7 +163,7 @@ class _LaporanPageState extends State<LaporanPage> {
                     child: ListView.separated(
                       shrinkWrap: true,
                       itemCount: details.length,
-                      separatorBuilder: (_, _) => Divider(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                      separatorBuilder: (ctx, idx) => Divider(color: cs.outlineVariant.withValues(alpha: 0.5)),
                       itemBuilder: (ctx, i) {
                         final d = details[i];
                         return Padding(
