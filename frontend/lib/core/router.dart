@@ -8,7 +8,7 @@ import '../features/admin/admin_shell.dart';
 import '../features/admin/admin_dashboard.dart';
 import '../features/admin/kategori_page.dart';
 import '../features/admin/produk_page.dart';
-import '../features/admin/stok_page.dart';
+import '../features/admin/bahan_baku_page.dart';
 import '../features/admin/laporan_page.dart';
 import '../features/admin/karyawan_page.dart';
 import '../features/admin/diskon_page.dart';
@@ -37,7 +37,7 @@ final appRouter = GoRouter(
         GoRoute(path: '/admin', pageBuilder: (context, state) => _fadeTransition(const AdminDashboard())),
         GoRoute(path: '/admin/produk', pageBuilder: (context, state) => _fadeTransition(const ProdukPage())),
         GoRoute(path: '/admin/kategori', pageBuilder: (context, state) => _fadeTransition(const KategoriPage())),
-        GoRoute(path: '/admin/stok', pageBuilder: (context, state) => _fadeTransition(const StokPage())),
+        GoRoute(path: '/admin/bahan-baku', pageBuilder: (context, state) => _fadeTransition(const BahanBakuPage())),
         GoRoute(path: '/admin/laporan', pageBuilder: (context, state) => _fadeTransition(const LaporanPage())),
         GoRoute(path: '/admin/karyawan', pageBuilder: (context, state) => _fadeTransition(const KaryawanPage())),
         GoRoute(path: '/admin/diskon', pageBuilder: (context, state) => _fadeTransition(const DiskonPage())),

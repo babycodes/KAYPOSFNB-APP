@@ -493,6 +493,14 @@ class _RecipeModalState extends State<RecipeModal> {
       totalHpp += cost * qty;
     }
 
+    String selectedUnit = '';
+    if (_selectedBahanId != null) {
+      try {
+        final b = _availableBahan.firstWhere((e) => e['id'] == _selectedBahanId);
+        selectedUnit = b['unit']?.toString() ?? '';
+      } catch (_) {}
+    }
+
     return Container(
       height: MediaQuery.sizeOf(context).height * 0.85,
       padding: const EdgeInsets.all(24),
@@ -531,7 +539,11 @@ class _RecipeModalState extends State<RecipeModal> {
                 Expanded(
                   child: TextFormField(
                     controller: _qtyCtrl,
-                    decoration: const InputDecoration(labelText: 'Qty Dibutuhkan', isDense: true),
+                    decoration: InputDecoration(
+                      labelText: 'Qty Dibutuhkan', 
+                      isDense: true,
+                      suffixText: selectedUnit.isNotEmpty ? selectedUnit : null,
+                    ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: (v) => v == null || v.isEmpty ? 'Wajib' : null,
                   ),

@@ -126,6 +126,26 @@ class Api {
         };
       }
 
+      // --- BAHAN BAKU ---
+      if (path == '/bahan-baku') {
+        final rows = await db.query('bahan_baku', orderBy: 'name ASC');
+        return rows;
+      }
+
+      // --- RESEP (By Product ID) ---
+      if (RegExp(r'^/resep/\d+$').hasMatch(path)) {
+        final productId = int.tryParse(path.split('/').last);
+        if (productId == null) throw Exception('ID Produk tidak valid');
+        
+        final rows = await db.rawQuery('''
+          SELECT r.*, b.name as bahan_name, b.unit as bahan_unit, b.cost_price as bahan_cost_price
+          FROM resep r
+          JOIN bahan_baku b ON r.bahan_baku_id = b.id
+          WHERE r.product_id = ?
+        ''', [productId]);
+        return rows;
+      }
+
       // --- AUTH ME ---
       if (path == '/auth/me') {
         if (_authToken.isEmpty) throw Exception('Sesi habis, silakan login kembali');
@@ -790,6 +810,28 @@ class Api {
         return {'success': true};
       }
 
+      // --- BAHAN BAKU ---
+      if (path == '/bahan-baku') {
+        await db.insert('bahan_baku', {
+          'name': body?['name']?.toString() ?? '',
+          'unit': body?['unit']?.toString() ?? '',
+          'stock': (body?['stock'] as num?)?.toDouble() ?? 0,
+          'cost_price': (body?['cost_price'] as num?)?.toDouble() ?? 0,
+          'min_stock_alert': (body?['min_stock_alert'] as num?)?.toDouble() ?? 0,
+        });
+        return {'success': true};
+      }
+
+      // --- RESEP ---
+      if (path == '/resep') {
+        await db.insert('resep', {
+          'product_id': body?['product_id'],
+          'bahan_baku_id': body?['bahan_baku_id'],
+          'qty_needed': (body?['qty_needed'] as num?)?.toDouble() ?? 0,
+        });
+        return {'success': true};
+      }
+
       throw Exception('Endpoint POST $path belum diimplementasikan di Offline Router');
     } catch (e) {
       if (e.toString().contains('Exception:')) rethrow;
@@ -954,6 +996,24 @@ class Api {
         }
         return {'success': true};
       }
+
+      // --- BAHAN BAKU ---
+      if (path.startsWith('/bahan-baku/')) {
+        final id = int.tryParse(path.split('/').last);
+        if (id == null) throw Exception('ID Bahan Baku tidak valid');
+
+        Map<String, dynamic> data = {};
+        if (body?['name'] != null) data['name'] = body!['name']?.toString() ?? '';
+        if (body?['unit'] != null) data['unit'] = body!['unit']?.toString() ?? '';
+        if (body?['stock'] != null) data['stock'] = (body!['stock'] as num?)?.toDouble() ?? 0;
+        if (body?['cost_price'] != null) data['cost_price'] = (body!['cost_price'] as num?)?.toDouble() ?? 0;
+        if (body?['min_stock_alert'] != null) data['min_stock_alert'] = (body!['min_stock_alert'] as num?)?.toDouble() ?? 0;
+        
+        if (data.isNotEmpty) {
+          await db.update('bahan_baku', data, where: 'id = ?', whereArgs: [id]);
+        }
+        return {'success': true};
+      }
       
       throw Exception('Endpoint PUT $path belum diimplementasikan di Offline Router');
     } catch (e) {
@@ -1003,6 +1063,22 @@ class Api {
         final id = int.tryParse(path.split('/').last);
         if (id == null) throw Exception('ID Diskon tidak valid');
         await db.delete('discounts', where: 'id = ?', whereArgs: [id]);
+        return {'success': true};
+      }
+
+      // --- BAHAN BAKU ---
+      if (path.startsWith('/bahan-baku/')) {
+        final id = int.tryParse(path.split('/').last);
+        if (id == null) throw Exception('ID Bahan Baku tidak valid');
+        await db.delete('bahan_baku', where: 'id = ?', whereArgs: [id]);
+        return {'success': true};
+      }
+
+      // --- RESEP ---
+      if (path.startsWith('/resep/')) {
+        final id = int.tryParse(path.split('/').last);
+        if (id == null) throw Exception('ID Resep tidak valid');
+        await db.delete('resep', where: 'id = ?', whereArgs: [id]);
         return {'success': true};
       }
       

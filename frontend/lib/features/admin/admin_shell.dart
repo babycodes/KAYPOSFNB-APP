@@ -18,7 +18,7 @@ class _AdminShellState extends State<AdminShell> {
     {'href': '/admin', 'label': 'Dashboard', 'icon': Icons.dashboard},
     {'href': '/admin/produk', 'label': 'Produk', 'icon': Icons.inventory_2},
     {'href': '/admin/kategori', 'label': 'Kategori', 'icon': Icons.label},
-    {'href': '/admin/stok', 'label': 'Inventaris', 'icon': Icons.warehouse},
+    {'href': '/admin/bahan-baku', 'label': 'Bahan Baku', 'icon': Icons.inventory_2},
     {'href': '/admin/laporan', 'label': 'Laporan', 'icon': Icons.bar_chart},
     {'href': '/admin/karyawan', 'label': 'Karyawan', 'icon': Icons.people},
     {'href': '/admin/diskon', 'label': 'Diskon', 'icon': Icons.discount},
