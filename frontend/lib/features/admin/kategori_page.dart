@@ -163,6 +163,7 @@ class _KategoriPageState extends State<KategoriPage> {
                   },
                 ),
               ],
+            ),
           ],
         ),
       ),
