@@ -1,4 +1,4 @@
-name: Build and Release v1.0.0
+name: Build and Release
 
 on:
   push:
@@ -51,14 +51,14 @@ jobs:
         working-directory: frontend
         run: |
           flutter build apk --release
-          mv build/app/outputs/flutter-apk/app-release.apk kayposfnb-v1.0.0.apk
+          mv build/app/outputs/flutter-apk/app-release.apk kayposfnb-v1.0.${{ github.run_number }}.apk
 
       - name: Release APK
         uses: softprops/action-gh-release@v2
         with:
-          files: frontend/kayposfnb-v1.0.0.apk
-          tag_name: v1.0.0
-          name: Release v1.0.0
+          files: frontend/kayposfnb-v1.0.${{ github.run_number }}.apk
+          tag_name: v1.0.${{ github.run_number }}
+          name: Release v1.0.${{ github.run_number }}
           draft: false
           prerelease: false
         env:
@@ -108,34 +108,34 @@ jobs:
           echo "Version=1.0" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Name=KayPOS FNB" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Comment=Food & Beverage POS System" >> pkg_root/usr/share/applications/kayposfnb.desktop
-          echo "Exec=/opt/kayposfnb/frontend" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Exec=/opt/kayposfnb/Kaypos" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Icon=kayposfnb" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Terminal=false" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Type=Application" >> pkg_root/usr/share/applications/kayposfnb.desktop
           echo "Categories=Utility;Office;" >> pkg_root/usr/share/applications/kayposfnb.desktop
           
-          # Copy App Icon for Desktop Shortcut (using icon-512.png because KFNB.png isn't committed)
+          # Copy App Icon for Desktop Shortcut (using icon-512.png)
           mkdir -p pkg_root/usr/share/pixmaps
           cp ../../../../../assets/icon-512.png pkg_root/usr/share/pixmaps/kayposfnb.png
           
           # Create symbolic link for terminal launch
           mkdir -p pkg_root/usr/bin
-          ln -s /opt/kayposfnb/frontend pkg_root/usr/bin/kayposfnb
+          ln -s /opt/kayposfnb/Kaypos pkg_root/usr/bin/kayposfnb
           
           # Build DEB
-          fpm -s dir -t deb -n kayposfnb -v 1.0.0 -p ../../../../../kayposfnb-v1.0.0.deb -C pkg_root usr opt
+          fpm -s dir -t deb -n kayposfnb -v 1.0.${{ github.run_number }} -p ../../../../../kayposfnb-v1.0.${{ github.run_number }}.deb -C pkg_root usr opt
           
           # Build RPM
-          fpm -s dir -t rpm -n kayposfnb -v 1.0.0 -p ../../../../../kayposfnb-v1.0.0.rpm -C pkg_root usr opt
+          fpm -s dir -t rpm -n kayposfnb -v 1.0.${{ github.run_number }} -p ../../../../../kayposfnb-v1.0.${{ github.run_number }}.rpm -C pkg_root usr opt
 
       - name: Release Linux Builds
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            frontend/kayposfnb-v1.0.0.deb
-            frontend/kayposfnb-v1.0.0.rpm
-          tag_name: v1.0.0
-          name: Release v1.0.0
+            frontend/kayposfnb-v1.0.${{ github.run_number }}.deb
+            frontend/kayposfnb-v1.0.${{ github.run_number }}.rpm
+          tag_name: v1.0.${{ github.run_number }}
+          name: Release v1.0.${{ github.run_number }}
           draft: false
           prerelease: false
         env:
@@ -170,10 +170,10 @@ jobs:
           $SetupScript = @"
           [Setup]
           AppName=KAYPOSFNB
-          AppVersion=1.0.0
+          AppVersion=1.0.${{ github.run_number }}
           DefaultDirName={autopf}\KAYPOSFNB
           OutputDir=.
-          OutputBaseFilename=kayposfnb-v1.0.0
+          OutputBaseFilename=kayposfnb-v1.0.${{ github.run_number }}
           Compression=lzma
           SolidCompression=yes
           [Files]
@@ -188,9 +188,9 @@ jobs:
       - name: Release Windows Build
         uses: softprops/action-gh-release@v2
         with:
-          files: frontend/kayposfnb-v1.0.0.exe
-          tag_name: v1.0.0
-          name: Release v1.0.0
+          files: frontend/kayposfnb-v1.0.${{ github.run_number }}.exe
+          tag_name: v1.0.${{ github.run_number }}
+          name: Release v1.0.${{ github.run_number }}
           draft: false
           prerelease: false
         env:
