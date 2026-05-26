@@ -54,6 +54,7 @@ class LocalDb {
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN discount_percent REAL DEFAULT 0'); } catch (_) {}
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN discount_amount REAL DEFAULT 0'); } catch (_) {}
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN addon_summary TEXT DEFAULT "[]"'); } catch (_) {}
+        try { await db.execute('ALTER TABLE bahan_baku ADD COLUMN kategori TEXT DEFAULT "Lainnya"'); } catch (_) {}
       },
       onCreate: (db, version) async {
         // ──────────────────────────────────────────────────
@@ -100,6 +101,7 @@ class LocalDb {
             stock REAL NOT NULL DEFAULT 0,
             cost_price REAL NOT NULL DEFAULT 0,
             min_stock_alert REAL DEFAULT 0,
+            kategori TEXT DEFAULT 'Lainnya',
             created_at TEXT DEFAULT (datetime('now','localtime')),
             updated_at TEXT DEFAULT (datetime('now','localtime'))
           )

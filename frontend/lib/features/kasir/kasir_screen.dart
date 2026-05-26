@@ -148,6 +148,49 @@ class _KasirScreenState extends State<KasirScreen> {
     } catch (_) { setState(() => txHistory = []); }
   }
 
+  Future<void> _showStockAlert() async {
+    try {
+      final lowStock = await Api.get('/inventory/low-stock') as List;
+      if (!mounted) return;
+      final cs = Theme.of(context).colorScheme;
+      showDialog(context: context, builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          Icon(Icons.notifications_active, color: cs.error, size: 22),
+          const SizedBox(width: 8),
+          const Text('Peringatan Stok Bahan Baku'),
+        ]),
+        content: SizedBox(
+          width: 400,
+          child: lowStock.isEmpty
+            ? const Padding(padding: EdgeInsets.all(16), child: Text('✅ Semua stok bahan baku aman!', style: TextStyle(fontSize: 14)))
+            : ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: lowStock.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final item = lowStock[i];
+                    final stock = _safeNum(item['stock']);
+                    final unit = item['unit']?.toString() ?? '';
+                    return ListTile(
+                      dense: true,
+                      leading: Icon(Icons.warning_amber, color: cs.error, size: 20),
+                      title: Text(item['name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      trailing: Text('${stock.round()} $unit', style: TextStyle(fontWeight: FontWeight.bold, color: cs.error)),
+                    );
+                  },
+                ),
+              ),
+        ),
+        actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Tutup'))],
+      ));
+    } catch (e) {
+      if (mounted) showToast(context, 'Gagal memuat stok: $e');
+    }
+  }
+
   int _getProductDiscount(dynamic product) => _getPromoInfo(product).$1;
 
   (int, String?) _getPromoInfo(dynamic product) {
@@ -407,6 +450,8 @@ class _KasirScreenState extends State<KasirScreen> {
                       _toolbarBtn(Icons.pie_chart, 'Rekap', onTap: () { setState(() { _closeAllModals(); showDashboard = true; }); _loadDashboard(); }),
                       const SizedBox(width: 4),
                       _toolbarBtn(Icons.history, 'Riwayat', onTap: () { setState(() { _closeAllModals(); showHistory = true; }); _loadHistory(); }),
+                      const SizedBox(width: 4),
+                      _toolbarBtn(Icons.notifications, 'Stok', onTap: _showStockAlert),
                       const SizedBox(width: 4),
                       _toolbarBtn(Icons.person, auth.userName, onTap: () => setState(() { _closeAllModals(); showProfile = true; })),
                       const SizedBox(width: 4),

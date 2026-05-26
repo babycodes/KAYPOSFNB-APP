@@ -71,13 +71,10 @@ class _ReceiptModalState extends State<ReceiptModal> {
           ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
             child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(20), children: [
               ...widget.details.map((d) {
-                final qty = (d['original_quantity'] as num?)?.toDouble() ?? (d['quantity'] as num?)?.toDouble() ?? 0.0;
-                final formattedUnit = formatCartItemDisplay(
-                  qty,
-                  d['current_unit_data'],
-                  d['product_units'] as List<dynamic>?,
-                  d['base_unit'] as String?,
-                );
+                final qty = (d['quantity'] as num?)?.toDouble() ?? 0.0;
+                final unitUsed = d['unit_used']?.toString() ?? 'pcs';
+                final qtyStr = qty == qty.truncateToDouble() ? qty.truncate().toString() : qty.toStringAsFixed(2);
+                final formattedUnit = '$qtyStr $unitUsed';
                 final itemDiscount = (d['discount_amount'] as num?)?.toDouble() ?? 0.0;
                 
                 return Padding(padding: const EdgeInsets.only(bottom: 8),

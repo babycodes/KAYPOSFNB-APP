@@ -13,6 +13,9 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
   List<dynamic> materials = [];
   bool isLoading = true;
   String searchQuery = '';
+  String? _selectedKategori;
+
+  static const _kategoriList = ['Daging/Protein', 'Sayur/Buah', 'Bumbu', 'Kemasan', 'Lainnya'];
 
   @override
   void initState() {
@@ -31,12 +34,13 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
   }
 
   List<dynamic> get filtered {
-    if (searchQuery.isEmpty) return materials;
-    final q = searchQuery.toLowerCase();
-    return materials.where((m) =>
-      (m['name'] ?? '').toString().toLowerCase().contains(q) ||
-      (m['unit'] ?? '').toString().toLowerCase().contains(q)
-    ).toList();
+    return materials.where((m) {
+      if (_selectedKategori != null && (m['kategori'] ?? 'Lainnya').toString() != _selectedKategori) return false;
+      if (searchQuery.isEmpty) return true;
+      final q = searchQuery.toLowerCase();
+      return (m['name'] ?? '').toString().toLowerCase().contains(q) ||
+             (m['unit'] ?? '').toString().toLowerCase().contains(q);
+    }).toList();
   }
 
   void _openForm([dynamic item]) {
@@ -139,7 +143,33 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
             )),
           ]),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
+        // Category Filter Chips
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: FilterChip(
+                  label: const Text('Semua'),
+                  selected: _selectedKategori == null,
+                  onSelected: (_) => setState(() => _selectedKategori = null),
+                ),
+              ),
+              ..._kategoriList.map((k) => Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: FilterChip(
+                  label: Text(k),
+                  selected: _selectedKategori == k,
+                  onSelected: (_) => setState(() => _selectedKategori = _selectedKategori == k ? null : k),
+                ),
+              )),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         // List
         Expanded(child: isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -201,6 +231,12 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                   decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(4)),
                   child: Text(m['unit'] ?? '', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSecondaryContainer)),
                 ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: cs.tertiaryContainer, borderRadius: BorderRadius.circular(4)),
+                  child: Text(m['kategori'] ?? 'Lainnya', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: cs.onTertiaryContainer)),
+                ),
                 const SizedBox(width: 8),
                 Text('Stok: ', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
                 Text(_formatStock(stock, m['unit'] ?? ''), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isLow ? cs.error : cs.onSurface)),
@@ -238,6 +274,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
             dataRowMinHeight: 56, dataRowMaxHeight: 56,
             columns: const [
               DataColumn(label: Text('Nama Bahan', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('Kategori')),
               DataColumn(label: Text('Satuan')),
               DataColumn(label: Text('Stok'), numeric: true),
               DataColumn(label: Text('Total Aset / Modal'), numeric: true),
@@ -262,6 +299,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                     const SizedBox(width: 10),
                     Text(m['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
                   ])),
+                  DataCell(Text(m['kategori'] ?? 'Lainnya', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant))),
                   DataCell(Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(6)),
@@ -314,9 +352,11 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl, _stockCtrl, _costCtrl, _minAlertCtrl;
   String _selectedUnit = 'gram';
+  String _selectedKategori = 'Lainnya';
   bool _isSaving = false;
 
   static const _units = ['Kg', 'gram', 'Liter', 'ml', 'pcs'];
+  static const _kategoriList = ['Daging/Protein', 'Sayur/Buah', 'Bumbu', 'Kemasan', 'Lainnya'];
 
   @override
   void initState() {
@@ -353,6 +393,11 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
       _selectedUnit = dbUnit;
     } else if (m == null) {
       _selectedUnit = 'Kg';
+    }
+
+    // Kategori
+    if (m != null && _kategoriList.contains(m['kategori'])) {
+      _selectedKategori = m['kategori'];
     }
   }
 
@@ -391,6 +436,7 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
       'stock': totalBaseQty,
       'cost_price': pricePerBaseUnit,
       'min_stock_alert': double.tryParse(_minAlertCtrl.text.replaceAll(',', '.')) ?? 0,
+      'kategori': _selectedKategori,
     };
 
     try {
@@ -459,6 +505,16 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                 items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
                 onChanged: (v) => setState(() => _selectedUnit = v ?? 'gram'),
                 validator: (v) => v == null ? 'Wajib dipilih' : null,
+              ),
+              const SizedBox(height: 16),
+
+              // Kategori
+              DropdownButtonFormField<String>(
+                value: _selectedKategori,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Kategori Bahan', isDense: true, prefixIcon: Icon(Icons.category_outlined, size: 20)),
+                items: _kategoriList.map((k) => DropdownMenuItem(value: k, child: Text(k))).toList(),
+                onChanged: (v) => setState(() => _selectedKategori = v ?? 'Lainnya'),
               ),
               const SizedBox(height: 16),
 

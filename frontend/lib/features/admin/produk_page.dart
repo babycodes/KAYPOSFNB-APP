@@ -116,7 +116,10 @@ class _ProdukPageState extends State<ProdukPage> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => RecipeModal(product: product),
-    );
+    ).then((_) {
+      // Refresh products list to show updated HPP immediately
+      _loadData();
+    });
   }
 
   @override
@@ -207,6 +210,7 @@ class _ProdukPageState extends State<ProdukPage> {
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(fmtPrice((p['price'] as num?)?.toDouble() ?? 0), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: p['is_active'] == 1 ? cs.primary : cs.onSurfaceVariant)),
                             Text('HPP: ${fmtPrice((p['total_hpp'] as num?)?.toDouble() ?? 0)}', style: TextStyle(fontSize: 12, color: cs.error)),

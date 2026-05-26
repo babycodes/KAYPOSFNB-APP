@@ -269,20 +269,7 @@ class Api {
           List<Map<String, dynamic>> enrichedDetails = [];
           for (var d in details) {
             final dm = Map<String, dynamic>.from(d);
-            final pId = dm['product_id'];
-            final pRow = await db.query('products', where: 'id = ?', whereArgs: [pId]);
-            final uRows = await db.query('product_units', where: 'product_id = ?', whereArgs: [pId]);
-            
-            dm['base_unit'] = pRow.isNotEmpty ? (pRow.first['purchase_unit']?.toString() ?? 'pcs') : 'pcs';
-            dm['product_units'] = uRows;
-            try {
-              dm['current_unit_data'] = uRows.firstWhere((u) => u['unit_name'] == dm['unit_used']);
-              final currentMultiplier = (dm['current_unit_data']['qty_per_unit'] as num?)?.toDouble() ?? 1.0;
-              dm['original_quantity'] = (dm['quantity'] as num).toDouble() / currentMultiplier;
-            } catch (_) {
-              dm['current_unit_data'] = null;
-              dm['original_quantity'] = (dm['quantity'] as num).toDouble();
-            }
+            dm['unit_used'] = dm['unit_used'] ?? 'pcs';
             enrichedDetails.add(dm);
           }
           final m = Map<String, dynamic>.from(t);
@@ -846,6 +833,7 @@ class Api {
           'stock': (body?['stock'] as num?)?.toDouble() ?? 0,
           'cost_price': (body?['cost_price'] as num?)?.toDouble() ?? 0,
           'min_stock_alert': (body?['min_stock_alert'] as num?)?.toDouble() ?? 0,
+          'kategori': body?['kategori']?.toString() ?? 'Lainnya',
         });
         return {'success': true};
       }
@@ -1036,6 +1024,7 @@ class Api {
         if (body?['stock'] != null) data['stock'] = (body!['stock'] as num?)?.toDouble() ?? 0;
         if (body?['cost_price'] != null) data['cost_price'] = (body!['cost_price'] as num?)?.toDouble() ?? 0;
         if (body?['min_stock_alert'] != null) data['min_stock_alert'] = (body!['min_stock_alert'] as num?)?.toDouble() ?? 0;
+        if (body?['kategori'] != null) data['kategori'] = body!['kategori']?.toString() ?? 'Lainnya';
         
         if (data.isNotEmpty) {
           await db.update('bahan_baku', data, where: 'id = ?', whereArgs: [id]);
