@@ -1,12 +1,13 @@
-name: Build and Manual Release
+name: Build and Release
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-fnb-build]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Private Source Code
         uses: actions/checkout@v4
