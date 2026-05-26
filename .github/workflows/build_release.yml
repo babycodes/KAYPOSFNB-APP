@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-android-linux:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Private Source Code
@@ -25,18 +25,24 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.x'
+          cache: true
+
+      - name: Install Linux Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
 
       - name: Decode Android Keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > frontend/android/app/upload-keystore.jks
         shell: bash
 
       - name: Create key.properties
         run: |
-          echo "storePassword=${{ secrets.STORE_PASSWORD }}" > android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
-          echo "storeFile=upload-keystore.jks" >> android/key.properties
+          echo "storePassword=${{ secrets.STORE_PASSWORD }}" > frontend/android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> frontend/android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> frontend/android/key.properties
+          echo "storeFile=upload-keystore.jks" >> frontend/android/key.properties
         shell: bash
 
       - name: Install Dependencies
@@ -47,10 +53,77 @@ jobs:
         working-directory: frontend
         run: flutter build apk --release
 
+      - name: Build Linux Release
+        working-directory: frontend
+        run: flutter build linux --release
+
+      - name: Package Linux
+        working-directory: frontend
+        run: |
+          cd build/linux/x64/release/bundle
+          tar -czvf ../../../../../KAYPOSFNB-linux-x64.tar.gz *
+
+      - name: Upload Linux and APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-linux-builds
+          path: |
+            frontend/build/app/outputs/flutter-apk/app-release.apk
+            KAYPOSFNB-linux-x64.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Private Source Code
+        uses: actions/checkout@v4
+        with:
+          repository: babycodes/KAYPOSFNB
+          token: ${{ secrets.PRIVATE_REPO_PAT }}
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.x'
+          cache: true
+
+      - name: Install Dependencies
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: Build Windows Release
+        working-directory: frontend
+        run: flutter build windows --release
+
+      - name: Package Windows
+        working-directory: frontend
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath ..\KAYPOSFNB-windows-x64.zip
+
+      - name: Upload Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: KAYPOSFNB-windows-x64.zip
+
+  publish-release:
+    needs: [build-android-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: frontend/build/app/outputs/flutter-apk/app-release.apk
+          files: |
+            artifacts/android-linux-builds/app-release.apk
+            artifacts/android-linux-builds/KAYPOSFNB-linux-x64.tar.gz
+            artifacts/windows-builds/KAYPOSFNB-windows-x64.zip
           tag_name: v1.0.0
           name: Release v1.0.0
           draft: false
