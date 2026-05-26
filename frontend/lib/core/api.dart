@@ -69,40 +69,30 @@ class Api {
       if (path == '/products' || path == '/products/all') {
         final activeFilter = path == '/products' ? 'WHERE p.is_active = 1' : '';
         final rows = await db.rawQuery('''
-          SELECT p.*, c.name as category_name, c.icon as category_icon,
-                 i.stock_quantity, i.min_stock_alert, i.stock_unit,
-                 u.price as sell_price, COALESCE(NULLIF(p.base_unit, ''), p.purchase_unit, 'pcs') as base_unit
+          SELECT 
+            p.id, 
+            p.category_id, 
+            p.name, 
+            p.description, 
+            p.price, 
+            p.image_url, 
+            p.barcode,
+            c.name as category_name, 
+            c.icon as category_icon,
+            p.is_active
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
-          LEFT JOIN inventory i ON p.id = i.product_id
-          LEFT JOIN product_units u ON p.id = u.product_id AND u.unit_name = COALESCE(NULLIF(p.base_unit, ''), p.purchase_unit, 'pcs')
           $activeFilter
           ORDER BY p.name ASC
         ''');
         
-        // Fetch units for all products
-        final allUnits = await db.query('product_units');
-        
         return rows.map((r) {
           try {
-            final pUnits = allUnits.where((u) => u['product_id'] == r['id']).toList();
             return {
               ...r,
               'category_name': r['category_name'] ?? '-',
               'category_icon': r['category_icon'] ?? '📦',
-              'stock_quantity': (r['stock_quantity'] as num?)?.toDouble() ?? 0.0,
-              'min_stock_alert': (r['min_stock_alert'] as num?)?.toDouble() ?? 0.0,
-              'purchase_price': (r['purchase_price'] as num?)?.toDouble() ?? 0.0,
               'is_active': r['is_active'] ?? 1,
-              'units': pUnits.isNotEmpty ? pUnits.map((pu) => {
-                ...pu,
-                'qty_per_unit': (pu['qty_per_unit'] as num?)?.toDouble() ?? 1.0,
-                'price': (pu['price'] as num?)?.toDouble() ?? 0.0,
-              }).toList() : [{
-                'unit_name': r['base_unit'] ?? 'pcs', 
-                'qty_per_unit': 1.0, 
-                'price': (r['sell_price'] as num?)?.toDouble() ?? 0.0
-              }]
             };
           } catch (err) {
             print('MAPPING ERROR in /products: $err');
@@ -116,29 +106,27 @@ class Api {
         final id = int.tryParse(path.split('/').last);
         if (id == null) throw Exception('ID Produk tidak valid');
         final rows = await db.rawQuery('''
-          SELECT p.*, c.name as category_name, c.icon as category_icon,
-                 i.stock_quantity, i.min_stock_alert, i.stock_unit
+          SELECT 
+            p.id, 
+            p.category_id, 
+            p.name, 
+            p.description, 
+            p.price, 
+            p.image_url, 
+            p.barcode,
+            c.name as category_name, 
+            c.icon as category_icon,
+            p.is_active
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
-          LEFT JOIN inventory i ON p.id = i.product_id
           WHERE p.id = ?
         ''', [id]);
         if (rows.isEmpty) throw Exception('Produk tidak ditemukan');
         final r = rows.first;
-        final allUnits = await db.query('product_units', where: 'product_id = ?', whereArgs: [id]);
         return {
           ...r,
           'category_name': r['category_name'] ?? '-',
           'category_icon': r['category_icon'] ?? '\u{1F4E6}',
-          'stock_quantity': (r['stock_quantity'] as num?)?.toDouble() ?? 0.0,
-          'min_stock_alert': (r['min_stock_alert'] as num?)?.toDouble() ?? 0.0,
-          'purchase_price': (r['purchase_price'] as num?)?.toDouble() ?? 0.0,
-          'base_unit': (r['base_unit']?.toString() ?? '').isNotEmpty ? r['base_unit'].toString() : (r['purchase_unit']?.toString() ?? 'pcs'),
-          'units': allUnits.map((u) => {
-            ...u,
-            'qty_per_unit': (u['qty_per_unit'] as num?)?.toDouble() ?? 1.0,
-            'price': (u['price'] as num?)?.toDouble() ?? 0.0,
-          }).toList(),
         };
       }
 
@@ -296,66 +284,42 @@ class Api {
       // --- INVENTORY: FULL LIST (for Stok/Inventaris page) ---
       if (path == '/inventory') {
         final rows = await db.rawQuery('''
-          SELECT p.id as product_id, p.name, p.purchase_price, p.purchase_unit as base_unit,
-                 c.name as category_name, c.icon as category_icon,
-                 COALESCE(i.stock_quantity, 0) as stock_quantity,
-                 COALESCE(i.min_stock_alert, 0) as min_stock_alert
+          SELECT 
+            p.id, 
+            p.category_id, 
+            p.name, 
+            p.description, 
+            p.price, 
+            p.image_url, 
+            p.barcode,
+            c.name as category_name, 
+            c.icon as category_icon,
+            p.is_active
           FROM products p
-          LEFT JOIN inventory i ON p.id = i.product_id
           LEFT JOIN categories c ON p.category_id = c.id
           WHERE p.is_active = 1
           ORDER BY p.name ASC
         ''');
-        final allUnits = await db.query('product_units');
         return rows.map((r) {
-          final pUnits = allUnits.where((u) => u['product_id'] == r['product_id']).toList();
           return {
             ...r,
-            'id': r['product_id'],
-            'product_id': r['product_id'],
+            'id': r['id'],
+            'product_id': r['id'],
             'name': r['name']?.toString() ?? '',
             'category_name': r['category_name'] ?? '-',
             'category_icon': r['category_icon'] ?? '\u{1F4E6}',
-            'stock_quantity': (r['stock_quantity'] as num?)?.toDouble() ?? 0.0,
-            'min_stock_alert': (r['min_stock_alert'] as num?)?.toDouble() ?? 0.0,
-            'purchase_price': (r['purchase_price'] as num?)?.toDouble() ?? 0.0,
-            'base_unit': r['base_unit']?.toString() ?? 'pcs',
-            'units': pUnits.map((u) => {
-              ...u,
-              'qty_per_unit': (u['qty_per_unit'] as num?)?.toDouble() ?? 1.0,
-              'price': (u['price'] as num?)?.toDouble() ?? 0.0,
-            }).toList(),
+            'stock_quantity': 0.0,
+            'min_stock_alert': 0.0,
+            'purchase_price': (r['price'] as num?)?.toDouble() ?? 0.0,
+            'base_unit': 'pcs',
+            'units': [],
           };
         }).toList();
       }
 
       // --- INVENTORY: LOW STOCK ---
       if (path == '/inventory/low-stock' || path == '/inventory/out-of-stock') {
-        final isOut = path == '/inventory/out-of-stock';
-        final condition = isOut ? '<= 0' : '> 0 AND i.stock_quantity <= i.min_stock_alert';
-        final rows = await db.rawQuery('''
-          SELECT p.*, c.name as category_name, c.icon as category_icon, i.stock_quantity, i.min_stock_alert 
-          FROM products p 
-          LEFT JOIN inventory i ON p.id = i.product_id 
-          LEFT JOIN categories c ON p.category_id = c.id 
-          WHERE p.is_active = 1 AND i.stock_quantity $condition
-          ORDER BY i.stock_quantity ASC
-        ''');
-        return rows.map((r) {
-          try {
-            return {
-              ...r,
-              'category_name': r['category_name'] ?? '-',
-              'category_icon': r['category_icon'] ?? '\u{1F4E6}',
-              'stock_quantity': (r['stock_quantity'] as num?)?.toDouble() ?? 0.0,
-              'min_stock_alert': (r['min_stock_alert'] as num?)?.toDouble() ?? 0.0,
-              'purchase_price': (r['purchase_price'] as num?)?.toDouble() ?? 0.0,
-            };
-          } catch (err) {
-            debugPrint('Mapping Error in low-stock: $err');
-            return r;
-          }
-        }).toList();
+        return [];
       }
 
       // --- REPORTS: CHART 28 DAYS ---
@@ -643,24 +607,18 @@ class Api {
           List<Map<String, dynamic>> resolvedItems = [];
           for (var item in items) {
             final productId = item['product_id'];
-            final unitName = item['unit_name']?.toString() ?? 'pcs';
             final quantity = (item['quantity'] as num).toDouble();
+            final addonSummaryStr = item['addon_summary']?.toString() ?? '[]';
 
             // Fetch product info
             final pRow = await txn.query('products', where: 'id = ?', whereArgs: [productId]);
             if (pRow.isEmpty) throw Exception('Produk ID $productId tidak ditemukan');
             final product = pRow.first;
             
-            // Fetch unit price
-            final uRow = await txn.query('product_units', where: 'product_id = ? AND unit_name = ?', whereArgs: [productId, unitName]);
-            final unitQty = uRow.isNotEmpty ? (uRow.first['qty_per_unit'] as num?)?.toDouble() ?? 1.0 : 1.0;
-            final soldPrice = uRow.isNotEmpty ? (uRow.first['price'] as num?)?.toDouble() ?? 0.0 : 0.0;
+            // Allow frontend to pass calculated price (if addons applied) or fallback to base price
+            final soldPrice = (item['price'] as num?)?.toDouble() ?? (product['price'] as num?)?.toDouble() ?? 0.0;
             
             final subtotal = soldPrice * quantity;
-            final baseQty = quantity * unitQty; // convert to base unit for stock deduction
-            final hpp = (product['purchase_price'] as num?)?.toDouble() ?? 0.0;
-
-            final allUnits = await txn.query('product_units', where: 'product_id = ?', whereArgs: [productId]);
             final discountPercent = (item['discount_percent'] as num?)?.toDouble() ?? 0.0;
             final discountAmount = (item['discount_amount'] as num?)?.toDouble() ?? 0.0;
             
@@ -668,16 +626,11 @@ class Api {
               'product_id': productId,
               'product_name': product['name']?.toString() ?? 'Item',
               'sold_price': soldPrice,
-              'purchase_price': hpp,
-              'quantity': baseQty,
-              'original_quantity': quantity,
-              'unit_used': unitName,
+              'quantity': quantity,
               'subtotal': subtotal,
+              'addon_summary': addonSummaryStr,
               'discount_percent': discountPercent,
               'discount_amount': discountAmount,
-              'current_unit_data': uRow.isNotEmpty ? uRow.first : null,
-              'product_units': allUnits,
-              'base_unit': product['base_unit']?.toString().isNotEmpty == true ? product['base_unit'].toString() : '',
             });
             totalAmount += subtotal;
           }
@@ -706,20 +659,25 @@ class Api {
               'product_id': ri['product_id'],
               'product_name': ri['product_name'],
               'sold_price': ri['sold_price'],
-              'purchase_price': ri['purchase_price'],
               'quantity': ri['quantity'],
-              'unit_used': ri['unit_used'],
               'subtotal': ri['subtotal'],
+              'addon_summary': ri['addon_summary'],
               'discount_percent': ri['discount_percent'],
               'discount_amount': ri['discount_amount'],
             });
             detailRows.add(ri);
 
-            // Deduct from inventory safely
-            await txn.rawUpdate(
-              'UPDATE inventory SET stock_quantity = stock_quantity - ? WHERE product_id = ?',
-              [ri['quantity'], ri['product_id']]
-            );
+            // BOM Deduction: Deduct from bahan_baku based on resep
+            final resepRows = await txn.query('resep', where: 'product_id = ?', whereArgs: [ri['product_id']]);
+            for (var r in resepRows) {
+              final bbId = r['bahan_baku_id'];
+              final qtyNeeded = (r['qty_needed'] as num).toDouble();
+              final deduction = qtyNeeded * (ri['quantity'] as double);
+              await txn.rawUpdate(
+                'UPDATE bahan_baku SET stock = stock - ? WHERE id = ?',
+                [deduction, bbId]
+              );
+            }
           }
         });
 
