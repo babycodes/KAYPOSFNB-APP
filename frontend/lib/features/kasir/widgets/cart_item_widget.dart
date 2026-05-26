@@ -5,9 +5,8 @@ import '../../../core/helpers.dart';
 class CartItemWidget extends StatefulWidget {
   final Map<String, dynamic> item;
   final VoidCallback onIncrement, onDecrement, onRemove;
-  final VoidCallback? onMaxSplit;
   final ValueChanged<double>? onSetQuantity;
-  const CartItemWidget({super.key, required this.item, required this.onIncrement, required this.onDecrement, required this.onRemove, this.onSetQuantity, this.onMaxSplit});
+  const CartItemWidget({super.key, required this.item, required this.onIncrement, required this.onDecrement, required this.onRemove, this.onSetQuantity});
 
   @override
   State<CartItemWidget> createState() => _CartItemWidgetState();
@@ -72,22 +71,6 @@ class _CartItemWidgetState extends State<CartItemWidget> {
     final qtyStr = quantity == quantity.roundToDouble() ? '${quantity.round()}' : quantity.toStringAsFixed(1);
 
     final product = widget.item['product'];
-    final selectedUnitName = widget.item['selected_unit']?.toString() ?? 'pcs';
-    final List units = (product is Map && product['units'] is List) ? product['units'] : [];
-    
-    // Safe unit lookup
-    Map<String, dynamic>? selectedUnit;
-    try { selectedUnit = Map<String, dynamic>.from(units.firstWhere((u) => u['unit_name']?.toString() == selectedUnitName)); } catch (_) {}
-    
-    final String baseUnit = (product is Map ? product['base_unit'] : null)?.toString() ?? 'pcs';
-    
-    final formattedSubtitle = formatCartItemDisplay(
-      quantity,
-      selectedUnit,
-      units,
-      baseUnit,
-    );
-
     final productName = (product is Map ? product['name'] : null)?.toString() ?? 'Item';
 
     return Container(
@@ -99,25 +82,15 @@ class _CartItemWidgetState extends State<CartItemWidget> {
           Text(productName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: cs.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 1),
           if (discountPercent > 0) ...[
-            Text('${fmtPrice(unitPrice)} × $formattedSubtitle', style: TextStyle(fontSize: 10, decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant)),
-            Text('${fmtPrice(finalUnitPrice)} × $formattedSubtitle', style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+            Text('${fmtPrice(unitPrice)} × $qtyStr', style: TextStyle(fontSize: 10, decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant)),
+            Text('${fmtPrice(finalUnitPrice)} × $qtyStr', style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
           ] else
-            Text('${fmtPrice(unitPrice)} × $formattedSubtitle', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+            Text('${fmtPrice(unitPrice)} × $qtyStr', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
         ])),
         const SizedBox(width: 4),
         // Subtotal
         Text(fmtPrice(subtotal), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: cs.primary)),
         const SizedBox(width: 6),
-        if (widget.onMaxSplit != null)
-          InkWell(
-            onTap: widget.onMaxSplit,
-            child: Container(
-              margin: const EdgeInsets.only(right: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-              child: const Text('MAX', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue))
-            )
-          ),
         // Compact qty controls with tappable number
         Container(
           height: 28,

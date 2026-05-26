@@ -11,7 +11,6 @@ import 'widgets/product_card.dart';
 import 'widgets/cart_item_widget.dart';
 import 'dialogs/payment_dialog.dart';
 import 'dialogs/receipt_modal.dart';
-import 'dialogs/unit_selector.dart';
 import 'dialogs/confirm_dialog.dart';
 import 'dialogs/printer_settings_dialog.dart';
 import '../auth/lock_screen.dart';
@@ -219,129 +218,6 @@ class _KasirScreenState extends State<KasirScreen> {
     return _safeNum(product['price']);
   }
 
-  double _getHeldQty(int productId) {
-    double sum = 0;
-    for (final hc in heldCarts) {
-      final cartData = (hc['cart_data'] is List) ? hc['cart_data'] as List : [];
-      for (final i in cartData) {
-        if (i is Map && i['product'] is Map && i['product']['id'] == productId) {
-          final units = (i['product']['units'] is List) ? i['product']['units'] as List : [];
-          final unitName = i['selected_unit']?.toString() ?? '';
-          final unit = _findUnit(units, unitName);
-          final multiplier = _safeNum(unit?['qty_per_unit'], 1.0);
-          sum += _safeNum(i['quantity']) * multiplier;
-        }
-      }
-    }
-    return sum;
-  }
-
-  double _getBookedStock(int productId) {
-    double booked = 0;
-    for (final item in cart) {
-      if (item['product'] is Map && item['product']['id'] == productId) {
-        final units = (item['product']['units'] is List) ? item['product']['units'] as List : [];
-        final unitName = item['selected_unit']?.toString() ?? '';
-        final unit = _findUnit(units, unitName);
-        final multiplier = _safeNum(unit?['qty_per_unit'], 1.0);
-        booked += _safeNum(item['quantity']) * multiplier;
-      }
-    }
-    return booked;
-  }
-  
-  void _applyMaxSplit(dynamic product) {
-    cart.removeWhere((i) => i['product'] is Map && i['product']['id'] == product['id']);
-    double remaining = _safeNum(product['stock_quantity']);
-    if (remaining <= 0) return;
-    
-    final units = List.from((product['units'] is List) ? product['units'] : []);
-    units.sort((a, b) => _safeNum(b['qty_per_unit'], 1).compareTo(_safeNum(a['qty_per_unit'], 1)));
-    
-    for (final unit in units) {
-      final mult = _safeNum(unit['qty_per_unit'], 1.0);
-      if (mult <= 0) continue;
-      final qty = (remaining / mult).floorToDouble();
-      if (qty > 0) {
-        cart.add({
-          'product': product, 
-          'selected_unit': unit['unit_name']?.toString() ?? '', 
-          'quantity': qty, 
-          'unit_price': _calcUnitPrice(product, unit['unit_name']?.toString() ?? '')
-        });
-        remaining = remaining - (qty * mult);
-      }
-    }
-    if (remaining > 0.001) {
-      final baseUnitName = (product['base_unit']?.toString().isNotEmpty == true) ? product['base_unit'].toString() : '';
-      cart.add({
-        'product': product, 
-        'selected_unit': baseUnitName, 
-        'quantity': double.parse(remaining.toStringAsFixed(2)), 
-        'unit_price': _calcUnitPrice(product, baseUnitName)
-      });
-    }
-    setState((){});
-  }
-
-  void _consolidateProductCart(dynamic product) {
-    final units = List.from((product['units'] is List) ? product['units'] : []);
-    if (units.length <= 1) return;
-
-    double totalBaseQtyInCart = 0;
-    units.sort((a, b) => _safeNum(b['qty_per_unit'], 1).compareTo(_safeNum(a['qty_per_unit'], 1)));
-
-    int firstIndex = -1;
-    for (int i = 0; i < cart.length; i++) {
-      final c = cart[i];
-      if (c['product'] is Map && c['product']['id'] == product['id']) {
-        if (firstIndex == -1) firstIndex = i;
-        final cUnit = _findUnit(units, c['selected_unit']?.toString() ?? '');
-        final mult = _safeNum(cUnit?['qty_per_unit'], 1.0);
-        totalBaseQtyInCart += _safeNum(c['quantity']) * mult;
-      }
-    }
-
-    if (totalBaseQtyInCart <= 0.001) return;
-
-    cart.removeWhere((c) => c['product'] is Map && c['product']['id'] == product['id']);
-
-    double remaining = totalBaseQtyInCart;
-    List<Map<String, dynamic>> newItems = [];
-
-    for (final unit in units) {
-      final mult = _safeNum(unit['qty_per_unit'], 1.0);
-      if (mult <= 0) continue;
-      final qty = (remaining / mult).floorToDouble();
-      if (qty > 0) {
-        newItems.add({
-          'product': product, 
-          'selected_unit': unit['unit_name']?.toString() ?? '', 
-          'quantity': qty, 
-          'unit_price': _calcUnitPrice(product, unit['unit_name']?.toString() ?? ''),
-          'discount_percent': _getProductDiscount(product),
-        });
-        remaining = remaining - (qty * mult);
-      }
-    }
-    
-    if (remaining > 0.001) {
-      final baseUnitName = (product['base_unit']?.toString().isNotEmpty == true) ? product['base_unit'].toString() : '';
-      newItems.add({
-        'product': product, 
-        'selected_unit': baseUnitName, 
-        'quantity': double.parse(remaining.toStringAsFixed(2)), 
-        'unit_price': _calcUnitPrice(product, baseUnitName),
-        'discount_percent': _getProductDiscount(product),
-      });
-    }
-    
-    if (firstIndex != -1 && firstIndex <= cart.length) {
-      cart.insertAll(firstIndex, newItems);
-    } else {
-      cart.addAll(newItems);
-    }
-  }
 
   void _handleProductSelect(dynamic product) {
     _addToCart(product, 'pcs', 1);
@@ -591,7 +467,7 @@ class _KasirScreenState extends State<KasirScreen> {
                           final promoInfo = _getPromoInfo(product);
                           return ProductCard(
                             product: product, 
-                            bookedQty: _getHeldQty(product['id']) + _getBookedStock(product['id']), 
+                            bookedQty: 0, 
                             discountPercent: promoInfo.$1,
                             promoName: promoInfo.$2,
                             onSelect: _handleProductSelect
@@ -621,7 +497,7 @@ class _KasirScreenState extends State<KasirScreen> {
                 ? Center(child: Text('Keranjang Kosong', style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: 0.5), fontWeight: FontWeight.w500, fontSize: 14)))
                 : ListView.builder(padding: const EdgeInsets.all(12), itemCount: cart.length,
                     itemBuilder: (_, i) => Padding(padding: const EdgeInsets.only(bottom: 8),
-                      child: CartItemWidget(item: cart[i], onIncrement: () => _incrementItem(i), onDecrement: () => _decrementItem(i), onRemove: () => _removeItem(i), onSetQuantity: (q) => _setItemQuantity(i, q), onMaxSplit: () => _applyMaxSplit(cart[i]['product']))))),
+                      child: CartItemWidget(item: cart[i], onIncrement: () => _incrementItem(i), onDecrement: () => _decrementItem(i), onRemove: () => _removeItem(i), onSetQuantity: (q) => _setItemQuantity(i, q))))),
               const Divider(height: 1),
               Padding(padding: const EdgeInsets.all(16), child: Column(children: [
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -766,7 +642,7 @@ class _KasirScreenState extends State<KasirScreen> {
               const Divider(),
               Flexible(child: ListView.builder(shrinkWrap: true, itemCount: cart.length, padding: const EdgeInsets.all(12),
                 itemBuilder: (_, i) => Padding(padding: const EdgeInsets.only(bottom: 8),
-                  child: CartItemWidget(item: cart[i], onIncrement: () => _incrementItem(i), onDecrement: () => _decrementItem(i), onRemove: () => _removeItem(i), onSetQuantity: (q) => _setItemQuantity(i, q), onMaxSplit: () => _applyMaxSplit(cart[i]['product']))))),
+                  child: CartItemWidget(item: cart[i], onIncrement: () => _incrementItem(i), onDecrement: () => _decrementItem(i), onRemove: () => _removeItem(i), onSetQuantity: (q) => _setItemQuantity(i, q))))),
               Padding(padding: const EdgeInsets.all(16), child: Column(children: [
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Total', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)), Text(fmtPrice(cartTotal), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: cs.primary))]),
                 const SizedBox(height: 8),
