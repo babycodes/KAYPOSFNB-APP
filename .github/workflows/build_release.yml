@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-android:
     runs-on: ubuntu-latest
@@ -88,29 +91,23 @@ jobs:
         working-directory: frontend
         run: flutter build linux --release
 
-      - name: Package Linux (DEB, RPM, TAR.GZ)
+      - name: Package Linux (DEB, RPM)
         working-directory: frontend
         run: |
           cd build/linux/x64/release/bundle
           
-          # 1. Package TAR.GZ
-          tar -czvf ../../../../../KAYPOSFNB-linux-x64.tar.gz *
+          # 1. Package DEB
+          fpm -s dir -t deb -n kayposfnb -v 1.0.0 --prefix /opt/kayposfnb -p kayposfnb_1.0.0_amd64.deb -C . .
           
-          # 2. Package DEB
-          fpm -s dir -t deb -n kayposfnb -v 1.0.0 --prefix /opt/kayposfnb -C . .
-          mv kayposfnb_1.0.0_amd64.deb ../../../../../
-          
-          # 3. Package RPM
-          fpm -s dir -t rpm -n kayposfnb -v 1.0.0 --prefix /opt/kayposfnb -C . .
-          mv kayposfnb-1.0.0-1.x86_64.rpm ../../../../../
+          # 2. Package RPM
+          fpm -s dir -t rpm -n kayposfnb -v 1.0.0 --prefix /opt/kayposfnb -p kayposfnb-1.0.0-1.x86_64.rpm -C . .
 
       - name: Release Linux Builds
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            KAYPOSFNB-linux-x64.tar.gz
-            kayposfnb_1.0.0_amd64.deb
-            kayposfnb-1.0.0-1.x86_64.rpm
+            frontend/build/linux/x64/release/bundle/kayposfnb_1.0.0_amd64.deb
+            frontend/build/linux/x64/release/bundle/kayposfnb-1.0.0-1.x86_64.rpm
           tag_name: v1.0.0
           name: Release v1.0.0
           draft: false
@@ -141,15 +138,31 @@ jobs:
         working-directory: frontend
         run: flutter build windows --release
 
-      - name: Package Windows
+      - name: Package Windows (EXE via Inno Setup)
         working-directory: frontend
         run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath ..\KAYPOSFNB-windows-x64.zip
+          $SetupScript = @"
+          [Setup]
+          AppName=KAYPOSFNB
+          AppVersion=1.0.0
+          DefaultDirName={autopf}\KAYPOSFNB
+          OutputDir=.
+          OutputBaseFilename=KAYPOSFNB-windows-x64
+          Compression=lzma
+          SolidCompression=yes
+          [Files]
+          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{autoprograms}\KAYPOSFNB"; Filename: "{app}\frontend.exe"
+          Name: "{autodesktop}\KAYPOSFNB"; Filename: "{app}\frontend.exe"
+          "@
+          Set-Content -Path installer.iss -Value $SetupScript
+          & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" installer.iss
 
       - name: Release Windows Build
         uses: softprops/action-gh-release@v2
         with:
-          files: KAYPOSFNB-windows-x64.zip
+          files: frontend/KAYPOSFNB-windows-x64.exe
           tag_name: v1.0.0
           name: Release v1.0.0
           draft: false
