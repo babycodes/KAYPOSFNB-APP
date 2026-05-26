@@ -69,81 +69,101 @@ class ProductCard extends StatelessWidget {
 
     final double baseUnitPrice = _safeDouble(product is Map ? product['price'] : 0.0);
 
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: () => onSelect(product),
+    // Bottleneck: available portions from BOM
+    final dynamic rawPortions = product is Map ? product['available_portions'] : null;
+    final bool hasRecipe = rawPortions != null;
+    final int availablePortions = hasRecipe ? (rawPortions as num).toInt() : -1; // -1 = no recipe
+    final bool soldOut = hasRecipe && availablePortions <= 0;
+
+    return Opacity(
+      opacity: soldOut ? 0.45 : 1.0,
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        splashColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.2),
-        hoverColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.08),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: isDark ? Colors.deepPurpleAccent.withValues(alpha: 0.15) : cs.primary.withValues(alpha: 0.05),
-            border: Border.all(color: isDark ? Colors.deepPurpleAccent.withValues(alpha: 0.5) : cs.primary.withValues(alpha: 0.3)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Stack(clipBehavior: Clip.none, children: [
-            Row(children: [
-              // Icon
-              Container(
-                width: 32, height: 32,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.deepPurpleAccent.withValues(alpha: 0.2) : cs.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+        child: InkWell(
+          onTap: soldOut ? null : () => onSelect(product),
+          borderRadius: BorderRadius.circular(8),
+          splashColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.2),
+          hoverColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.08),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: isDark ? Colors.deepPurpleAccent.withValues(alpha: 0.15) : cs.primary.withValues(alpha: 0.05),
+              border: Border.all(color: isDark ? Colors.deepPurpleAccent.withValues(alpha: 0.5) : cs.primary.withValues(alpha: 0.3)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Stack(clipBehavior: Clip.none, children: [
+              Row(children: [
+                // Icon
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.deepPurpleAccent.withValues(alpha: 0.2) : cs.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: buildCategoryIcon(categoryIcon, size: 16),
                 ),
-                alignment: Alignment.center,
-                child: buildCategoryIcon(categoryIcon, size: 16),
-              ),
-              const SizedBox(width: 8),
-              // Text Content
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Container(
-                      alignment: Alignment.centerLeft,
-                      child: AutoSizeText(
-                        toTitleCase(productName),
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: MediaQuery.sizeOf(context).width < 768 ? 12 : 14, color: isDark ? Colors.white : cs.onSurface, height: 1.1),
-                        maxLines: 1,
-                        minFontSize: 8,
-                        overflow: TextOverflow.ellipsis,
+                const SizedBox(width: 8),
+                // Text Content
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        alignment: Alignment.centerLeft,
+                        child: AutoSizeText(
+                          toTitleCase(productName),
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: MediaQuery.sizeOf(context).width < 768 ? 12 : 14, color: isDark ? Colors.white : cs.onSurface, height: 1.1),
+                          maxLines: 1,
+                          minFontSize: 8,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        children: [
-                          if (discountPercent > 0) ...[
-                            Text(fmtPrice(baseUnitPrice), style: TextStyle(fontSize: 10, decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant)),
-                            const SizedBox(width: 4),
-                            Text(fmtPrice(baseUnitPrice * (1 - discountPercent / 100)), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? Colors.yellowAccent : Colors.orange)),
-                          ] else
-                            Text(fmtPrice(baseUnitPrice), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? Colors.greenAccent : cs.primary, height: 1.1)),
-                        ]
-                      )
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          children: [
+                            if (discountPercent > 0) ...[
+                              Text(fmtPrice(baseUnitPrice), style: TextStyle(fontSize: 10, decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant)),
+                              const SizedBox(width: 4),
+                              Text(fmtPrice(baseUnitPrice * (1 - discountPercent / 100)), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? Colors.yellowAccent : Colors.orange)),
+                            ] else
+                              Text(fmtPrice(baseUnitPrice), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? Colors.greenAccent : cs.primary, height: 1.1)),
+                            if (hasRecipe) ...[
+                              const SizedBox(width: 6),
+                              Text('· $availablePortions porsi', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: availablePortions <= 0 ? cs.error : (availablePortions <= 5 ? Colors.amber[700] : cs.onSurfaceVariant))),
+                            ],
+                          ]
+                        )
+                      ),
                     ),
-                  ),
-                ],
-              )),
-            ]),
+                  ],
+                )),
+              ]),
 
-            // Badges
-            if (discountPercent > 0) Positioned(top: -4, right: -4,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(color: Colors.amberAccent, borderRadius: BorderRadius.circular(4), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1))]),
-                child: Text('-$discountPercent%', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.black)),
+              // Badges
+              if (soldOut) Positioned(top: -2, right: -2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(4)),
+                  child: const Text('HABIS', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
+                ),
               )
-            ),
-          ]),
+              else if (discountPercent > 0) Positioned(top: -4, right: -4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.amberAccent, borderRadius: BorderRadius.circular(4), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1))]),
+                  child: Text('-$discountPercent%', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.black)),
+                )
+              ),
+            ]),
+          ),
         ),
       ),
     );

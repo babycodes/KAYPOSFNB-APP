@@ -76,7 +76,8 @@ class Api {
             c.name as category_name, 
             c.icon as category_icon,
             p.is_active,
-            IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0) as total_hpp
+            IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0) as total_hpp,
+            (SELECT CAST(MIN(b.stock / r.qty_needed) AS INTEGER) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id AND r.qty_needed > 0) as available_portions
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
           $activeFilter
@@ -1013,6 +1014,17 @@ class Api {
         
         if (data.isNotEmpty) {
           await db.update('bahan_baku', data, where: 'id = ?', whereArgs: [id]);
+        }
+        return {'success': true};
+      }
+
+      // --- RESEP: UPDATE QTY ---
+      if (path.startsWith('/resep/')) {
+        final id = int.tryParse(path.split('/').last);
+        if (id == null) throw Exception('ID Resep tidak valid');
+        final qtyNeeded = (body?['qty_needed'] as num?)?.toDouble();
+        if (qtyNeeded != null && qtyNeeded > 0) {
+          await db.update('resep', {'qty_needed': qtyNeeded}, where: 'id = ?', whereArgs: [id]);
         }
         return {'success': true};
       }

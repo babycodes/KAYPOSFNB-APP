@@ -501,6 +501,45 @@ class _RecipeModalState extends State<RecipeModal> {
     }
   }
 
+  void _editIngredientQty(dynamic ing) async {
+    final currentQty = (ing['qty_needed'] as num?)?.toDouble() ?? 0;
+    final editCtrl = TextEditingController(text: currentQty == currentQty.roundToDouble() ? '${currentQty.round()}' : currentQty.toString());
+    final unit = ing['bahan_unit']?.toString() ?? '';
+
+    final newQty = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Edit Takaran: ${ing['bahan_name']}'),
+        content: TextField(
+          controller: editCtrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(labelText: 'Qty Dibutuhkan', suffixText: unit, isDense: true),
+          onSubmitted: (v) {
+            final val = double.tryParse(v.replaceAll(',', '.'));
+            Navigator.pop(dialogContext, val);
+          },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+          FilledButton(onPressed: () {
+            final val = double.tryParse(editCtrl.text.replaceAll(',', '.'));
+            Navigator.pop(dialogContext, val);
+          }, child: const Text('Simpan')),
+        ],
+      ),
+    );
+
+    if (newQty == null || newQty <= 0) return;
+
+    try {
+      await Api.put('/resep/${ing['id']}', body: {'qty_needed': newQty});
+      _loadData();
+    } catch (e) {
+      if (mounted) showAdminToast(context, 'Error: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -601,9 +640,20 @@ class _RecipeModalState extends State<RecipeModal> {
                           leading: const Icon(Icons.science),
                           title: Text('${ing['bahan_name']} - $qty ${ing['bahan_unit']}'),
                           subtitle: Text('Modal per satuan: ${fmtPrice(cost)} | Subtotal: ${fmtPrice(subtotal)}'),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _deleteIngredient(ing['id']),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.edit, color: cs.primary),
+                                tooltip: 'Edit takaran',
+                                onPressed: () => _editIngredientQty(ing),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                tooltip: 'Hapus bahan',
+                                onPressed: () => _deleteIngredient(ing['id']),
+                              ),
+                            ],
                           ),
                         ),
                       );
