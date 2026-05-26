@@ -49,12 +49,14 @@ jobs:
 
       - name: Build APK Release
         working-directory: frontend
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release
+          mv build/app/outputs/flutter-apk/app-release.apk kayposfnb-v1.0.0.apk
 
       - name: Release APK
         uses: softprops/action-gh-release@v2
         with:
-          files: frontend/build/app/outputs/flutter-apk/app-release.apk
+          files: frontend/kayposfnb-v1.0.0.apk
           tag_name: v1.0.0
           name: Release v1.0.0
           draft: false
@@ -96,18 +98,42 @@ jobs:
         run: |
           cd build/linux/x64/release/bundle
           
-          # 1. Package DEB
-          fpm -s dir -t deb -n kayposfnb -v 1.0.0 --prefix /opt/kayposfnb -p kayposfnb_1.0.0_amd64.deb -C . .
+          mkdir -p pkg_root/opt/kayposfnb
+          # Copy flutter build artifacts into opt
+          find . -mindepth 1 -maxdepth 1 ! -name 'pkg_root' -exec cp -r {} pkg_root/opt/kayposfnb/ \;
           
-          # 2. Package RPM
-          fpm -s dir -t rpm -n kayposfnb -v 1.0.0 --prefix /opt/kayposfnb -p kayposfnb-1.0.0-1.x86_64.rpm -C . .
+          # Create Desktop Shortcut
+          mkdir -p pkg_root/usr/share/applications
+          echo "[Desktop Entry]" > pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Version=1.0" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Name=KayPOS FNB" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Comment=Food & Beverage POS System" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Exec=/opt/kayposfnb/frontend" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Icon=kayposfnb" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Terminal=false" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Type=Application" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          echo "Categories=Utility;Office;" >> pkg_root/usr/share/applications/kayposfnb.desktop
+          
+          # Copy App Icon for Desktop Shortcut
+          mkdir -p pkg_root/usr/share/pixmaps
+          cp ../../../../../assets/KFNB.png pkg_root/usr/share/pixmaps/kayposfnb.png
+          
+          # Create symbolic link for terminal launch
+          mkdir -p pkg_root/usr/bin
+          ln -s /opt/kayposfnb/frontend pkg_root/usr/bin/kayposfnb
+          
+          # Build DEB
+          fpm -s dir -t deb -n kayposfnb -v 1.0.0 -p ../../../../../kayposfnb-v1.0.0.deb -C pkg_root usr opt
+          
+          # Build RPM
+          fpm -s dir -t rpm -n kayposfnb -v 1.0.0 -p ../../../../../kayposfnb-v1.0.0.rpm -C pkg_root usr opt
 
       - name: Release Linux Builds
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            frontend/build/linux/x64/release/bundle/kayposfnb_1.0.0_amd64.deb
-            frontend/build/linux/x64/release/bundle/kayposfnb-1.0.0-1.x86_64.rpm
+            frontend/kayposfnb-v1.0.0.deb
+            frontend/kayposfnb-v1.0.0.rpm
           tag_name: v1.0.0
           name: Release v1.0.0
           draft: false
@@ -147,7 +173,7 @@ jobs:
           AppVersion=1.0.0
           DefaultDirName={autopf}\KAYPOSFNB
           OutputDir=.
-          OutputBaseFilename=KAYPOSFNB-windows-x64
+          OutputBaseFilename=kayposfnb-v1.0.0
           Compression=lzma
           SolidCompression=yes
           [Files]
@@ -162,7 +188,7 @@ jobs:
       - name: Release Windows Build
         uses: softprops/action-gh-release@v2
         with:
-          files: frontend/KAYPOSFNB-windows-x64.exe
+          files: frontend/kayposfnb-v1.0.0.exe
           tag_name: v1.0.0
           name: Release v1.0.0
           draft: false
