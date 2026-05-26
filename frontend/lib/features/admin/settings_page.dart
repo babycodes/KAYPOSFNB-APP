@@ -518,7 +518,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
           // Update System
           _SectionBox(cs, title: 'Pembaruan Sistem', icon: Icons.system_update, action: _currentVersion.isEmpty ? null : Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(8)), child: Text('v$_currentVersion', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary))), children: [
-            Text('Periksa versi terbaru aplikasi KAYPOS. Data produk, pengaturan, dan riwayat transaksi tidak akan hilang setelah pembaruan.', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+            Text('Periksa versi terbaru aplikasi KAYPOS FNB. Data produk, pengaturan, dan riwayat transaksi tidak akan hilang setelah pembaruan.', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: _isCheckingUpdate ? null : _checkForUpdates,

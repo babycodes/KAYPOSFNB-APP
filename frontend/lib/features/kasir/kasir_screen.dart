@@ -220,7 +220,29 @@ class _KasirScreenState extends State<KasirScreen> {
 
 
   void _handleProductSelect(dynamic product) {
+    // Check available portions limit
+    final dynamic rawPortions = product is Map ? product['available_portions'] : null;
+    if (rawPortions != null) {
+      final int maxPortions = (rawPortions as num).toInt();
+      final int currentInCart = _getCartQtyForProduct(product['id']);
+      if (currentInCart >= maxPortions) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Stok bahan tidak cukup untuk menambah "${product['name']}"'), duration: const Duration(seconds: 2)),
+        );
+        return;
+      }
+    }
     _addToCart(product, 'pcs', 1);
+  }
+
+  int _getCartQtyForProduct(dynamic productId) {
+    int total = 0;
+    for (final item in cart) {
+      if (item['product'] is Map && item['product']['id'] == productId) {
+        total += _safeNum(item['quantity']).round();
+      }
+    }
+    return total;
   }
 
   void _addToCart(dynamic product, String unitName, num quantity) {
@@ -245,6 +267,24 @@ class _KasirScreenState extends State<KasirScreen> {
   
   void _setItemQuantity(int i, double qty) {
     if (qty < 0) qty = 0;
+
+    // Enforce available_portions limit
+    final product = cart[i]['product'];
+    if (product is Map) {
+      final dynamic rawPortions = product['available_portions'];
+      if (rawPortions != null) {
+        final int maxPortions = (rawPortions as num).toInt();
+        // Sum qty of same product in other cart entries
+        int otherQty = 0;
+        for (int j = 0; j < cart.length; j++) {
+          if (j != i && cart[j]['product'] is Map && cart[j]['product']['id'] == product['id']) {
+            otherQty += _safeNum(cart[j]['quantity']).round();
+          }
+        }
+        final int maxForThis = maxPortions - otherQty;
+        if (qty > maxForThis) qty = maxForThis.toDouble();
+      }
+    }
     
     setState(() {
       cart[i]['quantity'] = qty;

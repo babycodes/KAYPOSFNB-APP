@@ -184,9 +184,17 @@ class Api {
           for (var item in details) {
             final subtotal = (item['subtotal'] as num?)?.toDouble() ?? 0;
             final qty = (item['quantity'] as num?)?.toDouble() ?? 0;
-            final hpp = (item['purchase_price'] as num?)?.toDouble() ?? 0;
-            // Profit = Revenue - Cost. Revenue = subtotal, Cost = hpp * qty (base units)
-            totalProfit += subtotal - (hpp * qty);
+            // Calculate HPP from BOM (resep + bahan_baku)
+            final productId = item['product_id'];
+            double hppPerUnit = 0;
+            try {
+              final hppRows = await db.rawQuery(
+                'SELECT IFNULL(SUM(r.qty_needed * b.cost_price), 0) as hpp FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = ?',
+                [productId]
+              );
+              hppPerUnit = (hppRows.first['hpp'] as num?)?.toDouble() ?? 0;
+            } catch (_) {}
+            totalProfit += subtotal - (hppPerUnit * qty);
           }
         }
         
@@ -209,21 +217,7 @@ class Api {
         List<Map<String, dynamic>> enrichedDetails = [];
         for (var d in details) {
           final m = Map<String, dynamic>.from(d);
-          final pId = m['product_id'];
-          final pRow = await db.query('products', where: 'id = ?', whereArgs: [pId]);
-          final uRows = await db.query('product_units', where: 'product_id = ?', whereArgs: [pId]);
-          
-          m['base_unit'] = pRow.isNotEmpty && pRow.first['base_unit']?.toString().isNotEmpty == true ? pRow.first['base_unit'].toString() : '';
-          m['product_units'] = uRows;
-          try {
-            m['current_unit_data'] = uRows.firstWhere((u) => u['unit_name'] == m['unit_used']);
-            // transaction_details stores quantity as baseQty! To use formatCartItemDisplay, we must provide original qty.
-            final currentMultiplier = (m['current_unit_data']['qty_per_unit'] as num?)?.toDouble() ?? 1.0;
-            m['original_quantity'] = (m['quantity'] as num).toDouble() / currentMultiplier;
-          } catch (_) {
-            m['current_unit_data'] = null;
-            m['original_quantity'] = (m['quantity'] as num).toDouble();
-          }
+          m['unit_used'] = m['unit_used'] ?? 'pcs';
           enrichedDetails.add(m);
         }
         
@@ -338,29 +332,60 @@ class Api {
 
       // --- INVENTORY: LOW STOCK ---
       if (path == '/inventory/low-stock' || path == '/inventory/out-of-stock') {
-        return [];
+        final rows = await db.rawQuery('''
+          SELECT id, name, unit, stock, min_stock_alert, cost_price
+          FROM bahan_baku
+          WHERE min_stock_alert > 0 AND stock <= min_stock_alert
+          ORDER BY stock ASC
+        ''');
+        return rows.map((r) => Map<String, dynamic>.from(r)).toList();
       }
 
       // --- REPORTS: CHART 28 DAYS ---
       if (path == '/reports/chart28') {
         final past28 = DateTime.now().subtract(const Duration(days: 28)).toIso8601String().substring(0, 10);
-        final rows = await db.rawQuery('''
-          SELECT date(t.created_at) as date, 
-                 COALESCE(SUM(t.total_amount), 0) as sales,
-                 COALESCE(SUM(d.subtotal - (d.purchase_price * d.quantity)), 0) as profit
-          FROM transactions t
-          LEFT JOIN transaction_details d ON t.id = d.transaction_id
-          WHERE date(t.created_at) >= ?
-          GROUP BY date(t.created_at)
+        
+        // Get daily sales
+        final salesRows = await db.rawQuery('''
+          SELECT date(created_at) as date, COALESCE(SUM(total_amount), 0) as sales
+          FROM transactions
+          WHERE date(created_at) >= ?
+          GROUP BY date(created_at)
           ORDER BY date ASC
         ''', [past28]);
-        return rows.map((r) {
-          return {
-            'date': r['date']?.toString() ?? '',
-            'sales': (r['sales'] as num?)?.toDouble() ?? 0.0,
-            'profit': (r['profit'] as num?)?.toDouble() ?? 0.0,
-          };
-        }).toList();
+        
+        // Calculate profit per day using BOM-based HPP
+        List<Map<String, dynamic>> result = [];
+        for (var row in salesRows) {
+          final dateStr = row['date']?.toString() ?? '';
+          final sales = (row['sales'] as num?)?.toDouble() ?? 0.0;
+          
+          // Get total HPP for this day
+          double dayProfit = 0;
+          try {
+            final txRows = await db.rawQuery(
+              "SELECT id FROM transactions WHERE date(created_at) = ?",
+              [dateStr]
+            );
+            for (var tx in txRows) {
+              final items = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [tx['id']]);
+              for (var item in items) {
+                final subtotal = (item['subtotal'] as num?)?.toDouble() ?? 0;
+                final qty = (item['quantity'] as num?)?.toDouble() ?? 0;
+                final productId = item['product_id'];
+                final hppRows = await db.rawQuery(
+                  'SELECT IFNULL(SUM(r.qty_needed * b.cost_price), 0) as hpp FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = ?',
+                  [productId]
+                );
+                final hppPerUnit = (hppRows.first['hpp'] as num?)?.toDouble() ?? 0;
+                dayProfit += subtotal - (hppPerUnit * qty);
+              }
+            }
+          } catch (_) {}
+          
+          result.add({'date': dateStr, 'sales': sales, 'profit': dayProfit});
+        }
+        return result;
       }
 
       // --- REPORTS: TOP PRODUCTS ---

@@ -59,6 +59,59 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
     }
   }
 
+  void _showRestockDialog(dynamic item) {
+    final qtyCtrl = TextEditingController();
+    final costCtrl = TextEditingController();
+    final unit = item['unit']?.toString() ?? '';
+
+    showDialog(context: context, builder: (dialogContext) {
+      return AlertDialog(
+        title: Text('Restock: ${item['name']}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Stok saat ini: ${(item['stock'] as num?)?.toDouble() ?? 0} $unit', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 16),
+          TextField(
+            controller: qtyCtrl,
+            decoration: InputDecoration(labelText: 'Jumlah Tambah Stok', suffixText: unit, isDense: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: costCtrl,
+            decoration: const InputDecoration(labelText: 'Total Harga Beli Restock', prefixText: 'Rp ', isDense: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+          FilledButton(onPressed: () async {
+            final addQty = double.tryParse(qtyCtrl.text.replaceAll(',', '.')) ?? 0;
+            final addCost = double.tryParse(costCtrl.text.replaceAll(',', '.')) ?? 0;
+            if (addQty <= 0) return;
+
+            final currentStock = (item['stock'] as num?)?.toDouble() ?? 0;
+            final currentCostPrice = (item['cost_price'] as num?)?.toDouble() ?? 0;
+            final newStock = currentStock + addQty;
+            // AVCO: weighted average cost
+            final totalOldValue = currentStock * currentCostPrice;
+            final newCostPrice = newStock > 0 ? (totalOldValue + addCost) / newStock : currentCostPrice;
+
+            try {
+              await Api.put('/bahan-baku/${item['id']}', body: {
+                'stock': newStock,
+                'cost_price': newCostPrice,
+              });
+              if (mounted) Navigator.pop(dialogContext);
+              _loadData();
+            } catch (e) {
+              if (mounted) showAdminToast(context, 'Error: $e');
+            }
+          }, child: const Text('Tambah Stok')),
+        ],
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -158,10 +211,12 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
             PopupMenuButton(
               icon: const Icon(Icons.more_vert),
               itemBuilder: (_) => [
+                const PopupMenuItem(value: 'restock', child: Row(children: [Icon(Icons.add_box, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Restock', style: TextStyle(color: Colors.blue))])),
                 const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
                 const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
               ],
               onSelected: (val) {
+                if (val == 'restock') _showRestockDialog(m);
                 if (val == 'edit') _openForm(m);
                 if (val == 'delete') _confirmDelete(m);
               },
@@ -216,6 +271,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                   DataCell(Text(fmtPrice(stock * costPrice))),
                   DataCell(Text(_fmtNum(minAlert), style: TextStyle(color: cs.onSurfaceVariant))),
                   DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(icon: const Icon(Icons.add_box, size: 18, color: Colors.blue), onPressed: () => _showRestockDialog(m), tooltip: 'Restock'),
                     IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: () => _openForm(m), tooltip: 'Edit'),
                     IconButton(icon: const Icon(Icons.delete, size: 18, color: Colors.red), onPressed: () => _confirmDelete(m), tooltip: 'Hapus'),
                   ])),
@@ -268,15 +324,33 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     final m = widget.item;
     _nameCtrl = TextEditingController(text: (m?['name'] ?? '').toString());
     
+    final dbUnit = m != null ? (m['unit'] ?? '').toString() : '';
     final stock = m != null ? (m['stock'] as num?)?.toDouble() ?? 0 : 0.0;
     final costPrice = m != null ? (m['cost_price'] as num?)?.toDouble() ?? 0 : 0.0;
     
-    _stockCtrl = TextEditingController(text: m != null ? _fmtInit(stock) : '');
-    _costCtrl = TextEditingController(text: m != null ? _fmtInit(stock * costPrice) : '');
+    // Reverse conversion: show user-friendly units
+    double displayQty = stock;
+    double displayTotalCost = stock * costPrice;
+    String displayUnit = dbUnit;
+    
+    if (m != null) {
+      if (dbUnit == 'gram' && stock >= 1000) {
+        displayUnit = 'Kg';
+        displayQty = stock / 1000;
+      } else if (dbUnit == 'ml' && stock >= 1000) {
+        displayUnit = 'Liter';
+        displayQty = stock / 1000;
+      }
+    }
+    
+    _stockCtrl = TextEditingController(text: m != null ? _fmtInit(displayQty) : '');
+    _costCtrl = TextEditingController(text: m != null ? _fmtInit(displayTotalCost) : '');
     _minAlertCtrl = TextEditingController(text: m != null ? _fmtInit((m['min_stock_alert'] as num?)?.toDouble() ?? 0) : '');
 
-    if (m != null && _units.contains(m['unit'])) {
-      _selectedUnit = m['unit'];
+    if (m != null && _units.contains(displayUnit)) {
+      _selectedUnit = displayUnit;
+    } else if (m != null && _units.contains(dbUnit)) {
+      _selectedUnit = dbUnit;
     } else if (m == null) {
       _selectedUnit = 'Kg';
     }

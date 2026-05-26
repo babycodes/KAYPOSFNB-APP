@@ -47,12 +47,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           final txItems = (tx['items'] is List) ? tx['items'] as List : [];
           for (var item in txItems) {
             itemsSold += _safeNum(item['quantity']).round();
-            final sub = _safeNum(item['subtotal']);
-            final hpp = _safeNum(item['purchase_price']);
-            final qty = _safeNum(item['quantity']);
-            profit += sub - (hpp * qty);
           }
         }
+        // Use the pre-calculated profit from the /transactions/today endpoint
+        profit = _safeNum(summary['total_profit']);
       } catch (_) {}
 
       setState(() {
@@ -139,7 +137,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   decoration: BoxDecoration(color: cs.errorContainer.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8), border: Border.all(color: cs.error.withValues(alpha: 0.1))),
                   child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Expanded(child: Text(item['name'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
-                    Text('${_safeNum(item['stock_quantity']).round()} ${item['base_unit'] ?? ''}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.error)),
+                    Text('${_safeNum(item['stock']).round()} ${item['unit'] ?? ''}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.error)),
                   ]),
                 )),
               ]),
