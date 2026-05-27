@@ -107,19 +107,36 @@ class _DiskonPageState extends State<DiskonPage> {
       try {
         final dayMap = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
         final days = val.split(',').map((e) => int.tryParse(e.trim())).where((e) => e != null).cast<int>();
-        return days.map((d) => d >= 1 && d <= 7 ? dayMap[d - 1] : '').where((e) => e.isNotEmpty).join(', ');
+        final result = days.map((d) => d >= 1 && d <= 7 ? dayMap[d - 1] : '').where((e) => e.isNotEmpty).join(', ');
+        return result.isNotEmpty ? result : val;
       } catch (_) {
         return val;
       }
     }
     if (type == 'date_range') {
       try {
+        final months = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
         final parts = val.split(',');
         if (parts.length == 2) {
-          final start = parts[0].trim().split('-');
-          final end = parts[1].trim().split('-');
-          if (start.length == 3 && end.length == 3) {
-            return '${start[2]}-${start[1]}-${start[0]} s/d ${end[2]}-${end[1]}-${end[0]}';
+          final startParts = parts[0].trim().split('-');
+          final endParts = parts[1].trim().split('-');
+          if (startParts.length == 3 && endParts.length == 3) {
+            final sDay = int.parse(startParts[2]);
+            final sMonth = int.parse(startParts[1]);
+            final sYear = int.parse(startParts[0]);
+            final eDay = int.parse(endParts[2]);
+            final eMonth = int.parse(endParts[1]);
+            final eYear = int.parse(endParts[0]);
+            // Same month and year: "12 - 15 November 2023"
+            if (sMonth == eMonth && sYear == eYear) {
+              return '$sDay - $eDay ${months[eMonth]} $eYear';
+            }
+            // Same year: "12 November - 15 Desember 2023"
+            if (sYear == eYear) {
+              return '$sDay ${months[sMonth]} - $eDay ${months[eMonth]} $eYear';
+            }
+            // Different year
+            return '$sDay ${months[sMonth]} $sYear - $eDay ${months[eMonth]} $eYear';
           }
         }
       } catch (_) {}
@@ -527,6 +544,49 @@ class _DiskonDetailPageState extends State<DiskonDetailPage> {
     }
   }
 
+  String _formatScheduleDetail(dynamic diskon) {
+    final type = diskon['schedule_type']?.toString() ?? 'all_day';
+    final val = diskon['schedule_value']?.toString() ?? '';
+    
+    if (type == 'all_day') return 'Setiap Hari';
+    if (type == 'specific_days') {
+      try {
+        final dayMap = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+        final days = val.split(',').map((e) => int.tryParse(e.trim())).where((e) => e != null).cast<int>();
+        final result = days.map((d) => d >= 1 && d <= 7 ? dayMap[d - 1] : '').where((e) => e.isNotEmpty).join(', ');
+        return result.isNotEmpty ? result : val;
+      } catch (_) {
+        return val;
+      }
+    }
+    if (type == 'date_range') {
+      try {
+        final months = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+        final parts = val.split(',');
+        if (parts.length == 2) {
+          final startParts = parts[0].trim().split('-');
+          final endParts = parts[1].trim().split('-');
+          if (startParts.length == 3 && endParts.length == 3) {
+            final sDay = int.parse(startParts[2]);
+            final sMonth = int.parse(startParts[1]);
+            final sYear = int.parse(startParts[0]);
+            final eDay = int.parse(endParts[2]);
+            final eMonth = int.parse(endParts[1]);
+            final eYear = int.parse(endParts[0]);
+            if (sMonth == eMonth && sYear == eYear) {
+              return '$sDay - $eDay ${months[eMonth]} $eYear';
+            }
+            if (sYear == eYear) {
+              return '$sDay ${months[sMonth]} - $eDay ${months[eMonth]} $eYear';
+            }
+            return '$sDay ${months[sMonth]} $sYear - $eDay ${months[eMonth]} $eYear';
+          }
+        }
+      } catch (_) {}
+    }
+    return val;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -580,7 +640,7 @@ class _DiskonDetailPageState extends State<DiskonDetailPage> {
                       children: [
                         Icon(Icons.calendar_month, color: cs.primary, size: 20),
                         const SizedBox(width: 8),
-                        Expanded(child: Text('Jadwal: ${diskon['schedule_type']} (${diskon['schedule_value']})', style: const TextStyle(fontSize: 14))),
+                        Expanded(child: Text('Jadwal: ${_formatScheduleDetail(diskon)}', style: const TextStyle(fontSize: 14))),
                       ],
                     ),
                   ],

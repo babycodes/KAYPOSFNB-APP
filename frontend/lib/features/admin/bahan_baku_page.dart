@@ -122,10 +122,21 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
     });
   }
 
+  // Generate a deterministic color for a category name
+  Color _categoryColor(String? name) {
+    if (name == null || name.isEmpty) return Colors.grey;
+    final colors = [
+      Colors.blue, Colors.teal, Colors.orange, Colors.purple,
+      Colors.indigo, Colors.pink, Colors.cyan, Colors.amber,
+      Colors.deepOrange, Colors.green, Colors.lime, Colors.brown,
+    ];
+    final hash = name.codeUnits.fold<int>(0, (prev, c) => prev + c);
+    return colors[hash % colors.length];
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isMobile = MediaQuery.sizeOf(context).width < 768;
     final items = filtered;
 
     return Scaffold(
@@ -179,7 +190,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
           ),
         ),
         const SizedBox(height: 12),
-        // List
+        // List — unified card style for all screen sizes
         Expanded(child: isLoading
           ? const Center(child: CircularProgressIndicator())
           : items.isEmpty
@@ -194,7 +205,12 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                   label: const Text('Tambah Bahan Baku Pertama'),
                 ),
               ]))
-            : isMobile ? _buildMobileList(cs, items) : _buildDesktopTable(cs, items),
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: _buildCardList(cs, items),
+                ),
+              ),
         ),
       ]),
       floatingActionButton: FloatingActionButton.extended(
@@ -205,7 +221,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
     );
   }
 
-  Widget _buildMobileList(ColorScheme cs, List<dynamic> items) {
+  Widget _buildCardList(ColorScheme cs, List<dynamic> items) {
     return ListView.separated(
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -214,120 +230,58 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
         final stock = (m['stock'] as num?)?.toDouble() ?? 0;
         final minAlert = (m['min_stock_alert'] as num?)?.toDouble() ?? 0;
         final isLow = minAlert > 0 && stock <= minAlert;
-
         final costPrice = (m['cost_price'] as num?)?.toDouble() ?? 0;
+        final katName = m['kategori_name']?.toString() ?? 'Lainnya';
+        final catColor = _categoryColor(katName);
 
         return Container(
-          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: cs.surfaceBright,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: isLow ? cs.error.withValues(alpha: 0.4) : cs.outlineVariant),
           ),
           child: Row(children: [
+            // Colored left strip (category indicator)
             Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(10)),
-              child: Icon(Icons.science, color: cs.onPrimaryContainer, size: 22),
+              width: 6,
+              height: 72,
+              decoration: BoxDecoration(
+                color: catColor,
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomLeft: Radius.circular(12)),
+              ),
             ),
             const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(m['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              const SizedBox(height: 2),
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(4)),
-                  child: Text(m['unit'] ?? '', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSecondaryContainer)),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: cs.tertiaryContainer, borderRadius: BorderRadius.circular(4)),
-                  child: Text(m['kategori_name'] ?? 'Lainnya', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: cs.onTertiaryContainer)),
-                ),
-                const SizedBox(width: 8),
-                Text('Stok: ', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-                Text(_formatStock(stock, m['unit'] ?? ''), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isLow ? cs.error : cs.onSurface)),
+            // Content
+            Expanded(child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(m['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 4),
+                Wrap(spacing: 6, runSpacing: 4, children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: catColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                    child: Text(katName, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: catColor)),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(4)),
+                    child: Text(m['unit'] ?? '', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSecondaryContainer)),
+                  ),
+                  Text('Stok: ${_formatStock(stock, m['unit'] ?? '')}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isLow ? cs.error : cs.onSurface)),
+                ]),
+                const SizedBox(height: 2),
+                Text('Aset: ${fmtPrice(stock * costPrice)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
               ]),
-              const SizedBox(height: 2),
-              Text('Total Aset / Modal: ${fmtPrice(stock * costPrice)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-            ])),
-            PopupMenuButton(
-              icon: const Icon(Icons.more_vert),
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'restock', child: Row(children: [Icon(Icons.add_box, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Restock', style: TextStyle(color: Colors.blue))])),
-                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
-                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
-              ],
-              onSelected: (val) {
-                if (val == 'restock') _showRestockDialog(m);
-                if (val == 'edit') _openForm(m);
-                if (val == 'delete') _confirmDelete(m);
-              },
-            ),
+            )),
+            // Action buttons
+            IconButton(icon: const Icon(Icons.add_box, size: 20, color: Colors.blue), onPressed: () => _showRestockDialog(m), tooltip: 'Restock'),
+            IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => _openForm(m), tooltip: 'Edit'),
+            IconButton(icon: const Icon(Icons.delete, size: 20, color: Colors.red), onPressed: () => _confirmDelete(m), tooltip: 'Hapus'),
+            const SizedBox(width: 4),
           ]),
         );
       },
-    );
-  }
-
-  Widget _buildDesktopTable(ColorScheme cs, List<dynamic> items) {
-    return Container(
-      decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outlineVariant)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: ListView(children: [
-          DataTable(
-            headingRowColor: WidgetStatePropertyAll(cs.surfaceContainer),
-            dataRowMinHeight: 56, dataRowMaxHeight: 56,
-            columns: const [
-              DataColumn(label: Text('Nama Bahan', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Kategori')),
-              DataColumn(label: Text('Satuan')),
-              DataColumn(label: Text('Stok'), numeric: true),
-              DataColumn(label: Text('Total Aset / Modal'), numeric: true),
-              DataColumn(label: Text('Min. Alert'), numeric: true),
-              DataColumn(label: Text('')),
-            ],
-            rows: items.map((m) {
-              final stock = (m['stock'] as num?)?.toDouble() ?? 0;
-              final minAlert = (m['min_stock_alert'] as num?)?.toDouble() ?? 0;
-              final isLow = minAlert > 0 && stock <= minAlert;
-              final costPrice = (m['cost_price'] as num?)?.toDouble() ?? 0;
-
-              return DataRow(
-                color: isLow ? WidgetStatePropertyAll(cs.errorContainer.withValues(alpha: 0.2)) : null,
-                cells: [
-                  DataCell(Row(children: [
-                    Container(
-                      width: 32, height: 32,
-                      decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(8)),
-                      child: Icon(Icons.science, size: 16, color: cs.onPrimaryContainer),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(m['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  ])),
-                  DataCell(Text(m['kategori_name'] ?? 'Lainnya', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant))),
-                  DataCell(Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(6)),
-                    child: Text(m['unit'] ?? '', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSecondaryContainer)),
-                  )),
-                  DataCell(Text(_formatStock(stock, m['unit'] ?? ''), style: TextStyle(fontWeight: FontWeight.w900, color: isLow ? cs.error : cs.onSurface))),
-                  DataCell(Text(fmtPrice(stock * costPrice))),
-                  DataCell(Text(_fmtNum(minAlert), style: TextStyle(color: cs.onSurfaceVariant))),
-                  DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
-                    IconButton(icon: const Icon(Icons.add_box, size: 18, color: Colors.blue), onPressed: () => _showRestockDialog(m), tooltip: 'Restock'),
-                    IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: () => _openForm(m), tooltip: 'Edit'),
-                    IconButton(icon: const Icon(Icons.delete, size: 18, color: Colors.red), onPressed: () => _confirmDelete(m), tooltip: 'Hapus'),
-                  ])),
-                ],
-              );
-            }).toList(),
-          ),
-        ]),
-      ),
     );
   }
 

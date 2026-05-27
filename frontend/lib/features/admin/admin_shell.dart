@@ -18,8 +18,8 @@ class _AdminShellState extends State<AdminShell> {
     {'href': '/admin', 'label': 'Dashboard', 'icon': Icons.dashboard},
     {'href': '/admin/produk', 'label': 'Produk', 'icon': Icons.inventory_2},
     {'href': '/admin/kategori', 'label': 'Kategori Produk', 'icon': Icons.label},
-    {'href': '/admin/kategori-bahan', 'label': 'Kategori Bahan', 'icon': Icons.category},
     {'href': '/admin/bahan-baku', 'label': 'Bahan Baku', 'icon': Icons.inventory_2},
+    {'href': '/admin/kategori-bahan', 'label': 'Kategori Bahan', 'icon': Icons.category},
     {'href': '/admin/laporan', 'label': 'Laporan', 'icon': Icons.bar_chart},
     {'href': '/admin/karyawan', 'label': 'Karyawan', 'icon': Icons.people},
     {'href': '/admin/diskon', 'label': 'Diskon', 'icon': Icons.discount},
@@ -103,7 +103,18 @@ class _AdminShellState extends State<AdminShell> {
           return Tooltip(
             message: showLabels ? '' : item['label'] as String,
             child: Padding(padding: const EdgeInsets.only(bottom: 4), child: InkWell(
-              onTap: () { context.go(item['href'] as String); if (isMobile) Navigator.pop(context); },
+              onTap: () {
+                // Close any open modals/bottom sheets before navigating
+                final nav = Navigator.of(context);
+                while (nav.canPop()) {
+                  nav.pop();
+                }
+                // Then navigate
+                context.go(item['href'] as String);
+                if (isMobile && _scaffoldKey.currentState?.isDrawerOpen == true) {
+                  _scaffoldKey.currentState?.closeDrawer();
+                }
+              },
               borderRadius: BorderRadius.circular(12),
               child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(color: active ? cs.primaryContainer : null, borderRadius: BorderRadius.circular(12)),
