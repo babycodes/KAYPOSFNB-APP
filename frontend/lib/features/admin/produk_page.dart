@@ -181,71 +181,102 @@ class _ProdukPageState extends State<ProdukPage> {
                 const SizedBox(height: 16),
                 Text('Tidak ada produk', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
               ]))
-            : ListView.builder(
-                itemCount: items.length,
-                itemBuilder: (context, i) {
-                  final p = items[i];
-                  return Card(
-                    elevation: 0, margin: const EdgeInsets.only(bottom: 8),
-                    color: p['is_active'] == 1 ? cs.surfaceContainer : cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5))),
-                    child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        Container(width: 48, height: 48, decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(12)),
-                          child: Center(child: Text(p['category_icon'] ?? '📦', style: const TextStyle(fontSize: 24)))),
-                        const SizedBox(width: 12),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: p['is_active'] == 1 ? cs.onSurface : cs.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis)),
-                            if (p['is_active'] != 1) ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(4)), child: Text('NON-AKTIF', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onErrorContainer)))],
-                          ]),
-                          Row(children: [
-                            Text('${p['category_name']} ', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                            if (p['barcode'] != null && p['barcode'].toString().trim().isNotEmpty)
-                              Text('· ${p['barcode']}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant))
-                            else
-                              Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: cs.errorContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(4)), child: Text('No Barcode', style: TextStyle(fontSize: 9, color: cs.error))),
-                          ]),
-                        ])),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(fmtPrice((p['price'] as num?)?.toDouble() ?? 0), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: p['is_active'] == 1 ? cs.primary : cs.onSurfaceVariant)),
-                            Text('HPP: ${fmtPrice((p['total_hpp'] as num?)?.toDouble() ?? 0)}', style: TextStyle(fontSize: 12, color: cs.error)),
-                          ],
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) {
+                      final p = items[i];
+                      final isActive = p['is_active'] == 1;
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: isActive ? cs.surfaceBright : cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
                         ),
-                        const SizedBox(width: 16),
-                        ElevatedButton.icon(
-                          onPressed: () => _openRecipe(p),
-                          icon: const Icon(Icons.receipt_long, size: 18),
-                          label: const Text("Atur Resep"),
-                        ),
-                        PopupMenuButton(
-                          icon: const Icon(Icons.more_vert),
-                          itemBuilder: (_) => [
-                            PopupMenuItem(value: 'edit', child: const Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
-                            PopupMenuItem(value: 'toggle', child: Row(children: [Icon(p['is_active'] == 1 ? Icons.visibility_off : Icons.visibility, size: 18), SizedBox(width: 8), Text(p['is_active'] == 1 ? 'Non-aktifkan' : 'Aktifkan')])),
-                            const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
+                        child: Row(children: [
+                          // Category icon left strip
+                          Container(
+                            width: 6,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              color: isActive ? cs.primary.withValues(alpha: 0.3) : cs.outlineVariant,
+                              borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomLeft: Radius.circular(12)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // Content
+                          Expanded(child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Row(children: [
+                                Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isActive ? cs.onSurface : cs.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                if (!isActive) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(4)), child: Text('NON-AKTIF', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onErrorContainer)))],
+                              ]),
+                              const SizedBox(height: 4),
+                              Wrap(spacing: 6, runSpacing: 4, children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(4)),
+                                  child: Text(p['category_name'] ?? '', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: cs.primary)),
+                                ),
+                                Text(fmtPrice((p['price'] as num?)?.toDouble() ?? 0), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isActive ? cs.primary : cs.onSurfaceVariant)),
+                                Text('HPP: ${fmtPrice((p['total_hpp'] as num?)?.toDouble() ?? 0)}', style: TextStyle(fontSize: 11, color: cs.error)),
+                              ]),
+                            ]),
+                          )),
+                          // Actions: Desktop = buttons, Mobile = three dots
+                          if (isMobile)
+                            PopupMenuButton(
+                              icon: const Icon(Icons.more_vert),
+                              itemBuilder: (_) => [
+                                const PopupMenuItem(value: 'recipe', child: Row(children: [Icon(Icons.receipt_long, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Atur Resep', style: TextStyle(color: Colors.blue))])),
+                                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
+                                PopupMenuItem(value: 'toggle', child: Row(children: [Icon(isActive ? Icons.visibility_off : Icons.visibility, size: 18), const SizedBox(width: 8), Text(isActive ? 'Non-aktifkan' : 'Aktifkan')])),
+                                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
+                              ],
+                              onSelected: (val) {
+                                if (val == 'recipe') _openRecipe(p);
+                                if (val == 'edit') _openForm(p);
+                                if (val == 'toggle') _toggleActive(p);
+                                if (val == 'delete') _confirmDelete(p);
+                              },
+                            )
+                          else ...[
+                            ElevatedButton.icon(
+                              onPressed: () => _openRecipe(p),
+                              icon: const Icon(Icons.receipt_long, size: 16),
+                              label: const Text('Resep', style: TextStyle(fontSize: 12)),
+                              style: ElevatedButton.styleFrom(visualDensity: VisualDensity.compact),
+                            ),
+                            PopupMenuButton(
+                              icon: const Icon(Icons.more_vert),
+                              itemBuilder: (_) => [
+                                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
+                                PopupMenuItem(value: 'toggle', child: Row(children: [Icon(isActive ? Icons.visibility_off : Icons.visibility, size: 18), const SizedBox(width: 8), Text(isActive ? 'Non-aktifkan' : 'Aktifkan')])),
+                                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
+                              ],
+                              onSelected: (val) {
+                                if (val == 'edit') _openForm(p);
+                                if (val == 'toggle') _toggleActive(p);
+                                if (val == 'delete') _confirmDelete(p);
+                              },
+                            ),
                           ],
-                          onSelected: (val) {
-                            if (val == 'edit') _openForm(p);
-                            if (val == 'toggle') _toggleActive(p);
-                            if (val == 'delete') _confirmDelete(p);
-                          },
-                        )
-                      ]),
-                    ])),
-                  );
-                },
+                        ]),
+                      );
+                    },
+                  ),
+                ),
               )
         ),
       ]),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: _openForm,
-        icon: const Icon(Icons.add),
-        label: const Text('Produk Baru'),
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -468,6 +499,17 @@ class _RecipeModalState extends State<RecipeModal> {
     
     final qty = double.tryParse(_qtyCtrl.text.replaceAll(',', '.')) ?? 0;
     if (qty <= 0) return;
+
+    // Check for duplicate: if this bahan already exists in the recipe
+    final existing = _ingredients.where((ing) => ing['bahan_baku_id'] == _selectedBahanId).toList();
+    if (existing.isNotEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bahan sudah ada di dalam resep, silakan edit jumlahnya.')),
+        );
+      }
+      return;
+    }
 
     try {
       await Api.post('/resep', body: {

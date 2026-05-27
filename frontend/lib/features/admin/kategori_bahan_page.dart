@@ -146,10 +146,9 @@ class _KategoriBahanPageState extends State<KategoriBahanPage> {
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(),
-        icon: const Icon(Icons.add),
-        label: const Text('Kategori Baru'),
+        child: const Icon(Icons.add),
       ),
     );
   }

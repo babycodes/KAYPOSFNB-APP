@@ -122,17 +122,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
     });
   }
 
-  // Generate a deterministic color for a category name
-  Color _categoryColor(String? name) {
-    if (name == null || name.isEmpty) return Colors.grey;
-    final colors = [
-      Colors.blue, Colors.teal, Colors.orange, Colors.purple,
-      Colors.indigo, Colors.pink, Colors.cyan, Colors.amber,
-      Colors.deepOrange, Colors.green, Colors.lime, Colors.brown,
-    ];
-    final hash = name.codeUnits.fold<int>(0, (prev, c) => prev + c);
-    return colors[hash % colors.length];
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -213,15 +203,16 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
               ),
         ),
       ]),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: _openForm,
-        icon: const Icon(Icons.add),
-        label: const Text('Bahan Baru'),
+        child: const Icon(Icons.add),
       ),
     );
   }
 
   Widget _buildCardList(ColorScheme cs, List<dynamic> items) {
+    final isMobile = MediaQuery.sizeOf(context).width < 768;
+
     return ListView.separated(
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -229,24 +220,34 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
         final m = items[i];
         final stock = (m['stock'] as num?)?.toDouble() ?? 0;
         final minAlert = (m['min_stock_alert'] as num?)?.toDouble() ?? 0;
-        final isLow = minAlert > 0 && stock <= minAlert;
+        final isOut = stock == 0;
+        final isLow = !isOut && minAlert > 0 && stock <= minAlert;
         final costPrice = (m['cost_price'] as num?)?.toDouble() ?? 0;
         final katName = m['kategori_name']?.toString() ?? 'Lainnya';
-        final catColor = _categoryColor(katName);
+
+        // Stock-based left strip color
+        final Color stripColor;
+        if (isOut) {
+          stripColor = Colors.red;
+        } else if (isLow) {
+          stripColor = Colors.amber.shade700;
+        } else {
+          stripColor = cs.primary.withValues(alpha: 0.3);
+        }
 
         return Container(
           decoration: BoxDecoration(
             color: cs.surfaceBright,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isLow ? cs.error.withValues(alpha: 0.4) : cs.outlineVariant),
+            border: Border.all(color: isOut ? cs.error.withValues(alpha: 0.4) : isLow ? Colors.amber.withValues(alpha: 0.4) : cs.outlineVariant),
           ),
           child: Row(children: [
-            // Colored left strip (category indicator)
+            // Stock-based left strip
             Container(
               width: 6,
               height: 72,
               decoration: BoxDecoration(
-                color: catColor,
+                color: stripColor,
                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomLeft: Radius.circular(12)),
               ),
             ),
@@ -260,25 +261,53 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                 Wrap(spacing: 6, runSpacing: 4, children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: catColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                    child: Text(katName, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: catColor)),
+                    decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(4)),
+                    child: Text(katName, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: cs.primary)),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(4)),
                     child: Text(m['unit'] ?? '', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSecondaryContainer)),
                   ),
-                  Text('Stok: ${_formatStock(stock, m['unit'] ?? '')}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isLow ? cs.error : cs.onSurface)),
+                  Text('Stok: ${_formatStock(stock, m['unit'] ?? '')}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isOut ? cs.error : isLow ? Colors.amber.shade800 : cs.onSurface)),
+                  if (isOut)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
+                      child: const Text('Habis', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+                    )
+                  else if (isLow)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(color: Colors.amber.shade700, borderRadius: BorderRadius.circular(4)),
+                      child: const Text('Stok Rendah', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+                    ),
                 ]),
                 const SizedBox(height: 2),
                 Text('Aset: ${fmtPrice(stock * costPrice)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
               ]),
             )),
-            // Action buttons
-            IconButton(icon: const Icon(Icons.add_box, size: 20, color: Colors.blue), onPressed: () => _showRestockDialog(m), tooltip: 'Restock'),
-            IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => _openForm(m), tooltip: 'Edit'),
-            IconButton(icon: const Icon(Icons.delete, size: 20, color: Colors.red), onPressed: () => _confirmDelete(m), tooltip: 'Hapus'),
-            const SizedBox(width: 4),
+            // Action buttons: Desktop = icon row, Mobile = three dots
+            if (isMobile)
+              PopupMenuButton(
+                icon: const Icon(Icons.more_vert),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'restock', child: Row(children: [Icon(Icons.add_box, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Restock', style: TextStyle(color: Colors.blue))])),
+                  const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
+                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
+                ],
+                onSelected: (val) {
+                  if (val == 'restock') _showRestockDialog(m);
+                  if (val == 'edit') _openForm(m);
+                  if (val == 'delete') _confirmDelete(m);
+                },
+              )
+            else ...[
+              IconButton(icon: const Icon(Icons.add_box, size: 20, color: Colors.blue), onPressed: () => _showRestockDialog(m), tooltip: 'Restock'),
+              IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => _openForm(m), tooltip: 'Edit'),
+              IconButton(icon: const Icon(Icons.delete, size: 20, color: Colors.red), onPressed: () => _confirmDelete(m), tooltip: 'Hapus'),
+              const SizedBox(width: 4),
+            ],
           ]),
         );
       },

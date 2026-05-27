@@ -116,10 +116,9 @@ class _KategoriPageState extends State<KategoriPage> {
               itemCount: categories.length,
               itemBuilder: (context, i) => _buildCategoryItem(categories[i], cs),
             ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: _openForm,
-        icon: const Icon(Icons.add),
-        label: const Text('Kategori Baru'),
+        child: const Icon(Icons.add),
       ),
     );
   }

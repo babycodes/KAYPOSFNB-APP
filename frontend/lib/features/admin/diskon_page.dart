@@ -160,10 +160,9 @@ class _DiskonPageState extends State<DiskonPage> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(),
-        icon: const Icon(Icons.add),
-        label: const Text('Tambah Diskon'),
+        child: const Icon(Icons.add),
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
