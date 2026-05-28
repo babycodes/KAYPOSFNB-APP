@@ -90,42 +90,79 @@ class ReceiptGenerator {
     // Items
     dynamic lastProductId;
     for (var d in details) {
-      if (lastProductId != d['product_id'] || d['product_id'] == null) {
-        bytes += generator.text(d['product_name']?.toString() ?? '', styles: const PosStyles(bold: true));
-        lastProductId = d['product_id'];
-      }
-      
+      final isPaket = (d['is_paket'] as num?)?.toInt() == 1;
       final qty = (d['quantity'] as num?)?.toDouble() ?? 0.0;
-      final unitUsed = d['unit_used']?.toString() ?? 'pcs';
       final qtyStr = qty == qty.truncateToDouble() ? qty.truncate().toString() : qty.toStringAsFixed(2);
-      final formattedUnit = '$qtyStr $unitUsed';
-      
-      final price = _formatReceiptPrice(d['sold_price']).replaceAll(' ', '');
-      final subtotal = _formatReceiptPrice(d['subtotal']);
-      
-      final condensedUnit = formattedUnit.replaceAll(' ', '');
-      final desc = '  $condensedUnit @$price'; // Add padding for variants under product name
-      
       int maxChars = paperSize == PaperSize.mm58 ? 32 : 48;
-      int combinedLen = desc.length + subtotal.length;
-      
-      if (combinedLen < maxChars) {
-        String space = ' ' * (maxChars - combinedLen);
-        bytes += generator.text('$desc$space$subtotal', styles: const PosStyles(align: PosAlign.left));
-      } else {
-        bytes += generator.text(desc, styles: const PosStyles(align: PosAlign.left));
-        bytes += generator.text(subtotal, styles: const PosStyles(align: PosAlign.right));
-      }
 
-      final itemDiscount = (d['discount_amount'] as num?)?.toDouble() ?? 0.0;
-      if (itemDiscount > 0) {
-        bytes += generator.text('  - Rp ${_formatReceiptPrice(itemDiscount)}', styles: const PosStyles(align: PosAlign.left));
-      }
-      
-      final addonSummary = d['addon_summary']?.toString() ?? '';
-      if (addonSummary.isNotEmpty && addonSummary != '[]') {
-        for (final line in addonSummary.split('\n')) {
-          bytes += generator.text(line, styles: const PosStyles(align: PosAlign.left));
+      if (isPaket) {
+        final paketName = '${qtyStr}x ${d['product_name'] ?? ''}';
+        final subtotalStr = _formatReceiptPrice(d['subtotal']);
+        int combinedLen = paketName.length + subtotalStr.length;
+        
+        if (combinedLen < maxChars) {
+          String space = ' ' * (maxChars - combinedLen);
+          bytes += generator.text('$paketName$space$subtotalStr', styles: const PosStyles(bold: true));
+        } else {
+          bytes += generator.text(paketName, styles: const PosStyles(bold: true));
+          bytes += generator.text(subtotalStr, styles: const PosStyles(align: PosAlign.right, bold: true));
+        }
+        
+        final addonSummary = d['addon_summary']?.toString() ?? '';
+        if (addonSummary.isNotEmpty && addonSummary != '[]') {
+          for (final line in addonSummary.split('\n')) {
+             String cleanedLine = line.replaceAll('  - ', '   ').replaceAll(' (Rp 0)', '');
+             String rightText = 'Rp 0';
+             int lineCombinedLen = cleanedLine.length + rightText.length;
+             if (lineCombinedLen < maxChars) {
+                String space = ' ' * (maxChars - lineCombinedLen);
+                bytes += generator.text('$cleanedLine$space$rightText', styles: const PosStyles(align: PosAlign.left));
+             } else {
+                bytes += generator.text(cleanedLine, styles: const PosStyles(align: PosAlign.left));
+                bytes += generator.text(rightText, styles: const PosStyles(align: PosAlign.right));
+             }
+          }
+        }
+        
+        final itemDiscount = (d['discount_amount'] as num?)?.toDouble() ?? 0.0;
+        if (itemDiscount > 0) {
+          bytes += generator.text('  - Rp ${_formatReceiptPrice(itemDiscount)}', styles: const PosStyles(align: PosAlign.left));
+        }
+      } else {
+        if (lastProductId != d['product_id'] || d['product_id'] == null) {
+          bytes += generator.text(d['product_name']?.toString() ?? '', styles: const PosStyles(bold: true));
+          lastProductId = d['product_id'];
+        }
+        
+        final unitUsed = d['unit_used']?.toString() ?? 'pcs';
+        final formattedUnit = '$qtyStr $unitUsed';
+        
+        final price = _formatReceiptPrice(d['sold_price']).replaceAll(' ', '');
+        final subtotal = _formatReceiptPrice(d['subtotal']);
+        
+        final condensedUnit = formattedUnit.replaceAll(' ', '');
+        final desc = '  $condensedUnit @$price';
+        
+        int combinedLen = desc.length + subtotal.length;
+        
+        if (combinedLen < maxChars) {
+          String space = ' ' * (maxChars - combinedLen);
+          bytes += generator.text('$desc$space$subtotal', styles: const PosStyles(align: PosAlign.left));
+        } else {
+          bytes += generator.text(desc, styles: const PosStyles(align: PosAlign.left));
+          bytes += generator.text(subtotal, styles: const PosStyles(align: PosAlign.right));
+        }
+
+        final itemDiscount = (d['discount_amount'] as num?)?.toDouble() ?? 0.0;
+        if (itemDiscount > 0) {
+          bytes += generator.text('  - Rp ${_formatReceiptPrice(itemDiscount)}', styles: const PosStyles(align: PosAlign.left));
+        }
+        
+        final addonSummary = d['addon_summary']?.toString() ?? '';
+        if (addonSummary.isNotEmpty && addonSummary != '[]') {
+          for (final line in addonSummary.split('\n')) {
+            bytes += generator.text(line, styles: const PosStyles(align: PosAlign.left));
+          }
         }
       }
     }

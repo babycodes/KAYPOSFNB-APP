@@ -894,6 +894,44 @@ class _PaketItemsModalState extends State<PaketItemsModal> {
     }
   }
 
+  void _editItemQty(dynamic item) async {
+    final currentQty = (item['qty'] as num?)?.toInt() ?? 1;
+    final editCtrl = TextEditingController(text: currentQty.toString());
+
+    final newQty = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Edit Qty: ${item['product_name']}'),
+        content: TextField(
+          controller: editCtrl,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Qty', isDense: true),
+          onSubmitted: (v) {
+            final val = int.tryParse(v);
+            Navigator.pop(dialogContext, val);
+          },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+          FilledButton(onPressed: () {
+            final val = int.tryParse(editCtrl.text);
+            Navigator.pop(dialogContext, val);
+          }, child: const Text('Simpan')),
+        ],
+      ),
+    );
+
+    if (newQty == null || newQty <= 0) return;
+
+    try {
+      await Api.put('/paket-items/${item['id']}', body: {'qty': newQty});
+      _loadData();
+    } catch (e) {
+      if (mounted) showAdminToast(context, 'Error: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -952,9 +990,18 @@ class _PaketItemsModalState extends State<PaketItemsModal> {
                         leading: const Icon(Icons.fastfood),
                         title: Text('${item['qty']}x ${item['product_name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: Text(fmtPrice((item['product_price'] as num?)?.toDouble() ?? 0)),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteItem(item['id']),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.edit, color: cs.primary),
+                              onPressed: () => _editItemQty(item),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteItem(item['id']),
+                            ),
+                          ],
                         ),
                       ),
                     );

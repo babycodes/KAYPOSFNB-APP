@@ -369,8 +369,17 @@ class _KasirScreenState extends State<KasirScreen> {
   int _getCartQtyForProduct(dynamic productId) {
     int total = 0;
     for (final item in cart) {
-      if (item['product'] is Map && item['product']['id'] == productId) {
-        total += _safeNum(item['quantity']).round();
+      if (item['product'] is Map) {
+        final p = item['product'];
+        if (p['id'] == productId) {
+          total += _safeNum(item['quantity']).round();
+        } else if ((p['is_paket'] as num?)?.toInt() == 1 && p['paket_items'] is List) {
+          for (final pi in p['paket_items']) {
+            if (pi['product_id'] == productId) {
+              total += _safeNum(item['quantity']).round() * _safeNum(pi['qty']).round();
+            }
+          }
+        }
       }
     }
     return total;
@@ -382,8 +391,17 @@ class _KasirScreenState extends State<KasirScreen> {
       final cartData = held['cart_data'];
       if (cartData is List) {
         for (final item in cartData) {
-          if (item is Map && item['product'] is Map && item['product']['id'] == productId) {
-            total += _safeNum(item['quantity']).round();
+          if (item is Map && item['product'] is Map) {
+            final p = item['product'];
+            if (p['id'] == productId) {
+              total += _safeNum(item['quantity']).round();
+            } else if ((p['is_paket'] as num?)?.toInt() == 1 && p['paket_items'] is List) {
+              for (final pi in p['paket_items']) {
+                if (pi['product_id'] == productId) {
+                  total += _safeNum(item['quantity']).round() * _safeNum(pi['qty']).round();
+                }
+              }
+            }
           }
         }
       }

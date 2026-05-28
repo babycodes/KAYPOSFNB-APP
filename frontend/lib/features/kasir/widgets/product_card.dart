@@ -85,7 +85,7 @@ class ProductCard extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
-          onTap: soldOut ? null : () => onSelect(product),
+          onTap: isHabis ? () => _showBottleneck(context) : (isBooked ? null : () => onSelect(product)),
           borderRadius: BorderRadius.circular(8),
           splashColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.2),
           hoverColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.08),
@@ -159,15 +159,6 @@ class ProductCard extends StatelessWidget {
                     decoration: BoxDecoration(color: isHabis ? cs.error : Colors.orange[800], borderRadius: BorderRadius.circular(4)),
                     child: Text(isHabis ? 'HABIS' : 'DI KERANJANG', style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
                   ),
-                  const SizedBox(width: 2),
-                  if (isHabis) GestureDetector(
-                    onTap: () => _showBottleneck(context),
-                    child: Container(
-                      width: 16, height: 16,
-                      decoration: BoxDecoration(color: cs.error.withValues(alpha: 0.8), shape: BoxShape.circle),
-                      child: const Icon(Icons.info, size: 10, color: Colors.white),
-                    ),
-                  ),
                 ]),
               )
               else if (isPaket) Positioned(top: -4, right: -4,
@@ -222,6 +213,7 @@ class ProductCard extends StatelessWidget {
                 Expanded(
                   child: ListView.builder(
                     shrinkWrap: true,
+                    physics: const BouncingScrollPhysics(),
                     itemCount: items.length,
                     itemBuilder: (ctx, i) {
                       final item = items[i];

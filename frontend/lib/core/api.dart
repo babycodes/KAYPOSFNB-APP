@@ -77,7 +77,10 @@ class Api {
             c.icon as category_icon,
             p.is_active,
             COALESCE(p.is_paket, 0) as is_paket,
-            IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0) as total_hpp,
+            CASE 
+              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * (SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
+              ELSE IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0)
+            END as total_hpp,
             (SELECT CAST(MIN(b.stock / r.qty_needed) AS INTEGER) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id AND r.qty_needed > 0) as available_portions
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
@@ -121,6 +124,7 @@ class Api {
                   }
                 }
                 map['available_portions'] = minPortions;
+                map['paket_items'] = paketItems;
               } else {
                 map['available_portions'] = null; // No paket items configured
               }
@@ -147,7 +151,10 @@ class Api {
             c.name as category_name, 
             c.icon as category_icon,
             p.is_active,
-            IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0) as total_hpp
+            CASE 
+              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * (SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
+              ELSE IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0)
+            END as total_hpp
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
           WHERE p.id = ?
@@ -326,7 +333,12 @@ class Api {
         if (txId == null) throw Exception('ID Transaksi tidak valid');
         final txRows = await db.query('transactions', where: 'id = ?', whereArgs: [txId]);
         if (txRows.isEmpty) throw Exception('Transaksi tidak ditemukan');
-        final details = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [txId]);
+        final details = await db.rawQuery('''
+          SELECT td.*, COALESCE(p.is_paket, 0) as is_paket
+          FROM transaction_details td
+          LEFT JOIN products p ON td.product_id = p.id
+          WHERE td.transaction_id = ?
+        ''', [txId]);
         
         List<Map<String, dynamic>> enrichedDetails = [];
         for (var d in details) {
@@ -379,7 +391,12 @@ class Api {
         
         List<Map<String, dynamic>> results = [];
         for (var t in rows) {
-          final details = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [t['id']]);
+          final details = await db.rawQuery('''
+            SELECT td.*, COALESCE(p.is_paket, 0) as is_paket
+            FROM transaction_details td
+            LEFT JOIN products p ON td.product_id = p.id
+            WHERE td.transaction_id = ?
+          ''', [t['id']]);
           List<Map<String, dynamic>> enrichedDetails = [];
           for (var d in details) {
             final dm = Map<String, dynamic>.from(d);

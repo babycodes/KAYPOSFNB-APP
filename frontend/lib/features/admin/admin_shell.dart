@@ -128,7 +128,10 @@ class _AdminShellState extends State<AdminShell> {
         Padding(padding: const EdgeInsets.all(8), child: Column(children: [
           Tooltip(
             message: showLabels ? '' : 'Ke Kasir',
-            child: InkWell(onTap: () => context.go('/kasir'), borderRadius: BorderRadius.circular(12),
+            child: InkWell(onTap: () {
+              Navigator.of(context, rootNavigator: true).popUntil((route) => route is PageRoute);
+              context.go('/kasir');
+            }, borderRadius: BorderRadius.circular(12),
               child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(children: [
                   Icon(Icons.shopping_cart, size: 20, color: cs.primary),
@@ -150,6 +153,7 @@ class _AdminShellState extends State<AdminShell> {
                 ),
               );
               if (confirm == true && context.mounted) {
+                Navigator.of(context, rootNavigator: true).popUntil((route) => route is PageRoute);
                 auth.logout(); 
                 context.go('/login'); 
               }
