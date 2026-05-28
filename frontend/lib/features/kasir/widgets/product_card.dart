@@ -76,11 +76,11 @@ class ProductCard extends StatelessWidget {
     final bool isHabis = hasRecipe && absolutePortions <= 0;
     // effectiveStock is passed by parent and factors in cart/hold
     final bool isBooked = hasRecipe && !isHabis && bookedQty > 0 && effectiveStock <= 0;
-    final bool soldOut = isHabis || isBooked;
+    final bool soldOut = hasRecipe && effectiveStock == 0;
     final bool isPaket = (product is Map ? (product['is_paket'] as num?)?.toInt() : 0) == 1;
 
     return Opacity(
-      opacity: soldOut ? 0.45 : 1.0,
+      opacity: soldOut ? 0.4 : 1.0,
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
