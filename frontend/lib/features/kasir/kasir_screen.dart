@@ -339,19 +339,13 @@ class _KasirScreenState extends State<KasirScreen> {
 
 
   Future<void> _handleProductSelect(dynamic product) async {
-    // Check effective stock (available_portions - cart qty - held qty)
-    final dynamic rawPortions = product is Map ? product['available_portions'] : null;
-    if (rawPortions != null) {
-      final int maxPortions = (rawPortions as num).toInt();
-      final int currentInCart = _getCartQtyForProduct(product['id']);
-      final int currentInHeld = _getHeldQtyForProduct(product['id']);
-      final int effectiveStock = maxPortions - currentInCart - currentInHeld;
-      if (effectiveStock <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Stok bahan tidak cukup untuk menambah "${product['name']}"'), duration: const Duration(seconds: 2)),
-        );
-        return;
-      }
+    // Use _getEffectiveStock for real-time dynamic stock check (not stale snapshot)
+    final int currentEffective = _getEffectiveStock(product);
+    if (currentEffective == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Stok bahan tidak cukup untuk menambah "${product['name']}"'), duration: const Duration(seconds: 2)),
+      );
+      return;
     }
     
     String? addonSummary;
@@ -411,47 +405,86 @@ class _KasirScreenState extends State<KasirScreen> {
     return total;
   }
 
+  /// Returns the real-time effective stock for a product.
+  /// -1 = no recipe / unlimited (no stock tracking).
+  ///  0 = sold out.
+  /// >0 = available portions.
   int _getEffectiveStock(dynamic product) {
     if (product is! Map) return -1;
 
+    // === PACKAGE: dynamically compute from children's effectiveStock ===
     if ((product['is_paket'] as num?)?.toInt() == 1) {
-      int displayedPackageStock = 0;
       try {
-        if (product['paket_items'] is List) {
-          int? minPaketPortions;
-          for (final pi in product['paket_items']) {
-            final childProduct = products.firstWhere((p) => p['id'] == pi['product_id'], orElse: () => null);
-            if (childProduct != null) {
-              final childEffectiveStock = _getEffectiveStock(childProduct);
-              if (childEffectiveStock == -1) continue;
-              
-              final int neededQty = _safeNum(pi['qty']).round();
-              if (neededQty > 0) {
-                final childPortionsForPaket = (childEffectiveStock < 0 ? 0 : childEffectiveStock) ~/ neededQty;
-                if (minPaketPortions == null || childPortionsForPaket < minPaketPortions) {
-                  minPaketPortions = childPortionsForPaket;
-                }
-              }
+        final paketItems = product['paket_items'];
+        if (paketItems is! List || paketItems.isEmpty) return -1; // No children configured = unlimited
+        
+        int minPortions = 999999;
+        bool hasAnyRecipeChild = false;
+        for (final pi in paketItems) {
+          final childProduct = products.firstWhere(
+            (p) => p['id'] == pi['product_id'], orElse: () => null);
+          if (childProduct == null) continue;
+          
+          final childEffectiveStock = _getEffectiveStock(childProduct);
+          if (childEffectiveStock == -1) continue; // Child has no recipe = unlimited, skip
+          
+          hasAnyRecipeChild = true;
+          final int neededQty = _safeNum(pi['qty']).round();
+          if (neededQty > 0) {
+            final possibleFromChild = childEffectiveStock ~/ neededQty;
+            if (possibleFromChild < minPortions) {
+              minPortions = possibleFromChild;
             }
           }
-          displayedPackageStock = minPaketPortions ?? -1;
-        } else {
-          displayedPackageStock = -1;
         }
-      } catch (e) {
-        displayedPackageStock = 0; // Fallback to safe 0 to prevent white screen
+        
+        if (!hasAnyRecipeChild) return -1; // All children are unlimited
+        // Also subtract any direct paket cart qty (paket itself in cart)
+        final int paketInCart = _getDirectCartQty(product['id']);
+        final int paketInHeld = _getDirectHeldQty(product['id']);
+        int result = minPortions == 999999 ? 0 : minPortions;
+        result = result - paketInCart - paketInHeld;
+        return result < 0 ? 0 : result; // ABSOLUTE CLAMP
+      } catch (_) {
+        return -1; // Fail open to prevent UI lockout
       }
-      return displayedPackageStock;
     }
 
+    // === REGULAR PRODUCT: DB stock minus shadow deductions ===
     final dynamic rawPortions = product['available_portions'];
     if (rawPortions == null) return -1; // -1 means no recipe/unlimited
     final int maxPortions = (rawPortions as num).toInt();
     final int inCart = _getCartQtyForProduct(product['id']);
     final int inHeld = _getHeldQtyForProduct(product['id']);
     int effectiveStock = maxPortions - inCart - inHeld;
-    effectiveStock = effectiveStock < 0 ? 0 : effectiveStock; // ABSOLUTE CLAMP
-    return effectiveStock;
+    return effectiveStock < 0 ? 0 : effectiveStock; // ABSOLUTE CLAMP
+  }
+
+  /// Returns cart qty for ONLY this specific product ID (not counting paket children)
+  int _getDirectCartQty(dynamic productId) {
+    int total = 0;
+    for (final item in cart) {
+      if (item['product'] is Map && item['product']['id'] == productId) {
+        total += _safeNum(item['quantity']).round();
+      }
+    }
+    return total;
+  }
+
+  /// Returns held qty for ONLY this specific product ID (not counting paket children)
+  int _getDirectHeldQty(dynamic productId) {
+    int total = 0;
+    for (final held in heldCarts) {
+      final cartData = held['cart_data'];
+      if (cartData is List) {
+        for (final item in cartData) {
+          if (item is Map && item['product'] is Map && item['product']['id'] == productId) {
+            total += _safeNum(item['quantity']).round();
+          }
+        }
+      }
+    }
+    return total;
   }
 
   void _addToCart(dynamic product, String unitName, num quantity, [String? addonSummary]) {
@@ -734,7 +767,7 @@ class _KasirScreenState extends State<KasirScreen> {
                           final effectiveStock = _getEffectiveStock(product);
                           return ProductCard(
                             product: product, 
-                            bookedQty: 0, 
+                            bookedQty: _getDirectCartQty(product['id']).toDouble(), 
                             discountPercent: promoInfo.$1,
                             promoName: promoInfo.$2,
                             effectiveStock: effectiveStock,

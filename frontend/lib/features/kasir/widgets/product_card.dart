@@ -71,13 +71,15 @@ class ProductCard extends StatelessWidget {
     final double baseUnitPrice = _safeDouble(product is Map ? product['price'] : 0.0);
 
     final dynamic rawPortions = product is Map ? product['available_portions'] : null;
-    final bool hasRecipe = rawPortions != null;
-    final int absolutePortions = hasRecipe ? (rawPortions as num).toInt() : -1;
-    final bool isHabis = hasRecipe && absolutePortions <= 0;
-    // effectiveStock is passed by parent and factors in cart/hold
-    final bool isBooked = hasRecipe && !isHabis && bookedQty > 0 && effectiveStock <= 0;
-    final bool soldOut = hasRecipe && effectiveStock == 0;
     final bool isPaket = (product is Map ? (product['is_paket'] as num?)?.toInt() : 0) == 1;
+    // For packages: available_portions is null (dynamically computed via effectiveStock).
+    // hasRecipe = true if the product has stock tracking (regular: rawPortions != null, paket: effectiveStock != -1)
+    final bool hasRecipe = isPaket ? (effectiveStock != -1) : (rawPortions != null);
+    final int absolutePortions = rawPortions != null ? (rawPortions as num).toInt() : (isPaket ? effectiveStock : -1);
+    final bool isHabis = hasRecipe && absolutePortions <= 0 && bookedQty == 0;
+    // DI KERANJANG: only when THIS product's own cart qty > 0 AND effective stock hit 0
+    final bool isBooked = hasRecipe && !isHabis && bookedQty > 0 && effectiveStock <= 0;
+    final bool soldOut = isHabis || isBooked;
 
     return Opacity(
       opacity: soldOut ? 0.4 : 1.0,

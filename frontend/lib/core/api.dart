@@ -101,34 +101,16 @@ class Api {
             try {
               final paketItems = await db.rawQuery('SELECT * FROM paket_items WHERE paket_id = ?', [r['id']]);
               map['paket_items'] = paketItems;
+              // Do NOT set available_portions here — paket stock is computed
+              // dynamically on the client side via _getEffectiveStock() to avoid
+              // stale snapshot race conditions.
+              map['available_portions'] = null;
             } catch (_) {
               map['paket_items'] = [];
+              map['available_portions'] = null;
             }
           }
           result.add(map);
-        }
-        
-        // Pass 2: Calculate paket available_portions now that ALL products are loaded
-        for (var map in result) {
-          if ((map['is_paket'] as num?)?.toInt() == 1) {
-            final paketItems = map['paket_items'] as List<Map<String, dynamic>>? ?? [];
-            int minPortions = 999999;
-            for (var pi in paketItems) {
-              final childId = pi['product_id'];
-              final childProduct = result.firstWhere((p) => p['id'] == childId, orElse: () => {});
-              if (childProduct.isNotEmpty) {
-                final childAvailable = (childProduct['available_portions'] as num?)?.toInt() ?? 999999;
-                final qty = (pi['qty'] as num?)?.toInt() ?? 1;
-                if (qty > 0) {
-                  int possibleFromChild = childAvailable ~/ qty;
-                  if (possibleFromChild < minPortions) {
-                    minPortions = possibleFromChild;
-                  }
-                }
-              }
-            }
-            map['available_portions'] = minPortions == 999999 ? 0 : minPortions;
-          }
         }
         return result;
       }
