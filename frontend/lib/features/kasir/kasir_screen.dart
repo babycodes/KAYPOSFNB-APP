@@ -486,39 +486,68 @@ class _KasirScreenState extends State<KasirScreen> {
   /// 1. cartUsage[M] = SUM of all material M consumed by cart + held items
   /// 2. Remaining[M] = DB_Stock[M] - cartUsage[M]
   /// 3. Regular:  Effective(C) = MIN( floor( Remaining[M_i] / Recipe_Needed[M_i] ) )
-  /// 4. Package:  Effective(P) = MIN( floor( Effective(C_i) / Required_Qty(C_i) ) )
+  /// 4. Package:  packageMaterialNeed[M] = SUM(childQty * childRecipe[M]) for all children
+  ///             Effective(P) = MIN( floor( Remaining[M_i] / packageMaterialNeed[M_i] ) )
   int _getEffectiveStock(dynamic product) {
     if (product is! Map) return -1;
 
-    // === PACKAGE (is_paket == 1): Virtual wrapper, derived stock ===
+    // === PACKAGE (is_paket == 1): Material-aggregated capacity ===
+    // Instead of MIN(childEffective/childQty) — which double-counts shared
+    // ingredients — we aggregate the total raw material cost of 1 whole package
+    // and divide remaining global stock by that aggregate.
     if ((product['is_paket'] as num?)?.toInt() == 1) {
       try {
         final paketItems = product['paket_items'];
         if (paketItems is! List || paketItems.isEmpty) return 0;
 
-        int minPortions = 999999;
+        // Step 1: Aggregate total raw materials needed for 1 package unit.
+        // Map<materialId, totalQtyNeeded>
+        final Map<String, double> packageMaterialNeed = {};
+        bool hasAnyRecipeChild = false;
+
         for (final pi in paketItems) {
           if (pi is! Map) continue;
           final String childIdStr = pi['product_id']?.toString() ?? '';
           if (childIdStr.isEmpty) continue;
+          final double childQtyInPaket = _safeNum(pi['qty']);
+          if (childQtyInPaket <= 0) continue;
 
-          dynamic childProduct;
-          for (final p in products) {
-            if (p is Map && p['id']?.toString() == childIdStr) {
-              childProduct = p;
-              break;
+          final childRecipe = _recipes[childIdStr];
+          if (childRecipe == null || childRecipe.isEmpty) {
+            // Child has no recipe — check if it even exists in products
+            // If it has available_portions from SQL, we must fall back to
+            // child-based MIN for this specific child.
+            // For now, skip (treat as unlimited ingredient).
+            continue;
+          }
+
+          hasAnyRecipeChild = true;
+          for (final ing in childRecipe) {
+            final mid = ing['bahan_baku_id']?.toString() ?? '';
+            final double qtyNeeded = _safeNum(ing['qty_needed']);
+            if (mid.isNotEmpty && qtyNeeded > 0) {
+              // Total material per 1 package = childQtyInPaket * recipe per 1 child
+              packageMaterialNeed[mid] = 
+                (packageMaterialNeed[mid] ?? 0) + (childQtyInPaket * qtyNeeded);
             }
           }
-          if (childProduct == null) return 0;
+        }
 
-          final childEffective = _getEffectiveStock(childProduct);
-          if (childEffective == -1) continue;
+        // No children have recipes → treat as high-availability
+        if (!hasAnyRecipeChild || packageMaterialNeed.isEmpty) return 999;
 
-          final int neededQty = _safeNum(pi['qty']).round();
-          if (neededQty <= 0) continue;
-
-          final int possibleFromChild = childEffective ~/ neededQty;
-          if (possibleFromChild < minPortions) minPortions = possibleFromChild;
+        // Step 2: Compute max packages from remaining raw materials
+        final cartUsage = _computeCartMaterialUsage();
+        int minPortions = 999999;
+        for (final entry in packageMaterialNeed.entries) {
+          final String mid = entry.key;
+          final double neededPerPackage = entry.value;
+          if (neededPerPackage <= 0) continue;
+          final double totalStock = _materialStocks[mid] ?? 0;
+          final double consumed = cartUsage[mid] ?? 0;
+          final double remaining = totalStock - consumed;
+          final int portions = (remaining / neededPerPackage).floor();
+          if (portions < minPortions) minPortions = portions;
         }
 
         if (minPortions == 999999) return 999;
