@@ -406,85 +406,61 @@ class _KasirScreenState extends State<KasirScreen> {
   }
 
   /// Returns the real-time effective stock for a product.
-  /// -1 = no recipe / unlimited (no stock tracking).
-  ///  0 = sold out.
-  /// >0 = available portions.
+  /// For regular products: -1 = no recipe/unlimited, 0 = sold out, >0 = available.
+  /// For packages: ALWAYS returns 0 or >0 (never -1). Packages are virtual wrappers
+  /// whose stock is strictly derived from children's effective stock.
+  ///
+  /// MATHEMATICAL CHAIN:
+  /// Regular:  Effective(C) = Base_Available(C) - CartQty(C) - PaketShadow(C) - HeldQty(C)
+  /// Package:  Effective(P) = MIN( floor( Effective(C_i) / Required_Qty(C_i) ) )
+  ///
+  /// NOTE: _getCartQtyForProduct already includes package shadow deductions
+  /// (CartQty(P) * Qty_of_C_in_P), so NO additional subtraction is needed
+  /// in the package path. Doing so would double-count.
   int _getEffectiveStock(dynamic product) {
     if (product is! Map) return -1;
 
-    // === PACKAGE: dynamically compute from children's effectiveStock ===
+    // === PACKAGE (is_paket == 1): Virtual wrapper, derived stock ===
     if ((product['is_paket'] as num?)?.toInt() == 1) {
-      try {
-        final paketItems = product['paket_items'];
-        if (paketItems is! List || paketItems.isEmpty) return -1; // No children configured = unlimited
-        
-        int minPortions = 999999;
-        bool hasAnyRecipeChild = false;
-        for (final pi in paketItems) {
-          final childProduct = products.firstWhere(
-            (p) => p['id'] == pi['product_id'], orElse: () => null);
-          if (childProduct == null) continue;
-          
-          final childEffectiveStock = _getEffectiveStock(childProduct);
-          if (childEffectiveStock == -1) continue; // Child has no recipe = unlimited, skip
-          
-          hasAnyRecipeChild = true;
-          final int neededQty = _safeNum(pi['qty']).round();
-          if (neededQty > 0) {
-            final possibleFromChild = childEffectiveStock ~/ neededQty;
-            if (possibleFromChild < minPortions) {
-              minPortions = possibleFromChild;
-            }
-          }
+      final paketItems = product['paket_items'];
+      // If no children configured, package cannot be sold → 0
+      if (paketItems is! List || paketItems.isEmpty) return 0;
+
+      int minPortions = 999999;
+      for (final pi in paketItems) {
+        final childProduct = products.firstWhere(
+          (p) => p['id'] == pi['product_id'], orElse: () => null);
+        // If child product not found in loaded products → cannot fulfill → 0
+        if (childProduct == null) return 0;
+
+        final childEffective = _getEffectiveStock(childProduct);
+        // Child has no recipe (-1) → unlimited supply of this child → skip
+        if (childEffective == -1) continue;
+
+        final int neededQty = _safeNum(pi['qty']).round();
+        if (neededQty <= 0) continue;
+
+        final int possibleFromChild = childEffective ~/ neededQty;
+        if (possibleFromChild < minPortions) {
+          minPortions = possibleFromChild;
         }
-        
-        if (!hasAnyRecipeChild) return -1; // All children are unlimited
-        // Also subtract any direct paket cart qty (paket itself in cart)
-        final int paketInCart = _getDirectCartQty(product['id']);
-        final int paketInHeld = _getDirectHeldQty(product['id']);
-        int result = minPortions == 999999 ? 0 : minPortions;
-        result = result - paketInCart - paketInHeld;
-        return result < 0 ? 0 : result; // ABSOLUTE CLAMP
-      } catch (_) {
-        return -1; // Fail open to prevent UI lockout
       }
+
+      // If all children were unlimited (-1), package is also unlimited → but
+      // packages are virtual, so treat as a large number. Use 999 as display cap.
+      if (minPortions == 999999) return 999;
+      return minPortions < 0 ? 0 : minPortions;
     }
 
-    // === REGULAR PRODUCT: DB stock minus shadow deductions ===
+    // === REGULAR PRODUCT (is_paket == 0): DB stock minus ALL shadow deductions ===
     final dynamic rawPortions = product['available_portions'];
-    if (rawPortions == null) return -1; // -1 means no recipe/unlimited
+    if (rawPortions == null) return -1; // No recipe = unlimited
     final int maxPortions = (rawPortions as num).toInt();
+    // _getCartQtyForProduct includes: direct cart qty + SUM(paketCartQty * childQtyInPaket)
     final int inCart = _getCartQtyForProduct(product['id']);
     final int inHeld = _getHeldQtyForProduct(product['id']);
     int effectiveStock = maxPortions - inCart - inHeld;
     return effectiveStock < 0 ? 0 : effectiveStock; // ABSOLUTE CLAMP
-  }
-
-  /// Returns cart qty for ONLY this specific product ID (not counting paket children)
-  int _getDirectCartQty(dynamic productId) {
-    int total = 0;
-    for (final item in cart) {
-      if (item['product'] is Map && item['product']['id'] == productId) {
-        total += _safeNum(item['quantity']).round();
-      }
-    }
-    return total;
-  }
-
-  /// Returns held qty for ONLY this specific product ID (not counting paket children)
-  int _getDirectHeldQty(dynamic productId) {
-    int total = 0;
-    for (final held in heldCarts) {
-      final cartData = held['cart_data'];
-      if (cartData is List) {
-        for (final item in cartData) {
-          if (item is Map && item['product'] is Map && item['product']['id'] == productId) {
-            total += _safeNum(item['quantity']).round();
-          }
-        }
-      }
-    }
-    return total;
   }
 
   void _addToCart(dynamic product, String unitName, num quantity, [String? addonSummary]) {
@@ -767,7 +743,7 @@ class _KasirScreenState extends State<KasirScreen> {
                           final effectiveStock = _getEffectiveStock(product);
                           return ProductCard(
                             product: product, 
-                            bookedQty: _getDirectCartQty(product['id']).toDouble(), 
+                            bookedQty: _getCartQtyForProduct(product['id']).toDouble(), 
                             discountPercent: promoInfo.$1,
                             promoName: promoInfo.$2,
                             effectiveStock: effectiveStock,
