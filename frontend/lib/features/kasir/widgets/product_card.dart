@@ -70,16 +70,15 @@ class ProductCard extends StatelessWidget {
 
     final double baseUnitPrice = _safeDouble(product is Map ? product['price'] : 0.0);
 
-    final dynamic rawPortions = product is Map ? product['available_portions'] : null;
     final bool isPaket = (product is Map ? (product['is_paket'] as num?)?.toInt() : 0) == 1;
-    // For packages: available_portions is null (dynamically computed via effectiveStock).
-    // hasRecipe = true if the product has stock tracking (regular: rawPortions != null, paket: effectiveStock != -1)
-    final bool hasRecipe = isPaket ? (effectiveStock != -1) : (rawPortions != null);
-    final int absolutePortions = rawPortions != null ? (rawPortions as num).toInt() : (isPaket ? effectiveStock : -1);
-    final bool isHabis = hasRecipe && absolutePortions <= 0 && bookedQty == 0;
-    // DI KERANJANG: only when THIS product's own cart qty > 0 AND effective stock hit 0
-    final bool isBooked = hasRecipe && !isHabis && bookedQty > 0 && effectiveStock <= 0;
-    final bool soldOut = isHabis || isBooked;
+    // hasRecipe = true when this product has stock tracking (effectiveStock != -1)
+    // Works for both regular products (material-pool) and packages (child-derived).
+    final bool hasRecipe = effectiveStock != -1;
+    // soldOut = stock is at 0 and product has tracking
+    final bool soldOut = hasRecipe && effectiveStock <= 0;
+    // Differentiate HABIS (absolute zero, no reservations) vs BOOKED (reserved in cart/hold)
+    final bool isBooked = soldOut && bookedQty > 0;
+    final bool isHabis = soldOut && !isBooked;
 
     return Opacity(
       opacity: soldOut ? 0.4 : 1.0,
@@ -144,7 +143,7 @@ class ProductCard extends StatelessWidget {
                               Text(fmtPrice(baseUnitPrice), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? Colors.greenAccent : cs.primary, height: 1.1)),
                             if (hasRecipe) ...[
                               const SizedBox(width: 6),
-                              Text('· ${effectiveStock >= 0 ? effectiveStock : absolutePortions} porsi', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: soldOut ? cs.error : ((effectiveStock >= 0 ? effectiveStock : absolutePortions) <= 5 ? Colors.amber[700] : cs.onSurfaceVariant))),
+                              Text('· $effectiveStock porsi', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: soldOut ? cs.error : (effectiveStock <= 5 ? Colors.amber[700] : cs.onSurfaceVariant))),
                             ],
                           ]
                         )

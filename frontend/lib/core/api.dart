@@ -174,6 +174,17 @@ class Api {
         return rows.map((r) => Map<String, dynamic>.from(r)).toList();
       }
 
+      // --- STOCK POOL (Recipes + Material Stocks for Cashier real-time calc) ---
+      if (path == '/stock-pool') {
+        final rows = await db.rawQuery('''
+          SELECT r.product_id, r.bahan_baku_id, r.qty_needed, b.stock as bahan_stock
+          FROM resep r
+          JOIN bahan_baku b ON r.bahan_baku_id = b.id
+          WHERE r.qty_needed > 0
+        ''');
+        return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+      }
+
       // --- RESEP (By Product ID) ---
       if (RegExp(r'^/resep/\d+$').hasMatch(path)) {
         final productId = int.tryParse(path.split('/').last);

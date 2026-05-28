@@ -120,15 +120,37 @@ class _KasirScreenState extends State<KasirScreen> {
 
   List<dynamic> activeDiscounts = [];
 
+  /// Recipes indexed by product_id.toString() → [{bahan_baku_id, qty_needed}]
+  Map<String, List<Map<String, dynamic>>> _recipes = {};
+  /// Material stocks indexed by bahan_baku_id.toString() → stock (double)
+  Map<String, double> _materialStocks = {};
+
   Future<void> _loadData() async {
     try {
-      final results = await Future.wait([Api.get('/products'), Api.get('/categories'), Api.get('/discounts')]);
+      final results = await Future.wait([
+        Api.get('/products'), Api.get('/categories'), Api.get('/discounts'), Api.get('/stock-pool'),
+      ]);
       setState(() { 
         products = results[0] as List; 
         categories = results[1] as List; 
         final allDiscounts = results[2] as List;
-        
         activeDiscounts = allDiscounts.where((d) => d['is_active'] == 1).toList();
+
+        // Build recipe & material maps from stock-pool
+        _recipes = {};
+        _materialStocks = {};
+        final stockPool = results[3] as List;
+        for (final row in stockPool) {
+          if (row is! Map) continue;
+          final pid = row['product_id']?.toString() ?? '';
+          final mid = row['bahan_baku_id']?.toString() ?? '';
+          if (pid.isEmpty || mid.isEmpty) continue;
+          _recipes.putIfAbsent(pid, () => []).add({
+            'bahan_baku_id': mid,
+            'qty_needed': _safeNum(row['qty_needed']),
+          });
+          _materialStocks[mid] = _safeNum(row['bahan_stock']);
+        }
       });
     } catch (_) {}
   }
@@ -410,18 +432,61 @@ class _KasirScreenState extends State<KasirScreen> {
     return total;
   }
 
+  /// Computes total raw material consumed by ALL cart + held items.
+  /// Returns Map<materialId.toString(), totalConsumed>.
+  Map<String, double> _computeCartMaterialUsage() {
+    final Map<String, double> usage = {};
+
+    void addUsageForProduct(String productId, double qty) {
+      final recipe = _recipes[productId];
+      if (recipe == null) return;
+      for (final ing in recipe) {
+        final mid = ing['bahan_baku_id']?.toString() ?? '';
+        final needed = _safeNum(ing['qty_needed']);
+        if (mid.isNotEmpty && needed > 0) {
+          usage[mid] = (usage[mid] ?? 0) + (qty * needed);
+        }
+      }
+    }
+
+    void processCartList(List cartData) {
+      for (final item in cartData) {
+        if (item is! Map || item['product'] is! Map) continue;
+        final p = item['product'];
+        final double qty = _safeNum(item['quantity']);
+        if (qty <= 0) continue;
+
+        if ((p['is_paket'] as num?)?.toInt() == 1 && p['paket_items'] is List) {
+          for (final pi in p['paket_items']) {
+            if (pi is! Map) continue;
+            final childId = pi['product_id']?.toString() ?? '';
+            final childQty = _safeNum(pi['qty']);
+            addUsageForProduct(childId, qty * childQty);
+          }
+        } else {
+          addUsageForProduct(p['id']?.toString() ?? '', qty);
+        }
+      }
+    }
+
+    // Current cart
+    processCartList(cart);
+    // Held carts
+    for (final held in heldCarts) {
+      if (held['cart_data'] is List) processCartList(held['cart_data']);
+    }
+    return usage;
+  }
+
   /// Returns the real-time effective stock for a product.
   /// For regular products: -1 = no recipe/unlimited, 0 = sold out, >0 = available.
-  /// For packages: ALWAYS returns 0 or >0 (never -1). Packages are virtual wrappers
-  /// whose stock is strictly derived from children's effective stock.
+  /// For packages: ALWAYS returns 0 or >0 (never -1).
   ///
-  /// MATHEMATICAL CHAIN:
-  /// Regular:  Effective(C) = Base_Available(C) - CartQty(C) - PaketShadow(C) - HeldQty(C)
-  /// Package:  Effective(P) = MIN( floor( Effective(C_i) / Required_Qty(C_i) ) )
-  ///
-  /// NOTE: _getCartQtyForProduct already includes package shadow deductions
-  /// (CartQty(P) * Qty_of_C_in_P), so NO additional subtraction is needed
-  /// in the package path. Doing so would double-count.
+  /// MATHEMATICAL CHAIN (Cross-Product Shared Material Pool):
+  /// 1. cartUsage[M] = SUM of all material M consumed by cart + held items
+  /// 2. Remaining[M] = DB_Stock[M] - cartUsage[M]
+  /// 3. Regular:  Effective(C) = MIN( floor( Remaining[M_i] / Recipe_Needed[M_i] ) )
+  /// 4. Package:  Effective(P) = MIN( floor( Effective(C_i) / Required_Qty(C_i) ) )
   int _getEffectiveStock(dynamic product) {
     if (product is! Map) return -1;
 
@@ -434,8 +499,6 @@ class _KasirScreenState extends State<KasirScreen> {
         int minPortions = 999999;
         for (final pi in paketItems) {
           if (pi is! Map) continue;
-
-          // Find child product using .toString() comparison — crash-proof
           final String childIdStr = pi['product_id']?.toString() ?? '';
           if (childIdStr.isEmpty) continue;
 
@@ -446,39 +509,56 @@ class _KasirScreenState extends State<KasirScreen> {
               break;
             }
           }
-
-          // Child not in loaded products → cannot fulfill this package → 0
           if (childProduct == null) return 0;
 
           final childEffective = _getEffectiveStock(childProduct);
-          // Child has no recipe (-1) → unlimited supply → skip this child
           if (childEffective == -1) continue;
 
           final int neededQty = _safeNum(pi['qty']).round();
           if (neededQty <= 0) continue;
 
           final int possibleFromChild = childEffective ~/ neededQty;
-          if (possibleFromChild < minPortions) {
-            minPortions = possibleFromChild;
-          }
+          if (possibleFromChild < minPortions) minPortions = possibleFromChild;
         }
 
-        // All children unlimited → treat package as high-availability
         if (minPortions == 999999) return 999;
         return minPortions < 0 ? 0 : minPortions;
       } catch (_) {
-        return 0; // Fail locked on any stray exception
+        return 0;
       }
     }
 
-    // === REGULAR PRODUCT (is_paket == 0): DB stock minus ALL shadow deductions ===
-    final dynamic rawPortions = product['available_portions'];
-    if (rawPortions == null) return -1; // No recipe = unlimited
-    final int maxPortions = (rawPortions as num).toInt();
-    final int inCart = _getCartQtyForProduct(product['id']);
-    final int inHeld = _getHeldQtyForProduct(product['id']);
-    int effectiveStock = maxPortions - inCart - inHeld;
-    return effectiveStock < 0 ? 0 : effectiveStock; // ABSOLUTE CLAMP
+    // === REGULAR PRODUCT: Material-pool-aware effective stock ===
+    final String pid = product['id']?.toString() ?? '';
+    final recipe = _recipes[pid];
+
+    // No recipe loaded → check legacy available_portions as fallback
+    if (recipe == null || recipe.isEmpty) {
+      final dynamic rawPortions = product['available_portions'];
+      if (rawPortions == null) return -1; // No recipe = unlimited
+      // Fallback: use old simple deduction
+      final int maxPortions = (rawPortions as num).toInt();
+      final int inCart = _getCartQtyForProduct(product['id']);
+      final int inHeld = _getHeldQtyForProduct(product['id']);
+      int effectiveStock = maxPortions - inCart - inHeld;
+      return effectiveStock < 0 ? 0 : effectiveStock;
+    }
+
+    // Material-pool-aware calculation
+    final cartUsage = _computeCartMaterialUsage();
+    int minPortions = 999999;
+    for (final ing in recipe) {
+      final mid = ing['bahan_baku_id']?.toString() ?? '';
+      final double qtyNeeded = _safeNum(ing['qty_needed']);
+      if (mid.isEmpty || qtyNeeded <= 0) continue;
+      final double totalStock = _materialStocks[mid] ?? 0;
+      final double consumed = cartUsage[mid] ?? 0;
+      final double remaining = totalStock - consumed;
+      final int portions = (remaining / qtyNeeded).floor();
+      if (portions < minPortions) minPortions = portions;
+    }
+    int result = minPortions == 999999 ? -1 : minPortions;
+    return result < 0 ? 0 : result; // ABSOLUTE CLAMP
   }
 
   void _addToCart(dynamic product, String unitName, num quantity, [String? addonSummary]) {
