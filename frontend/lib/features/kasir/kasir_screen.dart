@@ -422,34 +422,51 @@ class _KasirScreenState extends State<KasirScreen> {
 
     // === PACKAGE (is_paket == 1): Virtual wrapper, derived stock ===
     if ((product['is_paket'] as num?)?.toInt() == 1) {
-      final paketItems = product['paket_items'];
-      // If no children configured, package cannot be sold → 0
-      if (paketItems is! List || paketItems.isEmpty) return 0;
+      try {
+        final paketItems = product['paket_items'];
+        // If no children configured, package cannot be sold → 0
+        if (paketItems is! List || paketItems.isEmpty) return 0;
 
-      int minPortions = 999999;
-      for (final pi in paketItems) {
-        final childProduct = products.firstWhere(
-          (p) => p['id'] == pi['product_id'], orElse: () => null);
-        // If child product not found in loaded products → cannot fulfill → 0
-        if (childProduct == null) return 0;
+        int minPortions = 999999;
+        for (final pi in paketItems) {
+          if (pi is! Map) continue;
+          
+          final childId = int.tryParse(pi['product_id']?.toString() ?? '');
+          if (childId == null) return 0;
 
-        final childEffective = _getEffectiveStock(childProduct);
-        // Child has no recipe (-1) → unlimited supply of this child → skip
-        if (childEffective == -1) continue;
+          dynamic childProduct;
+          try {
+            childProduct = products.firstWhere(
+              (p) => p is Map && int.tryParse(p['id']?.toString() ?? '') == childId, 
+              orElse: () => null
+            );
+          } catch (_) {
+            childProduct = null;
+          }
+          
+          // If child product not found in loaded products → cannot fulfill → 0
+          if (childProduct == null) return 0;
 
-        final int neededQty = _safeNum(pi['qty']).round();
-        if (neededQty <= 0) continue;
+          final childEffective = _getEffectiveStock(childProduct);
+          // Child has no recipe (-1) → unlimited supply of this child → skip
+          if (childEffective == -1) continue;
 
-        final int possibleFromChild = childEffective ~/ neededQty;
-        if (possibleFromChild < minPortions) {
-          minPortions = possibleFromChild;
+          final int neededQty = _safeNum(pi['qty']).round();
+          if (neededQty <= 0) continue;
+
+          final int possibleFromChild = childEffective ~/ neededQty;
+          if (possibleFromChild < minPortions) {
+            minPortions = possibleFromChild;
+          }
         }
-      }
 
-      // If all children were unlimited (-1), package is also unlimited → but
-      // packages are virtual, so treat as a large number. Use 999 as display cap.
-      if (minPortions == 999999) return 999;
-      return minPortions < 0 ? 0 : minPortions;
+        // If all children were unlimited (-1), package is also unlimited → but
+        // packages are virtual, so treat as a large number. Use 999 as display cap.
+        if (minPortions == 999999) return 999;
+        return minPortions < 0 ? 0 : minPortions;
+      } catch (e) {
+        return 0; // Fail locked to prevent UI rendering crash
+      }
     }
 
     // === REGULAR PRODUCT (is_paket == 0): DB stock minus ALL shadow deductions ===
