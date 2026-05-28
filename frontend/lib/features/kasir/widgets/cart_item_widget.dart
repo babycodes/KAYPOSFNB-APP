@@ -4,9 +4,10 @@ import '../../../core/helpers.dart';
 
 class CartItemWidget extends StatefulWidget {
   final Map<String, dynamic> item;
+  final int maxAllowedQty;
   final VoidCallback onIncrement, onDecrement, onRemove;
   final ValueChanged<double>? onSetQuantity;
-  const CartItemWidget({super.key, required this.item, required this.onIncrement, required this.onDecrement, required this.onRemove, this.onSetQuantity});
+  const CartItemWidget({super.key, required this.item, this.maxAllowedQty = 9999, required this.onIncrement, required this.onDecrement, required this.onRemove, this.onSetQuantity});
 
   @override
   State<CartItemWidget> createState() => _CartItemWidgetState();
@@ -40,8 +41,10 @@ class _CartItemWidgetState extends State<CartItemWidget> {
   }
 
   void _commitEdit() {
-    final val = double.tryParse(_editCtrl.text.replaceAll('.', '').replaceAll(',', '.'));
+    var val = double.tryParse(_editCtrl.text.replaceAll('.', '').replaceAll(',', '.'));
     if (val != null && val > 0 && widget.onSetQuantity != null) {
+      // Clamp to maxAllowedQty
+      if (val > widget.maxAllowedQty) val = widget.maxAllowedQty.toDouble();
       widget.onSetQuantity!(val);
     }
     setState(() => _editing = false);
@@ -124,10 +127,12 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                   child: Container(constraints: const BoxConstraints(minWidth: 30, maxWidth: 70), padding: const EdgeInsets.symmetric(horizontal: 4), height: 28, alignment: Alignment.center,
                     child: Text(qtyStr, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: cs.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis))),
             // Plus button
-            InkWell(onTap: widget.onIncrement,
+            InkWell(onTap: _safeNum(widget.item['quantity']).round() >= widget.maxAllowedQty ? null : widget.onIncrement,
               child: Container(width: 26, height: 28,
-                decoration: BoxDecoration(color: cs.primary, borderRadius: const BorderRadius.horizontal(right: Radius.circular(5))),
-                child: Icon(Icons.add, size: 12, color: cs.onPrimary))),
+                decoration: BoxDecoration(
+                  color: _safeNum(widget.item['quantity']).round() >= widget.maxAllowedQty ? cs.surfaceContainerHighest : cs.primary,
+                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(5))),
+                child: Icon(Icons.add, size: 12, color: _safeNum(widget.item['quantity']).round() >= widget.maxAllowedQty ? cs.onSurfaceVariant : cs.onPrimary))),
           ]),
         ),
       ]),

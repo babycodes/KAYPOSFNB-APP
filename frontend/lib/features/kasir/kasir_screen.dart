@@ -607,30 +607,35 @@ class _KasirScreenState extends State<KasirScreen> {
     }
   }
 
-  void _incrementItem(int i) => _setItemQuantity(i, _safeNum(cart[i]['quantity']) + 1);
+  /// Computes the max quantity this cart item can hold, based on
+  /// current effective stock (material-pool-aware) + its current qty.
+  int _getMaxCartQty(int cartIndex) {
+    if (cartIndex < 0 || cartIndex >= cart.length) return 0;
+    final product = cart[cartIndex]['product'];
+    if (product is! Map) return 999;
+    final int currentQty = _safeNum(cart[cartIndex]['quantity']).round();
+    final int effective = _getEffectiveStock(product);
+    if (effective == -1) return 9999; // Unlimited (no recipe)
+    // effective already accounts for this item's current qty in cart,
+    // so max allowed = currentQty + effective ("how many more can be added")
+    return currentQty + effective;
+  }
+
+  void _incrementItem(int i) {
+    final int maxQty = _getMaxCartQty(i);
+    final int currentQty = _safeNum(cart[i]['quantity']).round();
+    if (currentQty >= maxQty) return; // Already at max — block
+    _setItemQuantity(i, _safeNum(cart[i]['quantity']) + 1);
+  }
   void _decrementItem(int i) { if (_safeNum(cart[i]['quantity']) > 1) _setItemQuantity(i, _safeNum(cart[i]['quantity']) - 1); }
   void _removeItem(int i) => setState(() => cart.removeAt(i));
   
   void _setItemQuantity(int i, double qty) {
     if (qty < 0) qty = 0;
 
-    // Enforce available_portions limit
-    final product = cart[i]['product'];
-    if (product is Map) {
-      final dynamic rawPortions = product['available_portions'];
-      if (rawPortions != null) {
-        final int maxPortions = (rawPortions as num).toInt();
-        // Sum qty of same product in other cart entries
-        int otherQty = 0;
-        for (int j = 0; j < cart.length; j++) {
-          if (j != i && cart[j]['product'] is Map && cart[j]['product']['id'] == product['id']) {
-            otherQty += _safeNum(cart[j]['quantity']).round();
-          }
-        }
-        final int maxForThis = maxPortions - otherQty;
-        if (qty > maxForThis) qty = maxForThis.toDouble();
-      }
-    }
+    // Enforce material-pool-aware max quantity
+    final int maxQty = _getMaxCartQty(i);
+    if (qty > maxQty) qty = maxQty.toDouble();
     
     setState(() {
       cart[i]['quantity'] = qty;
@@ -901,7 +906,7 @@ class _KasirScreenState extends State<KasirScreen> {
                 ? Center(child: Text('Keranjang Kosong', style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: 0.5), fontWeight: FontWeight.w500, fontSize: 14)))
                 : ListView.builder(padding: const EdgeInsets.all(12), itemCount: cart.length,
                     itemBuilder: (_, i) => Padding(padding: const EdgeInsets.only(bottom: 8),
-                      child: CartItemWidget(item: cart[i], onIncrement: () => _incrementItem(i), onDecrement: () => _decrementItem(i), onRemove: () => _removeItem(i), onSetQuantity: (q) => _setItemQuantity(i, q))))),
+                      child: CartItemWidget(item: cart[i], maxAllowedQty: _getMaxCartQty(i), onIncrement: () => _incrementItem(i), onDecrement: () => _decrementItem(i), onRemove: () => _removeItem(i), onSetQuantity: (q) => _setItemQuantity(i, q))))),
               const Divider(height: 1),
               Padding(padding: const EdgeInsets.all(16), child: Column(children: [
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -1046,7 +1051,7 @@ class _KasirScreenState extends State<KasirScreen> {
               const Divider(),
               Flexible(child: ListView.builder(shrinkWrap: true, itemCount: cart.length, padding: const EdgeInsets.all(12),
                 itemBuilder: (_, i) => Padding(padding: const EdgeInsets.only(bottom: 8),
-                  child: CartItemWidget(item: cart[i], onIncrement: () => _incrementItem(i), onDecrement: () => _decrementItem(i), onRemove: () => _removeItem(i), onSetQuantity: (q) => _setItemQuantity(i, q))))),
+                  child: CartItemWidget(item: cart[i], maxAllowedQty: _getMaxCartQty(i), onIncrement: () => _incrementItem(i), onDecrement: () => _decrementItem(i), onRemove: () => _removeItem(i), onSetQuantity: (q) => _setItemQuantity(i, q))))),
               Padding(padding: const EdgeInsets.all(16), child: Column(children: [
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Total', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)), Text(fmtPrice(cartTotal), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: cs.primary))]),
                 const SizedBox(height: 8),
