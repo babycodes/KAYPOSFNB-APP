@@ -75,7 +75,7 @@ class ProductCard extends StatelessWidget {
     final int absolutePortions = hasRecipe ? (rawPortions as num).toInt() : -1;
     final bool isHabis = hasRecipe && absolutePortions <= 0;
     // effectiveStock is passed by parent and factors in cart/hold
-    final bool isBooked = hasRecipe && !isHabis && effectiveStock >= 0 && effectiveStock <= 0;
+    final bool isBooked = hasRecipe && !isHabis && bookedQty > 0 && effectiveStock <= 0;
     final bool soldOut = isHabis || isBooked;
     final bool isPaket = (product is Map ? (product['is_paket'] as num?)?.toInt() : 0) == 1;
 
@@ -86,7 +86,7 @@ class ProductCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: isHabis ? () => _showBottleneck(context) : (isBooked ? null : () => onSelect(product)),
-          onLongPress: isPaket ? () => _showPaketDetails(context) : null,
+          onLongPress: () => isPaket ? _showPaketDetails(context) : _showRecipeDetails(context),
           borderRadius: BorderRadius.circular(8),
           splashColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.2),
           hoverColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.08),
@@ -277,11 +277,47 @@ class ProductCard extends StatelessWidget {
                   final item = items[i];
                   final qty = _safeDouble(item['qty']).toStringAsFixed(0);
                   final name = item['product_name'] ?? '-';
-                  final hpp = _safeDouble(item['hpp']);
-                  final hppStr = hpp.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(" - ${qty}x $name (Modal: Rp $hppStr)", style: const TextStyle(fontSize: 13)),
+                    child: Text(" - ${qty}x $name", style: const TextStyle(fontSize: 13)),
+                  );
+                },
+              ),
+        ),
+        actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Tutup'))],
+      ));
+    } catch (_) {}
+  }
+
+  Future<void> _showRecipeDetails(BuildContext context) async {
+    final productId = product is Map ? product['id'] : null;
+    final productName = product is Map ? product['name'] : 'Produk';
+    if (productId == null) return;
+    try {
+      final data = await _callApi('/resep/$productId');
+      if (!context.mounted) return;
+      final items = (data as List?) ?? [];
+      
+      showDialog(context: context, builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Resep: $productName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Container(
+          width: 360,
+          constraints: const BoxConstraints(maxHeight: 400),
+          child: items.isEmpty
+            ? const Text('Produk ini tidak memiliki resep.')
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const BouncingScrollPhysics(),
+                itemCount: items.length,
+                itemBuilder: (ctx, i) {
+                  final item = items[i];
+                  final qtyNeeded = _safeDouble(item['qty_needed']).toStringAsFixed(0);
+                  final unit = item['bahan_unit']?.toString() ?? '';
+                  final name = item['bahan_name']?.toString() ?? '-';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(" - $qtyNeeded $unit $name", style: const TextStyle(fontSize: 13)),
                   );
                 },
               ),

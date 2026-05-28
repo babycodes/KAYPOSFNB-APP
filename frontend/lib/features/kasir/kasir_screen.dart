@@ -695,7 +695,7 @@ class _KasirScreenState extends State<KasirScreen> {
                         children: [
                           const Icon(Icons.local_offer, color: Colors.orange, size: 16),
                           const SizedBox(width: 8),
-                          Expanded(child: Text('🎁 Promo Aktif: ${activeNames.join(', ')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 12))),
+                          Expanded(child: Text('🎁 Promo Diskon Tersedia', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 12))),
                         ],
                       ),
                     );
@@ -710,7 +710,7 @@ class _KasirScreenState extends State<KasirScreen> {
                     children: [
                       const Icon(Icons.fastfood, color: Colors.orange, size: 16),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('🔥 Menu Paket Spesial: ${comboProducts.map((p) => p['name']).join(', ')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 12))),
+                      Expanded(child: Text('🔥 Menu Paket Spesial Tersedia', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 12))),
                     ],
                   ),
                 ),
