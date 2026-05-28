@@ -7,8 +7,9 @@ class ProductCard extends StatelessWidget {
   final double bookedQty;
   final int discountPercent;
   final String? promoName;
+  final int effectiveStock;
   final Function(dynamic) onSelect;
-  const ProductCard({super.key, required this.product, required this.bookedQty, this.discountPercent = 0, this.promoName, required this.onSelect});
+  const ProductCard({super.key, required this.product, required this.bookedQty, this.discountPercent = 0, this.promoName, this.effectiveStock = -1, required this.onSelect});
 
   // Safe num parser — never crashes
   static double _safeDouble(dynamic v, [double fallback = 0.0]) {
@@ -70,9 +71,11 @@ class ProductCard extends StatelessWidget {
     final double baseUnitPrice = _safeDouble(product is Map ? product['price'] : 0.0);
 
     // Bottleneck: available portions from BOM
+    // effectiveStock from parent takes priority (includes cart+hold deduction)
+    final bool useEffective = effectiveStock >= 0;
     final dynamic rawPortions = product is Map ? product['available_portions'] : null;
-    final bool hasRecipe = rawPortions != null;
-    final int availablePortions = hasRecipe ? (rawPortions as num).toInt() : -1; // -1 = no recipe
+    final bool hasRecipe = rawPortions != null || useEffective;
+    final int availablePortions = useEffective ? effectiveStock : (rawPortions != null ? (rawPortions as num).toInt() : -1);
     final bool soldOut = hasRecipe && availablePortions <= 0;
 
     return Opacity(

@@ -101,54 +101,72 @@ class _KategoriBahanPageState extends State<KategoriBahanPage> {
               const SizedBox(height: 16),
               Text('Belum ada kategori bahan', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
             ]))
-          : GridView.builder(
-              padding: const EdgeInsets.only(bottom: 80),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 280,
-                mainAxisExtent: 100,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: categories.length,
-              itemBuilder: (context, i) {
-                final cat = categories[i];
-                final count = (cat['item_count'] as num?)?.toInt() ?? 0;
-                return Card(
-                  elevation: 0,
-                  color: cs.surfaceContainer,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5))),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(children: [
-                      Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(color: cs.tertiaryContainer, borderRadius: BorderRadius.circular(12)),
-                        child: Icon(Icons.science, color: cs.onTertiaryContainer, size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Text(cat['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text('$count Bahan Baku', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                      ])),
-                      PopupMenuButton(
-                        icon: const Icon(Icons.more_vert, size: 20),
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
-                          const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
-                        ],
-                        onSelected: (val) {
-                          if (val == 'edit') _openForm(cat);
-                          if (val == 'delete') _confirmDelete(cat);
-                        },
-                      ),
-                    ]),
-                  ),
+          : LayoutBuilder(builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 600;
+              if (isMobile) {
+                return ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 80),
+                  itemCount: categories.length,
+                  itemBuilder: (context, i) {
+                    final cat = categories[i];
+                    final count = (cat['item_count'] as num?)?.toInt() ?? 0;
+                    return _buildCategoryItem(cat, count, cs);
+                  },
                 );
-              },
-            ),
+              }
+              return GridView.builder(
+                padding: const EdgeInsets.only(bottom: 80),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 280,
+                  mainAxisExtent: 80,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: categories.length,
+                itemBuilder: (context, i) {
+                  final cat = categories[i];
+                  final count = (cat['item_count'] as num?)?.toInt() ?? 0;
+                  return _buildCategoryItem(cat, count, cs);
+                },
+              );
+            }),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(),
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildCategoryItem(dynamic cat, int count, ColorScheme cs) {
+    return Card(
+      elevation: 0,
+      color: cs.surfaceContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5))),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(color: cs.tertiaryContainer, borderRadius: BorderRadius.circular(12)),
+            child: Icon(Icons.science, color: cs.onTertiaryContainer, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(cat['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text('$count Bahan Baku', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+          ])),
+          PopupMenuButton(
+            icon: const Icon(Icons.more_vert, size: 20),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
+              const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
+            ],
+            onSelected: (val) {
+              if (val == 'edit') _openForm(cat);
+              if (val == 'delete') _confirmDelete(cat);
+            },
+          ),
+        ]),
       ),
     );
   }

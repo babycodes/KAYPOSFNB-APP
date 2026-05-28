@@ -72,54 +72,100 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
   void _showRestockDialog(dynamic item) {
     final qtyCtrl = TextEditingController();
     final costCtrl = TextEditingController();
-    final unit = item['unit']?.toString() ?? '';
+    final baseUnit = item['unit']?.toString() ?? '';
+
+    // Build unit options based on base unit
+    final List<String> unitOptions = _getRestockUnitOptions(baseUnit);
+    String selectedUnit = unitOptions.first;
 
     showDialog(context: context, builder: (dialogContext) {
-      return AlertDialog(
-        title: Text('Restock: ${item['name']}'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Stok saat ini: ${(item['stock'] as num?)?.toDouble() ?? 0} $unit', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 16),
-          TextField(
-            controller: qtyCtrl,
-            decoration: InputDecoration(labelText: 'Jumlah Tambah Stok', suffixText: unit, isDense: true),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: costCtrl,
-            decoration: const InputDecoration(labelText: 'Total Harga Beli Restock', prefixText: 'Rp ', isDense: true),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
-          FilledButton(onPressed: () async {
-            final addQty = double.tryParse(qtyCtrl.text.replaceAll(',', '.')) ?? 0;
-            final addCost = double.tryParse(costCtrl.text.replaceAll(',', '.')) ?? 0;
-            if (addQty <= 0) return;
+      return StatefulBuilder(builder: (ctx, setDialogState) {
+        return AlertDialog(
+          title: Text('Restock: ${item['name']}'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Stok saat ini: ${(item['stock'] as num?)?.toDouble() ?? 0} $baseUnit', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: TextField(
+                controller: qtyCtrl,
+                decoration: const InputDecoration(labelText: 'Jumlah Restock', isDense: true),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              )),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 100,
+                child: DropdownButtonFormField<String>(
+                  value: selectedUnit,
+                  decoration: const InputDecoration(labelText: 'Satuan', isDense: true),
+                  items: unitOptions.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                  onChanged: (v) { if (v != null) setDialogState(() => selectedUnit = v); },
+                ),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            TextField(
+              controller: costCtrl,
+              decoration: const InputDecoration(labelText: 'Total Harga Beli Restock', prefixText: 'Rp ', isDense: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+            FilledButton(onPressed: () async {
+              final inputQty = double.tryParse(qtyCtrl.text.replaceAll(',', '.')) ?? 0;
+              final addCost = double.tryParse(costCtrl.text.replaceAll(',', '.')) ?? 0;
+              if (inputQty <= 0) return;
 
-            final currentStock = (item['stock'] as num?)?.toDouble() ?? 0;
-            final currentCostPrice = (item['cost_price'] as num?)?.toDouble() ?? 0;
-            final newStock = currentStock + addQty;
-            // AVCO: weighted average cost
-            final totalOldValue = currentStock * currentCostPrice;
-            final newCostPrice = newStock > 0 ? (totalOldValue + addCost) / newStock : currentCostPrice;
+              // Convert to base unit
+              final multiplier = _getUnitMultiplier(selectedUnit, baseUnit);
+              final addQty = inputQty * multiplier;
 
-            try {
-              await Api.put('/bahan-baku/${item['id']}', body: {
-                'stock': newStock,
-                'cost_price': newCostPrice,
-              });
-              if (mounted) Navigator.pop(dialogContext);
-              _loadData();
-            } catch (e) {
-              if (mounted) showAdminToast(context, 'Error: $e');
-            }
-          }, child: const Text('Tambah Stok')),
-        ],
-      );
+              final currentStock = (item['stock'] as num?)?.toDouble() ?? 0;
+              final currentCostPrice = (item['cost_price'] as num?)?.toDouble() ?? 0;
+              final newStock = currentStock + addQty;
+              // AVCO: weighted average cost
+              final totalOldValue = currentStock * currentCostPrice;
+              final newCostPrice = newStock > 0 ? (totalOldValue + addCost) / newStock : currentCostPrice;
+
+              try {
+                await Api.put('/bahan-baku/${item['id']}', body: {
+                  'stock': newStock,
+                  'cost_price': newCostPrice,
+                });
+                if (mounted) Navigator.pop(dialogContext);
+                _loadData();
+              } catch (e) {
+                if (mounted) showAdminToast(context, 'Error: $e');
+              }
+            }, child: const Text('Tambah Stok')),
+          ],
+        );
+      });
     });
+  }
+
+  List<String> _getRestockUnitOptions(String baseUnit) {
+    final lower = baseUnit.toLowerCase();
+    if (lower == 'gram' || lower == 'gr' || lower == 'g') return ['gram', 'Kg'];
+    if (lower == 'kg') return ['Kg', 'gram'];
+    if (lower == 'ml') return ['ml', 'Liter'];
+    if (lower == 'liter' || lower == 'l') return ['Liter', 'ml'];
+    // Default: just show the base unit
+    return [baseUnit];
+  }
+
+  double _getUnitMultiplier(String inputUnit, String baseUnit) {
+    final from = inputUnit.toLowerCase();
+    final to = baseUnit.toLowerCase();
+    // Kg → gram
+    if (from == 'kg' && (to == 'gram' || to == 'gr' || to == 'g')) return 1000;
+    // gram → Kg
+    if ((from == 'gram' || from == 'gr' || from == 'g') && to == 'kg') return 0.001;
+    // Liter → ml
+    if ((from == 'liter' || from == 'l') && to == 'ml') return 1000;
+    // ml → Liter
+    if (from == 'ml' && (to == 'liter' || to == 'l')) return 0.001;
+    return 1.0; // Same unit or unknown
   }
 
 

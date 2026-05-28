@@ -150,37 +150,109 @@ class _KasirScreenState extends State<KasirScreen> {
 
   Future<void> _showStockAlert() async {
     try {
-      final lowStock = await Api.get('/inventory/low-stock') as List;
+      final allBahan = await Api.get('/bahan-baku') as List;
       if (!mounted) return;
+      
+      final outOfStock = allBahan.where((b) {
+        final stock = _safeNum(b['stock']);
+        return stock <= 0;
+      }).toList();
+      
+      final lowStock = allBahan.where((b) {
+        final stock = _safeNum(b['stock']);
+        final minAlert = _safeNum(b['min_stock_alert']);
+        return stock > 0 && minAlert > 0 && stock <= minAlert;
+      }).toList();
+      
       final cs = Theme.of(context).colorScheme;
+      final totalAlerts = outOfStock.length + lowStock.length;
+      
       showDialog(context: context, builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(children: [
           Icon(Icons.notifications_active, color: cs.error, size: 22),
           const SizedBox(width: 8),
-          const Text('Peringatan Stok Bahan Baku'),
+          const Expanded(child: Text('Peringatan Stok Bahan Baku', style: TextStyle(fontSize: 16))),
         ]),
         content: SizedBox(
-          width: 400,
-          child: lowStock.isEmpty
+          width: 440,
+          child: totalAlerts == 0
             ? const Padding(padding: EdgeInsets.all(16), child: Text('✅ Semua stok bahan baku aman!', style: TextStyle(fontSize: 14)))
             : ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: lowStock.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final item = lowStock[i];
-                    final stock = _safeNum(item['stock']);
-                    final unit = item['unit']?.toString() ?? '';
-                    return ListTile(
-                      dense: true,
-                      leading: Icon(Icons.warning_amber, color: cs.error, size: 20),
-                      title: Text(item['name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
-                      trailing: Text('${stock.round()} $unit', style: TextStyle(fontWeight: FontWeight.bold, color: cs.error)),
-                    );
-                  },
+                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.6),
+                child: DefaultTabController(
+                  length: 2,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    TabBar(
+                      labelColor: cs.primary,
+                      indicatorColor: cs.primary,
+                      tabs: [
+                        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.error, size: 16, color: Colors.red),
+                          const SizedBox(width: 6),
+                          Text('Habis (${outOfStock.length})'),
+                        ])),
+                        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.warning_amber, size: 16, color: Colors.amber.shade700),
+                          const SizedBox(width: 6),
+                          Text('Rendah (${lowStock.length})'),
+                        ])),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Flexible(child: SizedBox(
+                      height: 300,
+                      child: TabBarView(children: [
+                        // Tab 1: Out of Stock
+                        outOfStock.isEmpty
+                          ? const Center(child: Text('Tidak ada bahan habis', style: TextStyle(fontSize: 13)))
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: outOfStock.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (_, i) {
+                                final item = outOfStock[i];
+                                final unit = item['unit']?.toString() ?? '';
+                                return ListTile(
+                                  dense: true,
+                                  leading: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
+                                    child: const Text('HABIS', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  ),
+                                  title: Text(item['name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                  trailing: Text('0 $unit', style: TextStyle(fontWeight: FontWeight.bold, color: cs.error)),
+                                );
+                              },
+                            ),
+                        // Tab 2: Low Stock
+                        lowStock.isEmpty
+                          ? const Center(child: Text('Tidak ada bahan stok rendah', style: TextStyle(fontSize: 13)))
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: lowStock.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (_, i) {
+                                final item = lowStock[i];
+                                final stock = _safeNum(item['stock']);
+                                final minAlert = _safeNum(item['min_stock_alert']);
+                                final unit = item['unit']?.toString() ?? '';
+                                return ListTile(
+                                  dense: true,
+                                  leading: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(color: Colors.amber.shade700, borderRadius: BorderRadius.circular(4)),
+                                    child: const Text('RENDAH', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  ),
+                                  title: Text(item['name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                  subtitle: Text('Min: ${minAlert.round()} $unit', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                                  trailing: Text('${stock.round()} $unit', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade800)),
+                                );
+                              },
+                            ),
+                      ]),
+                    )),
+                  ]),
                 ),
               ),
         ),
@@ -263,12 +335,14 @@ class _KasirScreenState extends State<KasirScreen> {
 
 
   void _handleProductSelect(dynamic product) {
-    // Check available portions limit
+    // Check effective stock (available_portions - cart qty - held qty)
     final dynamic rawPortions = product is Map ? product['available_portions'] : null;
     if (rawPortions != null) {
       final int maxPortions = (rawPortions as num).toInt();
       final int currentInCart = _getCartQtyForProduct(product['id']);
-      if (currentInCart >= maxPortions) {
+      final int currentInHeld = _getHeldQtyForProduct(product['id']);
+      final int effectiveStock = maxPortions - currentInCart - currentInHeld;
+      if (effectiveStock <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Stok bahan tidak cukup untuk menambah "${product['name']}"'), duration: const Duration(seconds: 2)),
         );
@@ -286,6 +360,30 @@ class _KasirScreenState extends State<KasirScreen> {
       }
     }
     return total;
+  }
+
+  int _getHeldQtyForProduct(dynamic productId) {
+    int total = 0;
+    for (final held in heldCarts) {
+      final cartData = held['cart_data'];
+      if (cartData is List) {
+        for (final item in cartData) {
+          if (item is Map && item['product'] is Map && item['product']['id'] == productId) {
+            total += _safeNum(item['quantity']).round();
+          }
+        }
+      }
+    }
+    return total;
+  }
+
+  int _getEffectiveStock(dynamic product) {
+    final dynamic rawPortions = product is Map ? product['available_portions'] : null;
+    if (rawPortions == null) return -1; // -1 means no recipe/unlimited
+    final int maxPortions = (rawPortions as num).toInt();
+    final int inCart = _getCartQtyForProduct(product['id']);
+    final int inHeld = _getHeldQtyForProduct(product['id']);
+    return maxPortions - inCart - inHeld;
   }
 
   void _addToCart(dynamic product, String unitName, num quantity) {
@@ -550,11 +648,13 @@ class _KasirScreenState extends State<KasirScreen> {
                         itemBuilder: (_, i) {
                           final product = filteredProducts[i];
                           final promoInfo = _getPromoInfo(product);
+                          final effectiveStock = _getEffectiveStock(product);
                           return ProductCard(
                             product: product, 
                             bookedQty: 0, 
                             discountPercent: promoInfo.$1,
                             promoName: promoInfo.$2,
+                            effectiveStock: effectiveStock,
                             onSelect: _handleProductSelect
                           );
                         },
