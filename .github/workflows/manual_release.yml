@@ -68,7 +68,7 @@ jobs:
              frontend/build/app/outputs/flutter-apk/KAYPOSFNB-$VERSION.apk
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.0.1
         with:
           tag_name: ${{ github.event.inputs.version_tag || github.ref_name }}
           name: KAYPOS FNB ${{ github.event.inputs.version_tag || github.ref_name }}
@@ -141,7 +141,7 @@ jobs:
           fpm -s dir -t rpm -n kayposfnb -v $VERSION_NUM -p ../../../../../KAYPOSFNB-$VERSION.rpm -C pkg_root usr opt
 
       - name: Release Linux Builds
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.0.1
         with:
           files: |
             frontend/KAYPOSFNB-*.deb
@@ -202,7 +202,7 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" installer.iss
 
       - name: Release Windows Build
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.0.1
         with:
           files: frontend/KAYPOSFNB-*.exe
           tag_name: ${{ github.event.inputs.version_tag || github.ref_name }}
