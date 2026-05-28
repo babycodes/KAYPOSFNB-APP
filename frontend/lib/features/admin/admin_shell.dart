@@ -17,6 +17,7 @@ class _AdminShellState extends State<AdminShell> {
   final navItems = [
     {'href': '/admin', 'label': 'Dashboard', 'icon': Icons.dashboard},
     {'href': '/admin/produk', 'label': 'Produk', 'icon': Icons.inventory_2},
+    {'href': '/admin/paket', 'label': 'Menu Paket', 'icon': Icons.fastfood},
     {'href': '/admin/kategori', 'label': 'Kategori Produk', 'icon': Icons.label},
     {'href': '/admin/bahan-baku', 'label': 'Bahan Baku', 'icon': Icons.inventory_2},
     {'href': '/admin/kategori-bahan', 'label': 'Kategori Bahan', 'icon': Icons.category},
@@ -105,10 +106,7 @@ class _AdminShellState extends State<AdminShell> {
             child: Padding(padding: const EdgeInsets.only(bottom: 4), child: InkWell(
               onTap: () {
                 // Close any open modals/bottom sheets before navigating
-                final nav = Navigator.of(context);
-                if (nav.canPop()) {
-                  nav.pop();
-                }
+                Navigator.of(context, rootNavigator: true).popUntil((route) => route is PageRoute);
                 // Then navigate
                 context.go(item['href'] as String);
                 if (isMobile && _scaffoldKey.currentState?.isDrawerOpen == true) {

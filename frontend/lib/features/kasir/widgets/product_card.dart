@@ -70,13 +70,13 @@ class ProductCard extends StatelessWidget {
 
     final double baseUnitPrice = _safeDouble(product is Map ? product['price'] : 0.0);
 
-    // Bottleneck: available portions from BOM
-    // effectiveStock from parent takes priority (includes cart+hold deduction)
-    final bool useEffective = effectiveStock >= 0;
     final dynamic rawPortions = product is Map ? product['available_portions'] : null;
-    final bool hasRecipe = rawPortions != null || useEffective;
-    final int availablePortions = useEffective ? effectiveStock : (rawPortions != null ? (rawPortions as num).toInt() : -1);
-    final bool soldOut = hasRecipe && availablePortions <= 0;
+    final bool hasRecipe = rawPortions != null;
+    final int absolutePortions = hasRecipe ? (rawPortions as num).toInt() : -1;
+    final bool isHabis = hasRecipe && absolutePortions <= 0;
+    // effectiveStock is passed by parent and factors in cart/hold
+    final bool isBooked = hasRecipe && !isHabis && effectiveStock >= 0 && effectiveStock <= 0;
+    final bool soldOut = isHabis || isBooked;
     final bool isPaket = (product is Map ? (product['is_paket'] as num?)?.toInt() : 0) == 1;
 
     return Opacity(
@@ -141,7 +141,7 @@ class ProductCard extends StatelessWidget {
                               Text(fmtPrice(baseUnitPrice), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? Colors.greenAccent : cs.primary, height: 1.1)),
                             if (hasRecipe) ...[
                               const SizedBox(width: 6),
-                              Text('· $availablePortions porsi', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: availablePortions <= 0 ? cs.error : (availablePortions <= 5 ? Colors.amber[700] : cs.onSurfaceVariant))),
+                              Text('· ${effectiveStock >= 0 ? effectiveStock : absolutePortions} porsi', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: soldOut ? cs.error : ((effectiveStock >= 0 ? effectiveStock : absolutePortions) <= 5 ? Colors.amber[700] : cs.onSurfaceVariant))),
                             ],
                           ]
                         )
@@ -156,11 +156,11 @@ class ProductCard extends StatelessWidget {
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(4)),
-                    child: const Text('HABIS', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
+                    decoration: BoxDecoration(color: isHabis ? cs.error : Colors.orange[800], borderRadius: BorderRadius.circular(4)),
+                    child: Text(isHabis ? 'HABIS' : 'DI KERANJANG', style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
                   ),
                   const SizedBox(width: 2),
-                  GestureDetector(
+                  if (isHabis) GestureDetector(
                     onTap: () => _showBottleneck(context),
                     child: Container(
                       width: 16, height: 16,
@@ -219,26 +219,29 @@ class ProductCard extends StatelessWidget {
             : Column(mainAxisSize: MainAxisSize.min, children: [
                 Text(isPaketProduct ? 'Produk isi paket yang habis:' : 'Bahan baku yang tidak mencukupi:', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
                 const SizedBox(height: 8),
-                ...items.map((item) {
-                  if (isPaketProduct) {
-                    return ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.fastfood, size: 18, color: Colors.red),
-                      title: Text(item['name']?.toString() ?? '', style: const TextStyle(fontSize: 13)),
-                      trailing: Text('${item['available']}/${item['needed']}', style: TextStyle(color: cs.error, fontWeight: FontWeight.bold, fontSize: 12)),
-                    );
-                  } else {
-                    final stock = _safeDouble(item['stock']);
-                    final needed = _safeDouble(item['qty_needed']);
-                    return ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.science, size: 18, color: Colors.red),
-                      title: Text(item['name']?.toString() ?? '', style: const TextStyle(fontSize: 13)),
-                      subtitle: Text('Butuh: ${needed.toStringAsFixed(0)} ${item['unit'] ?? ''}', style: const TextStyle(fontSize: 11)),
-                      trailing: Text('Stok: ${stock.toStringAsFixed(0)}', style: TextStyle(color: cs.error, fontWeight: FontWeight.bold, fontSize: 12)),
-                    );
-                  }
-                }),
+                Expanded(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: items.length,
+                    itemBuilder: (ctx, i) {
+                      final item = items[i];
+                      if (isPaketProduct) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text("Produk: ${item['name']} (Sisa: ${item['available']}, Butuh: ${item['needed']})", style: const TextStyle(fontSize: 13)),
+                        );
+                      } else {
+                        final stock = _safeDouble(item['stock']).toStringAsFixed(0);
+                        final needed = _safeDouble(item['qty_needed']).toStringAsFixed(0);
+                        final unit = item['unit'] ?? '';
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text("Bahan: ${item['name']} (Sisa: $stock $unit, Butuh: $needed $unit)", style: const TextStyle(fontSize: 13)),
+                        );
+                      }
+                    },
+                  ),
+                ),
               ]),
         ),
         actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Tutup'))],

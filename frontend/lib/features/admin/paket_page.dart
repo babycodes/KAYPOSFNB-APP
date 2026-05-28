@@ -4,13 +4,13 @@ import '../../core/api.dart';
 import '../../core/helpers.dart';
 import '../kasir/dialogs/confirm_dialog.dart';
 
-class ProdukPage extends StatefulWidget {
-  const ProdukPage({super.key});
+class PaketPage extends StatefulWidget {
+  const PaketPage({super.key});
   @override
-  State<ProdukPage> createState() => _ProdukPageState();
+  State<PaketPage> createState() => _PaketPageState();
 }
 
-class _ProdukPageState extends State<ProdukPage> {
+class _PaketPageState extends State<PaketPage> {
   List<dynamic> products = [];
   List<dynamic> categories = [];
   bool isLoading = true;
@@ -48,7 +48,7 @@ class _ProdukPageState extends State<ProdukPage> {
   List<dynamic> get filteredProducts {
     return products.where((p) {
       final isPaket = (p['is_paket'] as num?)?.toInt() == 1;
-      if (isPaket) return false;
+      if (!isPaket) return false;
       
       final isItemActive = p['is_active'] == 1;
       final matchTab = activeTab == 'active' ? isItemActive : !isItemActive;
@@ -68,7 +68,7 @@ class _ProdukPageState extends State<ProdukPage> {
       showAdminToast(context, 'Buat kategori terlebih dahulu!');
       return;
     }
-    showDialog(context: context, builder: (_) => ProdukFormDialog(
+    showDialog(context: context, builder: (_) => PaketFormDialog(
       product: product,
       categories: categories,
       onSave: _loadData,
@@ -217,6 +217,7 @@ class _ProdukPageState extends State<ProdukPage> {
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Row(children: [
                                 Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isActive ? cs.onSurface : cs.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                if ((p['is_paket'] as num?)?.toInt() == 1) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: Colors.deepOrange, borderRadius: BorderRadius.circular(4)), child: const Text('PAKET', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))],
                                 if (!isActive) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(4)), child: Text('NON-AKTIF', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onErrorContainer)))],
                               ]),
                               const SizedBox(height: 4),
@@ -236,7 +237,7 @@ class _ProdukPageState extends State<ProdukPage> {
                             PopupMenuButton(
                               icon: const Icon(Icons.more_vert),
                               itemBuilder: (_) => [
-                                const PopupMenuItem(value: 'recipe', child: Row(children: [Icon(Icons.receipt_long, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Atur Resep', style: TextStyle(color: Colors.blue))])),
+                                const PopupMenuItem(value: 'recipe', child: Row(children: [Icon(Icons.fastfood, size: 18, color: Colors.orange), SizedBox(width: 8), Text('Atur Produk Paket', style: TextStyle(color: Colors.orange))])),
                                 const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
                                 PopupMenuItem(value: 'toggle', child: Row(children: [Icon(isActive ? Icons.visibility_off : Icons.visibility, size: 18), const SizedBox(width: 8), Text(isActive ? 'Non-aktifkan' : 'Aktifkan')])),
                                 const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
@@ -251,9 +252,8 @@ class _ProdukPageState extends State<ProdukPage> {
                           else ...[
                             ElevatedButton.icon(
                               onPressed: () => _openRecipe(p),
-                              icon: const Icon(Icons.receipt_long, size: 16),
-                              label: const Text('Resep', style: TextStyle(fontSize: 12)),
-                              style: ElevatedButton.styleFrom(visualDensity: VisualDensity.compact),
+                              icon: const Icon(Icons.fastfood, size: 16), label: const Text('Isi Paket'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade50, foregroundColor: Colors.orange.shade700, elevation: 0),
                             ),
                             PopupMenuButton(
                               icon: const Icon(Icons.more_vert),
@@ -299,18 +299,18 @@ class _ProdukPageState extends State<ProdukPage> {
 }
 
 
-class ProdukFormDialog extends StatefulWidget {
+class PaketFormDialog extends StatefulWidget {
   final dynamic product;
   final List<dynamic> categories;
   final VoidCallback onSave;
 
-  const ProdukFormDialog({super.key, this.product, required this.categories, required this.onSave});
+  const PaketFormDialog({super.key, this.product, required this.categories, required this.onSave});
 
   @override
-  State<ProdukFormDialog> createState() => _ProdukFormDialogState();
+  State<PaketFormDialog> createState() => _PaketFormDialogState();
 }
 
-class _ProdukFormDialogState extends State<ProdukFormDialog> {
+class _PaketFormDialogState extends State<PaketFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl, _barcodeCtrl, _priceCtrl, _descCtrl;
   int? _selectedCat;
@@ -365,7 +365,7 @@ class _ProdukFormDialogState extends State<ProdukFormDialog> {
       'barcode': _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
       'price': _parseIDN(_priceCtrl.text),
       'description': _descCtrl.text.trim(),
-      'is_paket': 0,
+      'is_paket': 1,
     };
 
     try {
@@ -401,7 +401,7 @@ class _ProdukFormDialogState extends State<ProdukFormDialog> {
           Padding(
             padding: const EdgeInsets.all(20),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(widget.product != null ? 'Edit Produk' : 'Tambah Produk', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(widget.product != null ? 'Edit Paket' : 'Tambah Paket', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
             ]),
           ),
@@ -410,7 +410,7 @@ class _ProdukFormDialogState extends State<ProdukFormDialog> {
             padding: const EdgeInsets.all(20),
             child: Form(key: _formKey, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               // Basic Info
-              _field(_nameCtrl, 'Nama Produk', true, textCapitalization: TextCapitalization.words),
+              _field(_nameCtrl, 'Nama Paket', true, textCapitalization: TextCapitalization.words),
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(
                 value: _selectedCat,
@@ -434,7 +434,7 @@ class _ProdukFormDialogState extends State<ProdukFormDialog> {
             child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
               const SizedBox(width: 12),
-              FilledButton(onPressed: isSaving ? null : _save, child: isSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Simpan Produk')),
+              FilledButton(onPressed: isSaving ? null : _save, child: isSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Simpan Paket')),
             ]),
           )
         ]),

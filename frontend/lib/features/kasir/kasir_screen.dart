@@ -153,18 +153,17 @@ class _KasirScreenState extends State<KasirScreen> {
 
   Future<void> _showStockAlert() async {
     try {
-      final allBahan = await Api.get('/bahan-baku') as List;
+      final alertBahan = await Api.get('/bahan-baku/alerts') as List;
       if (!mounted) return;
       
-      final outOfStock = allBahan.where((b) {
+      final outOfStock = alertBahan.where((b) {
         final stock = _safeNum(b['stock']);
         return stock <= 0;
       }).toList();
       
-      final lowStock = allBahan.where((b) {
+      final lowStock = alertBahan.where((b) {
         final stock = _safeNum(b['stock']);
-        final minAlert = _safeNum(b['min_stock_alert']);
-        return stock > 0 && minAlert > 0 && stock <= minAlert;
+        return stock > 0;
       }).toList();
       
       final cs = Theme.of(context).colorScheme;

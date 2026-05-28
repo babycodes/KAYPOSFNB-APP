@@ -181,6 +181,11 @@ class Api {
         ''');
         return rows.map((r) => Map<String, dynamic>.from(r)).toList();
       }
+      
+      if (path == '/bahan-baku/alerts') {
+        final rows = await db.rawQuery('SELECT * FROM bahan_baku WHERE stock <= min_stock_alert');
+        return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+      }
 
       // --- RESEP (By Product ID) ---
       if (RegExp(r'^/resep/\d+$').hasMatch(path)) {
