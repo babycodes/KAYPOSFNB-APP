@@ -215,7 +215,8 @@ class Api {
         
         final rows = await db.rawQuery('''
           SELECT pi.*, p.name as product_name, p.price as product_price,
-            c.icon as product_icon, c.name as category_name
+            c.icon as product_icon, c.name as category_name,
+            IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id), 0) as hpp
           FROM paket_items pi
           JOIN products p ON pi.product_id = p.id
           LEFT JOIN categories c ON p.category_id = c.id

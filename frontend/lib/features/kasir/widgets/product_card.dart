@@ -86,6 +86,7 @@ class ProductCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: isHabis ? () => _showBottleneck(context) : (isBooked ? null : () => onSelect(product)),
+          onLongPress: isPaket ? () => _showPaketDetails(context) : null,
           borderRadius: BorderRadius.circular(8),
           splashColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.2),
           hoverColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.08),
@@ -248,6 +249,46 @@ class ProductCard extends StatelessWidget {
       final dynamic result = await _callApi('/products/$productId/bottleneck');
       return result is Map<String, dynamic> ? result : {};
     } catch (_) { return {}; }
+  }
+
+  Future<void> _showPaketDetails(BuildContext context) async {
+    final productId = product is Map ? product['id'] : null;
+    final productName = product is Map ? product['name'] : 'Paket';
+    if (productId == null) return;
+    try {
+      final data = await _callApi('/paket-items/$productId');
+      if (!context.mounted) return;
+      final cs = Theme.of(context).colorScheme;
+      final items = (data as List?) ?? [];
+      
+      showDialog(context: context, builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Detail Isi Paket: $productName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Container(
+          width: 360,
+          constraints: const BoxConstraints(maxHeight: 400),
+          child: items.isEmpty
+            ? const Text('Tidak ada detail yang tersedia.')
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const BouncingScrollPhysics(),
+                itemCount: items.length,
+                itemBuilder: (ctx, i) {
+                  final item = items[i];
+                  final qty = _safeDouble(item['qty']).toStringAsFixed(0);
+                  final name = item['product_name'] ?? '-';
+                  final hpp = _safeDouble(item['hpp']);
+                  final hppStr = hpp.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(" - ${qty}x $name (Modal: Rp $hppStr)", style: const TextStyle(fontSize: 13)),
+                  );
+                },
+              ),
+        ),
+        actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Tutup'))],
+      ));
+    } catch (_) {}
   }
 
   static Future<dynamic> _callApi(String path) async {

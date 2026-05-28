@@ -78,6 +78,8 @@ class _KasirScreenState extends State<KasirScreen> {
     bool matchCat = false;
     if (selectedCategory == -999) {
       try { matchCat = _getProductDiscount(p) > 0; } catch (_) { matchCat = false; }
+    } else if (selectedCategory == -998) {
+      matchCat = (p['is_paket'] as num?)?.toInt() == 1;
     } else {
       matchCat = selectedCategory == null || p['category_id'] == selectedCategory;
     }
@@ -412,24 +414,34 @@ class _KasirScreenState extends State<KasirScreen> {
   int _getEffectiveStock(dynamic product) {
     if (product is! Map) return -1;
 
-    if ((product['is_paket'] as num?)?.toInt() == 1 && product['paket_items'] is List) {
-      int? minPaketPortions;
-      for (final pi in product['paket_items']) {
-        final childProduct = products.firstWhere((p) => p['id'] == pi['product_id'], orElse: () => null);
-        if (childProduct != null) {
-          final childEffectiveStock = _getEffectiveStock(childProduct);
-          if (childEffectiveStock == -1) continue;
-          
-          final int neededQty = _safeNum(pi['qty']).round();
-          if (neededQty > 0) {
-            final childPortionsForPaket = (childEffectiveStock < 0 ? 0 : childEffectiveStock) ~/ neededQty;
-            if (minPaketPortions == null || childPortionsForPaket < minPaketPortions) {
-              minPaketPortions = childPortionsForPaket;
+    if ((product['is_paket'] as num?)?.toInt() == 1) {
+      int displayedPackageStock = 0;
+      try {
+        if (product['paket_items'] is List) {
+          int? minPaketPortions;
+          for (final pi in product['paket_items']) {
+            final childProduct = products.firstWhere((p) => p['id'] == pi['product_id'], orElse: () => null);
+            if (childProduct != null) {
+              final childEffectiveStock = _getEffectiveStock(childProduct);
+              if (childEffectiveStock == -1) continue;
+              
+              final int neededQty = _safeNum(pi['qty']).round();
+              if (neededQty > 0) {
+                final childPortionsForPaket = (childEffectiveStock < 0 ? 0 : childEffectiveStock) ~/ neededQty;
+                if (minPaketPortions == null || childPortionsForPaket < minPaketPortions) {
+                  minPaketPortions = childPortionsForPaket;
+                }
+              }
             }
           }
+          displayedPackageStock = minPaketPortions ?? -1;
+        } else {
+          displayedPackageStock = -1;
         }
+      } catch (e) {
+        displayedPackageStock = 0; // Fallback to safe 0 to prevent white screen
       }
-      return minPaketPortions ?? -1;
+      return displayedPackageStock;
     }
 
     final dynamic rawPortions = product['available_portions'];
@@ -574,6 +586,7 @@ class _KasirScreenState extends State<KasirScreen> {
                   items: [
                     const DropdownMenuItem(value: null, child: Text('📦 Semua Kategori')),
                     const DropdownMenuItem(value: -999, child: Text('🎁 Promo', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold))),
+                    const DropdownMenuItem(value: -998, child: Text('🎁 Paket Combo', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold))),
                     ...categories.map((c) {
                       final cId = (c['id'] is int) ? c['id'] as int : int.tryParse(c['id']?.toString() ?? '') ?? 0;
                       return DropdownMenuItem(value: cId, child: Text('${c['icon'] ?? '📦'} ${c['name'] ?? ''}'));
