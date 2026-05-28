@@ -85,7 +85,7 @@ class ProductCard extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
-          onTap: isHabis ? () => _showBottleneck(context) : (isBooked ? null : () => onSelect(product)),
+          onTap: (hasRecipe && effectiveStock == 0) ? null : () => onSelect(product),
           onLongPress: () => isPaket ? _showPaketDetails(context) : _showRecipeDetails(context),
           borderRadius: BorderRadius.circular(8),
           splashColor: (isDark ? Colors.deepPurpleAccent : cs.primary).withValues(alpha: 0.2),

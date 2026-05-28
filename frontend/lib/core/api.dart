@@ -98,7 +98,6 @@ class Api {
             'is_active': r['is_active'] ?? 1,
           };
           
-          // For paket products: min(child_available_portions / child_qty)
           if ((r['is_paket'] as num?)?.toInt() == 1) {
             try {
               final paketItems = await db.rawQuery('''
@@ -109,25 +108,20 @@ class Api {
                 FROM paket_items pi WHERE pi.paket_id = ?
               ''', [r['id']]);
               
-              if (paketItems.isNotEmpty) {
-                int? minPortions;
-                for (final pi in paketItems) {
-                  final childPortions = (pi['child_portions'] as num?)?.toInt();
-                  final qty = (pi['qty'] as num?)?.toInt() ?? 1;
-                  if (childPortions != null && qty > 0) {
-                    final paketPortions = childPortions ~/ qty;
-                    if (minPortions == null || paketPortions < minPortions) {
-                      minPortions = paketPortions;
-                    }
-                  } else if (childPortions == null) {
-                    // Child has no recipe, treat as unlimited
+              int minPortions = 999999;
+              for (final pi in paketItems) {
+                final childAvailable = (pi['child_portions'] as num?)?.toInt() ?? 999999;
+                final qty = (pi['qty'] as num?)?.toInt() ?? 1;
+                if (qty > 0) {
+                  final possibleFromChild = childAvailable ~/ qty;
+                  if (possibleFromChild < minPortions) {
+                    minPortions = possibleFromChild;
                   }
                 }
-                map['available_portions'] = minPortions;
-                map['paket_items'] = paketItems;
-              } else {
-                map['available_portions'] = null; // No paket items configured
               }
+              final finalPackagePortions = minPortions == 999999 ? 0 : minPortions;
+              map['available_portions'] = paketItems.isEmpty ? 0 : finalPackagePortions;
+              map['paket_items'] = paketItems;
             } catch (_) {}
           }
           result.add(map);

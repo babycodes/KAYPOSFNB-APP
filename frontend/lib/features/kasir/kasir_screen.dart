@@ -449,7 +449,9 @@ class _KasirScreenState extends State<KasirScreen> {
     final int maxPortions = (rawPortions as num).toInt();
     final int inCart = _getCartQtyForProduct(product['id']);
     final int inHeld = _getHeldQtyForProduct(product['id']);
-    return maxPortions - inCart - inHeld;
+    int effectiveStock = maxPortions - inCart - inHeld;
+    effectiveStock = effectiveStock < 0 ? 0 : effectiveStock; // ABSOLUTE CLAMP
+    return effectiveStock;
   }
 
   void _addToCart(dynamic product, String unitName, num quantity, [String? addonSummary]) {
