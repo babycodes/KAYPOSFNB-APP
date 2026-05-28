@@ -106,7 +106,10 @@ class _AdminShellState extends State<AdminShell> {
             child: Padding(padding: const EdgeInsets.only(bottom: 4), child: InkWell(
               onTap: () {
                 // Close any open modals/bottom sheets before navigating
-                Navigator.of(context, rootNavigator: true).popUntil((route) => route is PageRoute);
+                final rootNav = Navigator.of(context, rootNavigator: true);
+                if (rootNav.canPop()) {
+                  rootNav.popUntil((route) => route.isFirst || route is PageRoute);
+                }
                 // Then navigate
                 context.go(item['href'] as String);
                 if (isMobile && _scaffoldKey.currentState?.isDrawerOpen == true) {
@@ -129,7 +132,10 @@ class _AdminShellState extends State<AdminShell> {
           Tooltip(
             message: showLabels ? '' : 'Ke Kasir',
             child: InkWell(onTap: () {
-              Navigator.of(context, rootNavigator: true).popUntil((route) => route is PageRoute);
+              final rootNav = Navigator.of(context, rootNavigator: true);
+              if (rootNav.canPop()) {
+                rootNav.popUntil((route) => route.isFirst || route is PageRoute);
+              }
               context.go('/kasir');
             }, borderRadius: BorderRadius.circular(12),
               child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -153,7 +159,10 @@ class _AdminShellState extends State<AdminShell> {
                 ),
               );
               if (confirm == true && context.mounted) {
-                Navigator.of(context, rootNavigator: true).popUntil((route) => route is PageRoute);
+                final rootNav = Navigator.of(context, rootNavigator: true);
+                if (rootNav.canPop()) {
+                  rootNav.popUntil((route) => route.isFirst || route is PageRoute);
+                }
                 auth.logout(); 
                 context.go('/login'); 
               }

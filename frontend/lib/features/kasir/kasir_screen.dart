@@ -410,7 +410,29 @@ class _KasirScreenState extends State<KasirScreen> {
   }
 
   int _getEffectiveStock(dynamic product) {
-    final dynamic rawPortions = product is Map ? product['available_portions'] : null;
+    if (product is! Map) return -1;
+
+    if ((product['is_paket'] as num?)?.toInt() == 1 && product['paket_items'] is List) {
+      int? minPaketPortions;
+      for (final pi in product['paket_items']) {
+        final childProduct = products.firstWhere((p) => p['id'] == pi['product_id'], orElse: () => null);
+        if (childProduct != null) {
+          final childEffectiveStock = _getEffectiveStock(childProduct);
+          if (childEffectiveStock == -1) continue;
+          
+          final int neededQty = _safeNum(pi['qty']).round();
+          if (neededQty > 0) {
+            final childPortionsForPaket = (childEffectiveStock < 0 ? 0 : childEffectiveStock) ~/ neededQty;
+            if (minPaketPortions == null || childPortionsForPaket < minPaketPortions) {
+              minPaketPortions = childPortionsForPaket;
+            }
+          }
+        }
+      }
+      return minPaketPortions ?? -1;
+    }
+
+    final dynamic rawPortions = product['available_portions'];
     if (rawPortions == null) return -1; // -1 means no recipe/unlimited
     final int maxPortions = (rawPortions as num).toInt();
     final int inCart = _getCartQtyForProduct(product['id']);
@@ -669,37 +691,13 @@ class _KasirScreenState extends State<KasirScreen> {
                 if (comboProducts.isNotEmpty) Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.withValues(alpha: 0.3))),
+                  child: Row(
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                        child: Text("🔥 Menu Paket Spesial", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 16)),
-                      ),
-                      SizedBox(
-                        height: 72,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: comboProducts.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
-                          itemBuilder: (context, i) {
-                            final product = comboProducts[i];
-                            final promoInfo = _getPromoInfo(product);
-                            final effectiveStock = _getEffectiveStock(product);
-                            return SizedBox(
-                              width: 200,
-                              child: ProductCard(
-                                product: product, 
-                                bookedQty: 0, 
-                                discountPercent: promoInfo.$1,
-                                promoName: promoInfo.$2,
-                                effectiveStock: effectiveStock,
-                                onSelect: _handleProductSelect
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                      const Icon(Icons.fastfood, color: Colors.orange, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('🔥 Menu Paket Spesial: ${comboProducts.map((p) => p['name']).join(', ')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 12))),
                     ],
                   ),
                 ),

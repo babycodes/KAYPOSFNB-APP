@@ -1224,6 +1224,17 @@ class Api {
         return {'success': true};
       }
       
+      // --- PAKET ITEMS: UPDATE QTY ---
+      if (path.startsWith('/paket-items/')) {
+        final id = int.tryParse(path.split('/').last);
+        if (id == null) throw Exception('ID Paket Item tidak valid');
+        final qty = (body?['qty'] as num?)?.toInt();
+        if (qty != null && qty > 0) {
+          await db.update('paket_items', {'qty': qty}, where: 'id = ?', whereArgs: [id]);
+        }
+        return {'success': true};
+      }
+      
       throw Exception('Endpoint PUT $path belum diimplementasikan di Offline Router');
     } catch (e) {
       if (e.toString().contains('Exception:')) rethrow;
