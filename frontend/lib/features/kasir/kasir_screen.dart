@@ -362,16 +362,19 @@ class _KasirScreenState extends State<KasirScreen> {
     _addToCart(product, 'pcs', 1, addonSummary);
   }
 
+  /// Shadow deduction: counts how many units of [productId] are consumed
+  /// across the entire cart (direct items + items consumed inside packages).
   int _getCartQtyForProduct(dynamic productId) {
+    final String pid = productId.toString();
     int total = 0;
     for (final item in cart) {
       if (item['product'] is Map) {
         final p = item['product'];
-        if (p['id'] == productId) {
+        if (p['id']?.toString() == pid) {
           total += _safeNum(item['quantity']).round();
         } else if ((p['is_paket'] as num?)?.toInt() == 1 && p['paket_items'] is List) {
           for (final pi in p['paket_items']) {
-            if (pi['product_id'] == productId) {
+            if (pi is Map && pi['product_id']?.toString() == pid) {
               total += _safeNum(item['quantity']).round() * _safeNum(pi['qty']).round();
             }
           }
@@ -381,7 +384,9 @@ class _KasirScreenState extends State<KasirScreen> {
     return total;
   }
 
+  /// Same as _getCartQtyForProduct but for held/parked carts.
   int _getHeldQtyForProduct(dynamic productId) {
+    final String pid = productId.toString();
     int total = 0;
     for (final held in heldCarts) {
       final cartData = held['cart_data'];
@@ -389,11 +394,11 @@ class _KasirScreenState extends State<KasirScreen> {
         for (final item in cartData) {
           if (item is Map && item['product'] is Map) {
             final p = item['product'];
-            if (p['id'] == productId) {
+            if (p['id']?.toString() == pid) {
               total += _safeNum(item['quantity']).round();
             } else if ((p['is_paket'] as num?)?.toInt() == 1 && p['paket_items'] is List) {
               for (final pi in p['paket_items']) {
-                if (pi['product_id'] == productId) {
+                if (pi is Map && pi['product_id']?.toString() == pid) {
                   total += _safeNum(item['quantity']).round() * _safeNum(pi['qty']).round();
                 }
               }
@@ -424,31 +429,29 @@ class _KasirScreenState extends State<KasirScreen> {
     if ((product['is_paket'] as num?)?.toInt() == 1) {
       try {
         final paketItems = product['paket_items'];
-        // If no children configured, package cannot be sold → 0
         if (paketItems is! List || paketItems.isEmpty) return 0;
 
         int minPortions = 999999;
         for (final pi in paketItems) {
           if (pi is! Map) continue;
-          
-          final childId = int.tryParse(pi['product_id']?.toString() ?? '');
-          if (childId == null) return 0;
+
+          // Find child product using .toString() comparison — crash-proof
+          final String childIdStr = pi['product_id']?.toString() ?? '';
+          if (childIdStr.isEmpty) continue;
 
           dynamic childProduct;
-          try {
-            childProduct = products.firstWhere(
-              (p) => p is Map && int.tryParse(p['id']?.toString() ?? '') == childId, 
-              orElse: () => null
-            );
-          } catch (_) {
-            childProduct = null;
+          for (final p in products) {
+            if (p is Map && p['id']?.toString() == childIdStr) {
+              childProduct = p;
+              break;
+            }
           }
-          
-          // If child product not found in loaded products → cannot fulfill → 0
+
+          // Child not in loaded products → cannot fulfill this package → 0
           if (childProduct == null) return 0;
 
           final childEffective = _getEffectiveStock(childProduct);
-          // Child has no recipe (-1) → unlimited supply of this child → skip
+          // Child has no recipe (-1) → unlimited supply → skip this child
           if (childEffective == -1) continue;
 
           final int neededQty = _safeNum(pi['qty']).round();
@@ -460,12 +463,11 @@ class _KasirScreenState extends State<KasirScreen> {
           }
         }
 
-        // If all children were unlimited (-1), package is also unlimited → but
-        // packages are virtual, so treat as a large number. Use 999 as display cap.
+        // All children unlimited → treat package as high-availability
         if (minPortions == 999999) return 999;
         return minPortions < 0 ? 0 : minPortions;
-      } catch (e) {
-        return 0; // Fail locked to prevent UI rendering crash
+      } catch (_) {
+        return 0; // Fail locked on any stray exception
       }
     }
 
@@ -473,7 +475,6 @@ class _KasirScreenState extends State<KasirScreen> {
     final dynamic rawPortions = product['available_portions'];
     if (rawPortions == null) return -1; // No recipe = unlimited
     final int maxPortions = (rawPortions as num).toInt();
-    // _getCartQtyForProduct includes: direct cart qty + SUM(paketCartQty * childQtyInPaket)
     final int inCart = _getCartQtyForProduct(product['id']);
     final int inHeld = _getHeldQtyForProduct(product['id']);
     int effectiveStock = maxPortions - inCart - inHeld;
