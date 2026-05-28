@@ -60,8 +60,7 @@ class Api {
         }
         return result;
       }
-      
-      // --- PRODUCTS ---
+        // --- PRODUCTS ---
       if (path == '/products' || path == '/products/all') {
         final activeFilter = path == '/products' ? 'WHERE p.is_active = 1' : '';
         final rows = await db.rawQuery('''
@@ -76,6 +75,7 @@ class Api {
             c.name as category_name, 
             c.icon as category_icon,
             p.is_active,
+            COALESCE(p.is_paket, 0) as is_paket,
             IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0) as total_hpp,
             (SELECT CAST(MIN(b.stock / r.qty_needed) AS INTEGER) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id AND r.qty_needed > 0) as available_portions
           FROM products p
@@ -84,19 +84,50 @@ class Api {
           ORDER BY p.name ASC
         ''');
         
-        return rows.map((r) {
-          try {
-            return {
-              ...r,
-              'category_name': r['category_name'] ?? '-',
-              'category_icon': r['category_icon'] ?? '📦',
-              'is_active': r['is_active'] ?? 1,
-            };
-          } catch (err) {
-            print('MAPPING ERROR in /products: $err');
-            return r; // Fallback
+        // Post-process: compute available_portions for paket products
+        List<Map<String, dynamic>> result = [];
+        for (final r in rows) {
+          final map = {
+            ...r,
+            'category_name': r['category_name'] ?? '-',
+            'category_icon': r['category_icon'] ?? '\u{1F4E6}',
+            'is_active': r['is_active'] ?? 1,
+          };
+          
+          // For paket products: min(child_available_portions / child_qty)
+          if ((r['is_paket'] as num?)?.toInt() == 1) {
+            try {
+              final paketItems = await db.rawQuery('''
+                SELECT pi.product_id, pi.qty,
+                  (SELECT CAST(MIN(b.stock / re.qty_needed) AS INTEGER) 
+                   FROM resep re JOIN bahan_baku b ON re.bahan_baku_id = b.id 
+                   WHERE re.product_id = pi.product_id AND re.qty_needed > 0) as child_portions
+                FROM paket_items pi WHERE pi.paket_id = ?
+              ''', [r['id']]);
+              
+              if (paketItems.isNotEmpty) {
+                int? minPortions;
+                for (final pi in paketItems) {
+                  final childPortions = (pi['child_portions'] as num?)?.toInt();
+                  final qty = (pi['qty'] as num?)?.toInt() ?? 1;
+                  if (childPortions != null && qty > 0) {
+                    final paketPortions = childPortions ~/ qty;
+                    if (minPortions == null || paketPortions < minPortions) {
+                      minPortions = paketPortions;
+                    }
+                  } else if (childPortions == null) {
+                    // Child has no recipe, treat as unlimited
+                  }
+                }
+                map['available_portions'] = minPortions;
+              } else {
+                map['available_portions'] = null; // No paket items configured
+              }
+            } catch (_) {}
           }
-        }).toList();
+          result.add(map);
+        }
+        return result;
       }
 
       // --- SINGLE PRODUCT (for Restock Dialog) ---
@@ -162,6 +193,68 @@ class Api {
           WHERE r.product_id = ?
         ''', [productId]);
         return rows;
+      }
+
+      // --- PAKET ITEMS (By Paket Product ID) ---
+      if (RegExp(r'^/paket-items/\d+$').hasMatch(path)) {
+        final paketId = int.tryParse(path.split('/').last);
+        if (paketId == null) throw Exception('ID Paket tidak valid');
+        
+        final rows = await db.rawQuery('''
+          SELECT pi.*, p.name as product_name, p.price as product_price,
+            c.icon as product_icon, c.name as category_name
+          FROM paket_items pi
+          JOIN products p ON pi.product_id = p.id
+          LEFT JOIN categories c ON p.category_id = c.id
+          WHERE pi.paket_id = ?
+        ''', [paketId]);
+        return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+      }
+
+      // --- BOTTLENECK DETAIL (Why out of stock) ---
+      if (RegExp(r'^/products/\d+/bottleneck$').hasMatch(path)) {
+        final productId = int.tryParse(path.split('/')[2]);
+        if (productId == null) throw Exception('ID Produk tidak valid');
+        
+        // Check if paket
+        final pRow = await db.query('products', columns: ['is_paket'], where: 'id = ?', whereArgs: [productId]);
+        final isPaket = pRow.isNotEmpty && (pRow.first['is_paket'] as num?)?.toInt() == 1;
+        
+        if (isPaket) {
+          // For paket: find child products that are out of stock
+          final items = await db.rawQuery('''
+            SELECT pi.qty, p.name as product_name,
+              (SELECT CAST(MIN(b.stock / re.qty_needed) AS INTEGER) 
+               FROM resep re JOIN bahan_baku b ON re.bahan_baku_id = b.id 
+               WHERE re.product_id = pi.product_id AND re.qty_needed > 0) as child_portions
+            FROM paket_items pi
+            JOIN products p ON pi.product_id = p.id
+            WHERE pi.paket_id = ?
+          ''', [productId]);
+          
+          final missing = <Map<String, dynamic>>[];
+          for (final item in items) {
+            final childPortions = (item['child_portions'] as num?)?.toInt() ?? 0;
+            final qty = (item['qty'] as num?)?.toInt() ?? 1;
+            if (childPortions < qty) {
+              missing.add({
+                'name': item['product_name'],
+                'available': childPortions,
+                'needed': qty,
+              });
+            }
+          }
+          return {'is_paket': true, 'items': missing};
+        } else {
+          // For regular: find insufficient ingredients
+          final rows = await db.rawQuery('''
+            SELECT b.name, b.stock, r.qty_needed, b.unit
+            FROM resep r
+            JOIN bahan_baku b ON r.bahan_baku_id = b.id
+            WHERE r.product_id = ? AND b.stock < r.qty_needed
+          ''', [productId]);
+          return {'is_paket': false, 'items': rows.map((r) => Map<String, dynamic>.from(r)).toList()};
+        }
       }
 
       // --- AUTH ME ---
@@ -713,16 +806,33 @@ class Api {
             });
             detailRows.add(ri);
 
-            // BOM Deduction: Deduct from bahan_baku based on resep
-            final resepRows = await txn.query('resep', where: 'product_id = ?', whereArgs: [ri['product_id']]);
-            for (var r in resepRows) {
-              final bbId = r['bahan_baku_id'];
-              final qtyNeeded = (r['qty_needed'] as num).toDouble();
-              final deduction = qtyNeeded * (ri['quantity'] as double);
-              await txn.rawUpdate(
-                'UPDATE bahan_baku SET stock = stock - ? WHERE id = ?',
-                [deduction, bbId]
-              );
+            // BOM Deduction: Handle both regular and paket products
+            final productRow = await txn.query('products', columns: ['is_paket'], where: 'id = ?', whereArgs: [ri['product_id']]);
+            final isPaket = productRow.isNotEmpty && (productRow.first['is_paket'] as num?)?.toInt() == 1;
+            
+            if (isPaket) {
+              // Paket: deduct stock for each child product's recipe
+              final paketChildren = await txn.query('paket_items', where: 'paket_id = ?', whereArgs: [ri['product_id']]);
+              for (var child in paketChildren) {
+                final childProductId = child['product_id'];
+                final childQty = (child['qty'] as num?)?.toInt() ?? 1;
+                final childResep = await txn.query('resep', where: 'product_id = ?', whereArgs: [childProductId]);
+                for (var r in childResep) {
+                  final bbId = r['bahan_baku_id'];
+                  final qtyNeeded = (r['qty_needed'] as num).toDouble();
+                  final deduction = qtyNeeded * childQty * (ri['quantity'] as double);
+                  await txn.rawUpdate('UPDATE bahan_baku SET stock = stock - ? WHERE id = ?', [deduction, bbId]);
+                }
+              }
+            } else {
+              // Regular: deduct from bahan_baku based on resep
+              final resepRows = await txn.query('resep', where: 'product_id = ?', whereArgs: [ri['product_id']]);
+              for (var r in resepRows) {
+                final bbId = r['bahan_baku_id'];
+                final qtyNeeded = (r['qty_needed'] as num).toDouble();
+                final deduction = qtyNeeded * (ri['quantity'] as double);
+                await txn.rawUpdate('UPDATE bahan_baku SET stock = stock - ? WHERE id = ?', [deduction, bbId]);
+              }
             }
           }
         });
@@ -835,17 +945,19 @@ class Api {
         final barcode = body?['barcode']?.toString() ?? '';
         final price = (body?['price'] as num?)?.toDouble() ?? 0.0;
         final description = body?['description']?.toString() ?? '';
+        final isPaket = (body?['is_paket'] as num?)?.toInt() ?? 0;
         
-        await db.insert('products', {
+        final id = await db.insert('products', {
           'name': name,
           'category_id': categoryId,
           'barcode': barcode.isEmpty ? null : barcode,
           'price': price,
           'description': description,
           'is_active': 1,
+          'is_paket': isPaket,
         });
         
-        return {'success': true};
+        return {'success': true, 'id': id};
       }
 
       // --- BAHAN BAKU ---
@@ -869,6 +981,16 @@ class Api {
           'bahan_baku_id': body?['bahan_baku_id'],
           'qty_needed': (body?['qty_needed'] as num?)?.toDouble() ?? 0,
         });
+        return {'success': true};
+      }
+
+      // --- PAKET ITEMS ---
+      if (path == '/paket-items') {
+        await db.insert('paket_items', {
+          'paket_id': body?['paket_id'],
+          'product_id': body?['product_id'],
+          'qty': (body?['qty'] as num?)?.toInt() ?? 1,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
         return {'success': true};
       }
 
@@ -1009,6 +1131,7 @@ class Api {
         if (barcode != null) pData['barcode'] = barcode.isEmpty ? null : barcode;
         if (price != null) pData['price'] = price;
         if (description != null) pData['description'] = description;
+        if (body?['is_paket'] != null) pData['is_paket'] = (body!['is_paket'] as num?)?.toInt() ?? 0;
         
         if (pData.isNotEmpty) {
           await db.update('products', pData, where: 'id = ?', whereArgs: [id]);
@@ -1158,6 +1281,14 @@ class Api {
         final id = int.tryParse(path.split('/').last);
         if (id == null) throw Exception('ID Resep tidak valid');
         await db.delete('resep', where: 'id = ?', whereArgs: [id]);
+        return {'success': true};
+      }
+
+      // --- PAKET ITEMS ---
+      if (path.startsWith('/paket-items/')) {
+        final id = int.tryParse(path.split('/').last);
+        if (id == null) throw Exception('ID Paket Item tidak valid');
+        await db.delete('paket_items', where: 'id = ?', whereArgs: [id]);
         return {'success': true};
       }
       

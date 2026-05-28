@@ -106,7 +106,7 @@ class _AdminShellState extends State<AdminShell> {
               onTap: () {
                 // Close any open modals/bottom sheets before navigating
                 final nav = Navigator.of(context);
-                while (nav.canPop()) {
+                if (nav.canPop()) {
                   nav.pop();
                 }
                 // Then navigate

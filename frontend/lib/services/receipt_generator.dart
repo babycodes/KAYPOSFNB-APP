@@ -121,6 +121,13 @@ class ReceiptGenerator {
       if (itemDiscount > 0) {
         bytes += generator.text('  - Rp ${_formatReceiptPrice(itemDiscount)}', styles: const PosStyles(align: PosAlign.left));
       }
+      
+      final addonSummary = d['addon_summary']?.toString() ?? '';
+      if (addonSummary.isNotEmpty && addonSummary != '[]') {
+        for (final line in addonSummary.split('\n')) {
+          bytes += generator.text(line, styles: const PosStyles(align: PosAlign.left));
+        }
+      }
     }
 
     bytes += generator.hr(ch: '-');

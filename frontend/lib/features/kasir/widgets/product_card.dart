@@ -77,6 +77,7 @@ class ProductCard extends StatelessWidget {
     final bool hasRecipe = rawPortions != null || useEffective;
     final int availablePortions = useEffective ? effectiveStock : (rawPortions != null ? (rawPortions as num).toInt() : -1);
     final bool soldOut = hasRecipe && availablePortions <= 0;
+    final bool isPaket = (product is Map ? (product['is_paket'] as num?)?.toInt() : 0) == 1;
 
     return Opacity(
       opacity: soldOut ? 0.45 : 1.0,
@@ -152,10 +153,32 @@ class ProductCard extends StatelessWidget {
 
               // Badges
               if (soldOut) Positioned(top: -2, right: -2,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(4)),
+                    child: const Text('HABIS', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
+                  ),
+                  const SizedBox(width: 2),
+                  GestureDetector(
+                    onTap: () => _showBottleneck(context),
+                    child: Container(
+                      width: 16, height: 16,
+                      decoration: BoxDecoration(color: cs.error.withValues(alpha: 0.8), shape: BoxShape.circle),
+                      child: const Icon(Icons.info, size: 10, color: Colors.white),
+                    ),
+                  ),
+                ]),
+              )
+              else if (isPaket) Positioned(top: -4, right: -4,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(4)),
-                  child: const Text('HABIS', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Colors.deepOrange, Colors.deepPurple]),
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1))],
+                  ),
+                  child: const Text('PAKET', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: Colors.white)),
                 ),
               )
               else if (discountPercent > 0) Positioned(top: -4, right: -4,
@@ -170,5 +193,76 @@ class ProductCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _showBottleneck(BuildContext context) async {
+    final productId = product is Map ? product['id'] : null;
+    if (productId == null) return;
+    try {
+      final data = await _fetchBottleneck(productId);
+      if (!context.mounted) return;
+      final cs = Theme.of(context).colorScheme;
+      final items = (data['items'] as List?) ?? [];
+      final isPaketProduct = data['is_paket'] == true;
+      
+      showDialog(context: context, builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Icon(Icons.info, color: cs.error, size: 20),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Detail Stok Habis', style: TextStyle(fontSize: 16))),
+        ]),
+        content: SizedBox(
+          width: 360,
+          child: items.isEmpty
+            ? const Text('Tidak ada detail yang tersedia.')
+            : Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(isPaketProduct ? 'Produk isi paket yang habis:' : 'Bahan baku yang tidak mencukupi:', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+                const SizedBox(height: 8),
+                ...items.map((item) {
+                  if (isPaketProduct) {
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.fastfood, size: 18, color: Colors.red),
+                      title: Text(item['name']?.toString() ?? '', style: const TextStyle(fontSize: 13)),
+                      trailing: Text('${item['available']}/${item['needed']}', style: TextStyle(color: cs.error, fontWeight: FontWeight.bold, fontSize: 12)),
+                    );
+                  } else {
+                    final stock = _safeDouble(item['stock']);
+                    final needed = _safeDouble(item['qty_needed']);
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.science, size: 18, color: Colors.red),
+                      title: Text(item['name']?.toString() ?? '', style: const TextStyle(fontSize: 13)),
+                      subtitle: Text('Butuh: ${needed.toStringAsFixed(0)} ${item['unit'] ?? ''}', style: const TextStyle(fontSize: 11)),
+                      trailing: Text('Stok: ${stock.toStringAsFixed(0)}', style: TextStyle(color: cs.error, fontWeight: FontWeight.bold, fontSize: 12)),
+                    );
+                  }
+                }),
+              ]),
+        ),
+        actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Tutup'))],
+      ));
+    } catch (_) {}
+  }
+
+  static Future<Map<String, dynamic>> _fetchBottleneck(dynamic productId) async {
+    // Import would be circular, so we use a direct DB call pattern
+    // This accesses the API layer which is already imported in the app
+    try {
+      final dynamic result = await _callApi('/products/$productId/bottleneck');
+      return result is Map<String, dynamic> ? result : {};
+    } catch (_) { return {}; }
+  }
+
+  static Future<dynamic> _callApi(String path) async {
+    // Lazy import pattern - we call the static Api.get
+    // The Api class is accessible via the app's import tree
+    return await _apiGetter?.call(path);
+  }
+
+  static Future<dynamic> Function(String)? _apiGetter;
+  static void setApiGetter(Future<dynamic> Function(String) getter) {
+    _apiGetter = getter;
   }
 }

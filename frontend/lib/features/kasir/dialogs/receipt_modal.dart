@@ -84,6 +84,8 @@ class _ReceiptModalState extends State<ReceiptModal> {
                     Text('$formattedUnit × ${fmtPrice(d['sold_price'] ?? 0)}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                     if (itemDiscount > 0)
                       Text('  - Rp ${fmtPrice(itemDiscount)}', style: const TextStyle(fontSize: 12, color: Colors.red)),
+                    if (d['addon_summary'] != null && d['addon_summary'].toString().isNotEmpty && d['addon_summary'].toString() != '[]')
+                      Text(d['addon_summary'].toString(), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontStyle: FontStyle.italic)),
                   ])),
                   Text(fmtPrice(d['subtotal'] ?? 0), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: cs.onSurface)),
                 ]));

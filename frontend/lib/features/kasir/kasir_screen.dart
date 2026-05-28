@@ -72,6 +72,8 @@ class _KasirScreenState extends State<KasirScreen> {
     return s + price * qty;
   });
 
+  List<dynamic> get comboProducts => products.where((p) => (p['is_paket'] as num?)?.toInt() == 1).toList();
+
   List<dynamic> get filteredProducts => products.where((p) {
     bool matchCat = false;
     if (selectedCategory == -999) {
@@ -91,6 +93,7 @@ class _KasirScreenState extends State<KasirScreen> {
   @override
   void initState() {
     super.initState();
+    ProductCard.setApiGetter(Api.get);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = context.read<AuthProvider>();
       if (!auth.isLoggedIn) { context.go('/login'); return; }
@@ -334,7 +337,7 @@ class _KasirScreenState extends State<KasirScreen> {
   }
 
 
-  void _handleProductSelect(dynamic product) {
+  Future<void> _handleProductSelect(dynamic product) async {
     // Check effective stock (available_portions - cart qty - held qty)
     final dynamic rawPortions = product is Map ? product['available_portions'] : null;
     if (rawPortions != null) {
@@ -349,7 +352,19 @@ class _KasirScreenState extends State<KasirScreen> {
         return;
       }
     }
-    _addToCart(product, 'pcs', 1);
+    
+    String? addonSummary;
+    if ((product['is_paket'] as num?)?.toInt() == 1) {
+      try {
+        final items = await Api.get('/paket-items/${product['id']}');
+        if (items is List && items.isNotEmpty) {
+          final summaryLines = items.map((i) => '  - ${i['qty']}x ${i['product_name']} (Rp 0)').toList();
+          addonSummary = summaryLines.join('\n');
+        }
+      } catch (_) {}
+    }
+    
+    _addToCart(product, 'pcs', 1, addonSummary);
   }
 
   int _getCartQtyForProduct(dynamic productId) {
@@ -386,8 +401,8 @@ class _KasirScreenState extends State<KasirScreen> {
     return maxPortions - inCart - inHeld;
   }
 
-  void _addToCart(dynamic product, String unitName, num quantity) {
-    final idx = cart.indexWhere((i) => i['product'] is Map && i['product']['id'] == product['id'] && i['selected_unit'] == unitName);
+  void _addToCart(dynamic product, String unitName, num quantity, [String? addonSummary]) {
+    final idx = cart.indexWhere((i) => i['product'] is Map && i['product']['id'] == product['id'] && i['selected_unit'] == unitName && (i['addon_summary'] ?? '') == (addonSummary ?? ''));
     if (idx >= 0) {
       _setItemQuantity(idx, _safeNum(cart[idx]['quantity']) + quantity.toDouble());
     } else {
@@ -397,6 +412,7 @@ class _KasirScreenState extends State<KasirScreen> {
         'quantity': 0, 
         'unit_price': _calcUnitPrice(product, unitName),
         'discount_percent': _getProductDiscount(product),
+        if (addonSummary != null) 'addon_summary': addonSummary,
       });
       _setItemQuantity(cart.length - 1, quantity.toDouble());
     }
@@ -632,6 +648,43 @@ class _KasirScreenState extends State<KasirScreen> {
                       ),
                     );
                   }
+                ),
+                if (comboProducts.isNotEmpty) Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: Text("🔥 Menu Paket Spesial", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 16)),
+                      ),
+                      SizedBox(
+                        height: 72,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: comboProducts.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (context, i) {
+                            final product = comboProducts[i];
+                            final promoInfo = _getPromoInfo(product);
+                            final effectiveStock = _getEffectiveStock(product);
+                            return SizedBox(
+                              width: 200,
+                              child: ProductCard(
+                                product: product, 
+                                bookedQty: 0, 
+                                discountPercent: promoInfo.$1,
+                                promoName: promoInfo.$2,
+                                effectiveStock: effectiveStock,
+                                onSelect: _handleProductSelect
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 Expanded(
                   child: filteredProducts.isEmpty

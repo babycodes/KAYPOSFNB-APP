@@ -80,6 +80,11 @@ class _CartItemWidgetState extends State<CartItemWidget> {
         // Name + unit info
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Text(productName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: cs.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (widget.item['addon_summary'] != null && widget.item['addon_summary'].toString().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 2),
+              child: Text(widget.item['addon_summary'].toString(), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant, fontStyle: FontStyle.italic)),
+            ),
           const SizedBox(height: 1),
           if (discountPercent > 0) ...[
             Text('${fmtPrice(unitPrice)} × $qtyStr', style: TextStyle(fontSize: 10, decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant)),

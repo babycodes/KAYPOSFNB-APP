@@ -73,6 +73,19 @@ class LocalDb {
           }
         } catch (_) {}
         try { await db.execute('ALTER TABLE bahan_baku ADD COLUMN kategori_bahan_id INTEGER DEFAULT 0'); } catch (_) {}
+        // Module: Combo Meals (Paket)
+        try { await db.execute('ALTER TABLE products ADD COLUMN is_paket INTEGER DEFAULT 0'); } catch (_) {}
+        try {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS paket_items (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              paket_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+              product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+              qty INTEGER NOT NULL DEFAULT 1,
+              UNIQUE(paket_id, product_id)
+            )
+          ''');
+        } catch (_) {}
         // Migrate old string kategori to kategori_bahan_id
         try {
           final rows = await db.rawQuery("SELECT id, kategori FROM bahan_baku WHERE kategori_bahan_id = 0 AND kategori IS NOT NULL AND kategori != ''");
@@ -161,6 +174,19 @@ class LocalDb {
             bahan_baku_id INTEGER NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
             qty_needed REAL NOT NULL DEFAULT 0,
             UNIQUE(product_id, bahan_baku_id)
+          )
+        ''');
+
+        // ──────────────────────────────────────────────────
+        // 4b. Paket Items (Combo Meal child products)
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS paket_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            paket_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            qty INTEGER NOT NULL DEFAULT 1,
+            UNIQUE(paket_id, product_id)
           )
         ''');
 

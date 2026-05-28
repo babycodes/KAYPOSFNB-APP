@@ -111,13 +111,13 @@ class _ProdukPageState extends State<ProdukPage> {
   }
 
   void _openRecipe(dynamic product) {
+    final isPaket = (product['is_paket'] as num?)?.toInt() == 1;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => RecipeModal(product: product),
+      builder: (_) => isPaket ? PaketItemsModal(product: product) : RecipeModal(product: product),
     ).then((_) {
-      // Refresh products list to show updated HPP immediately
       _loadData();
     });
   }
@@ -214,6 +214,7 @@ class _ProdukPageState extends State<ProdukPage> {
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Row(children: [
                                 Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isActive ? cs.onSurface : cs.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                if ((p['is_paket'] as num?)?.toInt() == 1) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: Colors.deepOrange, borderRadius: BorderRadius.circular(4)), child: const Text('PAKET', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))],
                                 if (!isActive) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(4)), child: Text('NON-AKTIF', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onErrorContainer)))],
                               ]),
                               const SizedBox(height: 4),
@@ -233,7 +234,7 @@ class _ProdukPageState extends State<ProdukPage> {
                             PopupMenuButton(
                               icon: const Icon(Icons.more_vert),
                               itemBuilder: (_) => [
-                                const PopupMenuItem(value: 'recipe', child: Row(children: [Icon(Icons.receipt_long, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Atur Resep', style: TextStyle(color: Colors.blue))])),
+                                const PopupMenuItem(value: 'recipe', child: Row(children: [Icon(Icons.receipt_long, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Atur Resep/Paket', style: TextStyle(color: Colors.blue))])),
                                 const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
                                 PopupMenuItem(value: 'toggle', child: Row(children: [Icon(isActive ? Icons.visibility_off : Icons.visibility, size: 18), const SizedBox(width: 8), Text(isActive ? 'Non-aktifkan' : 'Aktifkan')])),
                                 const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
@@ -248,8 +249,8 @@ class _ProdukPageState extends State<ProdukPage> {
                           else ...[
                             ElevatedButton.icon(
                               onPressed: () => _openRecipe(p),
-                              icon: const Icon(Icons.receipt_long, size: 16),
-                              label: const Text('Resep', style: TextStyle(fontSize: 12)),
+                              icon: Icon((p['is_paket'] as num?)?.toInt() == 1 ? Icons.fastfood : Icons.receipt_long, size: 16),
+                              label: Text((p['is_paket'] as num?)?.toInt() == 1 ? 'Paket' : 'Resep', style: const TextStyle(fontSize: 12)),
                               style: ElevatedButton.styleFrom(visualDensity: VisualDensity.compact),
                             ),
                             PopupMenuButton(
@@ -312,6 +313,7 @@ class _ProdukFormDialogState extends State<ProdukFormDialog> {
   late TextEditingController _nameCtrl, _barcodeCtrl, _priceCtrl, _descCtrl;
   int? _selectedCat;
   bool isSaving = false;
+  bool _isPaket = false;
 
   @override
   void initState() {
@@ -321,6 +323,7 @@ class _ProdukFormDialogState extends State<ProdukFormDialog> {
     _barcodeCtrl = TextEditingController(text: (p?['barcode'] ?? '').toString());
     _priceCtrl = TextEditingController(text: p != null ? (p['price'] ?? 0).toString() : '');
     _descCtrl = TextEditingController(text: (p?['description'] ?? '').toString());
+    _isPaket = (p?['is_paket'] as num?)?.toInt() == 1;
 
     if (widget.categories.isNotEmpty) {
       final catId = _toInt(p?['category_id']) ?? _toInt(widget.categories.first['id']);
@@ -362,6 +365,7 @@ class _ProdukFormDialogState extends State<ProdukFormDialog> {
       'barcode': _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
       'price': _parseIDN(_priceCtrl.text),
       'description': _descCtrl.text.trim(),
+      'is_paket': _isPaket ? 1 : 0,
     };
 
     try {
@@ -422,6 +426,15 @@ class _ProdukFormDialogState extends State<ProdukFormDialog> {
               _field(_barcodeCtrl, 'Barcode (opsional)', false),
               const SizedBox(height: 16),
               _field(_descCtrl, 'Deskripsi (opsional)', false),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                title: const Text('Jadikan Menu Paket (Combo)', style: TextStyle(fontSize: 14)),
+                subtitle: const Text('Produk ini berisi beberapa produk lain', style: TextStyle(fontSize: 11)),
+                value: _isPaket,
+                onChanged: (v) => setState(() => _isPaket = v),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
             ])),
           )),
           const Divider(height: 1),
@@ -808,6 +821,161 @@ class _RecipeModalState extends State<RecipeModal> {
           )
         ],
       ),
+    );
+  }
+}
+
+class PaketItemsModal extends StatefulWidget {
+  final dynamic product;
+  const PaketItemsModal({super.key, required this.product});
+  @override
+  State<PaketItemsModal> createState() => _PaketItemsModalState();
+}
+
+class _PaketItemsModalState extends State<PaketItemsModal> {
+  List<dynamic> _items = [];
+  List<dynamic> _allProducts = [];
+  bool _isLoading = true;
+  int? _selectedProductId;
+  final _qtyCtrl = TextEditingController(text: '1');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final futures = await Future.wait([
+        Api.get('/paket-items/${widget.product['id']}').catchError((_) => []),
+        Api.get('/products/all').catchError((_) => []),
+      ]);
+      if (mounted) {
+        setState(() {
+          _items = futures[0] as List;
+          // Filter out the paket itself and other pakets from selection
+          _allProducts = (futures[1] as List).where((p) {
+            final id = p['id'];
+            final isPaket = (p['is_paket'] as num?)?.toInt() == 1;
+            return id != widget.product['id'] && !isPaket && p['is_active'] == 1;
+          }).toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) { setState(() => _isLoading = false); showAdminToast(context, 'Error: $e'); }
+    }
+  }
+
+  void _addItem() async {
+    if (_selectedProductId == null) return;
+    final qty = int.tryParse(_qtyCtrl.text) ?? 1;
+    if (qty <= 0) return;
+
+    final existing = _items.where((i) => i['product_id'] == _selectedProductId).toList();
+    if (existing.isNotEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Produk sudah ada di dalam paket.')));
+      return;
+    }
+
+    try {
+      await Api.post('/paket-items', body: {
+        'paket_id': widget.product['id'],
+        'product_id': _selectedProductId,
+        'qty': qty,
+      });
+      _qtyCtrl.text = '1';
+      _selectedProductId = null;
+      _loadData();
+    } catch (e) {
+      if (mounted) showAdminToast(context, 'Error: $e');
+    }
+  }
+
+  void _deleteItem(int id) async {
+    try {
+      await Api.delete('/paket-items/$id');
+      _loadData();
+    } catch (e) {
+      if (mounted) showAdminToast(context, 'Error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      height: MediaQuery.sizeOf(context).height * 0.85,
+      padding: const EdgeInsets.all(24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Expanded(child: Text('🍱 Atur Isi Paket: ${widget.product['name']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+        ]),
+        const Divider(),
+        const SizedBox(height: 8),
+        // Add item row
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Expanded(
+            flex: 3,
+            child: DropdownButtonFormField<int>(
+              value: _selectedProductId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Pilih Produk', isDense: true),
+              items: _allProducts.map((p) => DropdownMenuItem<int>(
+                value: p['id'] as int,
+                child: Text('${p['name']}', maxLines: 1, overflow: TextOverflow.ellipsis),
+              )).toList(),
+              onChanged: (v) => setState(() => _selectedProductId = v),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 70,
+            child: TextFormField(
+              controller: _qtyCtrl,
+              decoration: const InputDecoration(labelText: 'Qty', isDense: true),
+              keyboardType: TextInputType.number,
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.icon(onPressed: _addItem, icon: const Icon(Icons.add), label: const Text('Tambah')),
+        ]),
+        const SizedBox(height: 16),
+        const Text('Isi Paket:', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Expanded(
+          child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _items.isEmpty
+              ? const Center(child: Text('Belum ada produk di dalam paket ini.'))
+              : ListView.builder(
+                  itemCount: _items.length,
+                  itemBuilder: (context, i) {
+                    final item = _items[i];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: const Icon(Icons.fastfood),
+                        title: Text('${item['qty']}x ${item['product_name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Text(fmtPrice((item['product_price'] as num?)?.toDouble() ?? 0)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _deleteItem(item['id']),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        const Divider(),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text('Total ${_items.length} produk di dalam paket', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
+        ),
+      ]),
     );
   }
 }
