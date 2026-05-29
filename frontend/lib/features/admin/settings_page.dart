@@ -10,7 +10,7 @@ import '../../core/helpers.dart';
 import '../../core/local_db.dart';
 import '../../services/update_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:flutter_phoenix/flutter_phoenix.dart';
+import 'package:go_router/go_router.dart';
 
 
 class SettingsPage extends StatefulWidget {
@@ -264,25 +264,28 @@ class _SettingsPageState extends State<SettingsPage> {
                       await Future.delayed(const Duration(milliseconds: 300));
                       
                       // 2. Rename staged file to the pending restore name
-                      //    _applyPendingRestore in LocalDb._init() will pick it up
                       setDialogState(() => statusText = 'Menyiapkan restore...');
                       final pendingPath = '$dbDir/kaypos_restore_pending.db';
                       final stagedFile = File(_stagedRestorePath!);
                       if (await stagedFile.exists()) {
                         stagedFile.copySync(pendingPath);
-                        stagedFile.deleteSync(); // Clean up staging file
+                        stagedFile.deleteSync();
                       }
                       
-                      // 3. Reinitialize DB (this triggers _applyPendingRestore)
+                      // 3. Reinitialize DB (triggers _applyPendingRestore)
                       setDialogState(() => statusText = 'Memulai ulang database...');
                       await LocalDb.instance;
                       
-                      // 4. Soft restart the app
-                      setDialogState(() => statusText = 'Restart aplikasi...');
-                      await Future.delayed(const Duration(milliseconds: 300));
-                      
+                      // 4. Close dialog FIRST, then navigate to splash
                       if (ctx.mounted) {
-                        Phoenix.rebirth(ctx);
+                        Navigator.of(dialogCtx).pop();
+                      }
+                      await Future.delayed(const Duration(milliseconds: 100));
+                      
+                      // 5. Navigate to splash → splash re-checks auth → routes to login
+                      if (context.mounted) {
+                        showToast(context, '✅ Restore berhasil! Memuat ulang...');
+                        context.go('/');
                       }
                     } catch (e) {
                       if (ctx.mounted) {
