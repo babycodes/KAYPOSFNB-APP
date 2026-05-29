@@ -154,7 +154,17 @@ class _KasirScreenState extends State<KasirScreen> {
             'bahan_baku_id': mid,
             'qty_needed': _safeNum(row['qty_needed']),
           });
-          _materialStocks[mid] = _safeNum(row['bahan_stock']);
+          // Master Unit Normalizer: convert Kg→gram, Liter→ml in-memory
+          // so the cashier engine (which expects base units) calculates correctly.
+          // DB remains untouched — this is a read-time mapping only.
+          double stock = _safeNum(row['bahan_stock']);
+          final unit = (row['bahan_unit'] ?? '').toString().toLowerCase();
+          if (unit == 'kg') {
+            stock *= 1000; // Kg → gram
+          } else if (unit == 'liter' || unit == 'l') {
+            stock *= 1000; // Liter → ml
+          }
+          _materialStocks[mid] = stock;
         }
       });
     } catch (_) {}

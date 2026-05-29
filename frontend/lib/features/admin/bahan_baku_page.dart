@@ -431,11 +431,9 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     final costPrice = m != null ? (m['cost_price'] as num?)?.toDouble() ?? 0 : 0.0;
     final minAlert = m != null ? (m['min_stock_alert'] as num?)?.toDouble() ?? 0 : 0.0;
     
-    // Master Unit Architecture: display raw DB values as-is (no unit mutation)
-    final displayTotalCost = stock * costPrice;
-    
+    // Master Unit Architecture: show unit price directly (no total multiplication)
     _stockCtrl = TextEditingController(text: m != null ? _fmtInit(stock) : '');
-    _costCtrl = TextEditingController(text: m != null ? _fmtInit(displayTotalCost) : '');
+    _costCtrl = TextEditingController(text: m != null ? _fmtInit(costPrice) : '');
     _minAlertCtrl = TextEditingController(text: m != null ? _fmtInit(minAlert) : '');
 
     if (m != null && _units.contains(dbUnit)) {
@@ -462,20 +460,19 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     setState(() => _isSaving = true);
 
     final qtyBeliStr = _stockCtrl.text.replaceAll(',', '.');
-    final totalHargaStr = _costCtrl.text.replaceAll(',', '.');
+    final unitPriceStr = _costCtrl.text.replaceAll(',', '.');
     
     final qtyBeli = double.tryParse(qtyBeliStr) ?? 0;
-    final totalHarga = double.tryParse(totalHargaStr) ?? 0;
+    final unitPrice = double.tryParse(unitPriceStr) ?? 0;
     
-    // Master Unit Architecture: save directly in the selected unit (NO conversion)
-    final pricePerUnit = qtyBeli > 0 ? totalHarga / qtyBeli : 0.0;
+    // Master Unit Architecture: save unit price directly (no division)
     final double minAlertInput = double.tryParse(_minAlertCtrl.text.replaceAll(',', '.')) ?? 0;
 
     final data = {
       'name': toTitleCase(_nameCtrl.text.trim()),
       'unit': _selectedUnit,  // Master unit locked as-is
       'stock': qtyBeli,
-      'cost_price': pricePerUnit,
+      'cost_price': unitPrice,
       'min_stock_alert': minAlertInput,
       'kategori_bahan_id': _selectedKategoriId ?? 0,
     };
@@ -559,32 +556,41 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
               ),
               const SizedBox(height: 16),
 
-              // Stok Awal & Harga Beli
+              // Stok & Harga per Satuan
               isMobile ? Column(children: [
                 TextFormField(
                   controller: _stockCtrl,
-                  decoration: InputDecoration(labelText: 'Jumlah Beli', isDense: true, prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20), suffixText: _selectedUnit),
+                  decoration: InputDecoration(labelText: isEdit ? 'Stok Saat Ini' : 'Jumlah Beli', isDense: true, prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20), suffixText: _selectedUnit),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _costCtrl,
-                  decoration: const InputDecoration(labelText: 'Total Harga Beli', isDense: true, prefixText: 'Rp ', prefixIcon: Icon(Icons.payments_outlined, size: 20)),
+                  decoration: InputDecoration(labelText: 'Harga per $_selectedUnit', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
               ]) : Row(children: [
                 Expanded(child: TextFormField(
                   controller: _stockCtrl,
-                  decoration: InputDecoration(labelText: 'Jumlah Beli', isDense: true, suffixText: _selectedUnit),
+                  decoration: InputDecoration(labelText: isEdit ? 'Stok Saat Ini' : 'Jumlah Beli', isDense: true, suffixText: _selectedUnit),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
                 const SizedBox(width: 12),
                 Expanded(child: TextFormField(
                   controller: _costCtrl,
-                  decoration: const InputDecoration(labelText: 'Total Harga Beli', isDense: true, prefixText: 'Rp '),
+                  decoration: InputDecoration(labelText: 'Harga per $_selectedUnit', isDense: true, prefixText: 'Rp '),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
               ]),
+              // Nilai Aset Tersisa (read-only, computed from current stock × unit price)
+              if (isEdit) Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Builder(builder: (_) {
+                  final curStock = double.tryParse(_stockCtrl.text.replaceAll(',', '.')) ?? 0;
+                  final curPrice = double.tryParse(_costCtrl.text.replaceAll(',', '.')) ?? 0;
+                  return Text('💰 Nilai Aset Tersisa: ${fmtPrice(curStock * curPrice)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary));
+                }),
+              ),
               const SizedBox(height: 16),
 
               // Min Stock Alert

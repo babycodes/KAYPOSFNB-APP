@@ -78,10 +78,10 @@ class Api {
             p.is_active,
             COALESCE(p.is_paket, 0) as is_paket,
             CASE 
-              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id), 0)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
-              ELSE IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0)
+              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * IFNULL((SELECT SUM(r.qty_needed * (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.cost_price / 1000.0 ELSE b.cost_price END)) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id), 0)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
+              ELSE IFNULL((SELECT SUM(r.qty_needed * (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.cost_price / 1000.0 ELSE b.cost_price END)) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0)
             END as total_hpp,
-            (SELECT CAST(MIN(b.stock / r.qty_needed) AS INTEGER) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id AND r.qty_needed > 0) as available_portions
+            (SELECT CAST(MIN((CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.stock * 1000 ELSE b.stock END) / r.qty_needed) AS INTEGER) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id AND r.qty_needed > 0) as available_portions
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
           $activeFilter
@@ -137,8 +137,8 @@ class Api {
             c.icon as category_icon,
             p.is_active,
             CASE 
-              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id), 0)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
-              ELSE IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0)
+              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * IFNULL((SELECT SUM(r.qty_needed * (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.cost_price / 1000.0 ELSE b.cost_price END)) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id), 0)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
+              ELSE IFNULL((SELECT SUM(r.qty_needed * (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.cost_price / 1000.0 ELSE b.cost_price END)) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0)
             END as total_hpp
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
@@ -182,7 +182,7 @@ class Api {
       // --- STOCK POOL (Recipes + Material Stocks for Cashier real-time calc) ---
       if (path == '/stock-pool') {
         final rows = await db.rawQuery('''
-          SELECT r.product_id, r.bahan_baku_id, r.qty_needed, b.stock as bahan_stock
+          SELECT r.product_id, r.bahan_baku_id, r.qty_needed, b.stock as bahan_stock, b.unit as bahan_unit
           FROM resep r
           JOIN bahan_baku b ON r.bahan_baku_id = b.id
           WHERE r.qty_needed > 0
@@ -212,7 +212,7 @@ class Api {
         final rows = await db.rawQuery('''
           SELECT pi.*, p.name as product_name, p.price as product_price,
             c.icon as product_icon, c.name as category_name,
-            IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id), 0) as hpp
+            IFNULL((SELECT SUM(r.qty_needed * (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.cost_price / 1000.0 ELSE b.cost_price END)) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id), 0) as hpp
           FROM paket_items pi
           JOIN products p ON pi.product_id = p.id
           LEFT JOIN categories c ON p.category_id = c.id
@@ -234,7 +234,7 @@ class Api {
           // For paket: find child products that are out of stock
           final items = await db.rawQuery('''
             SELECT pi.qty, p.name as product_name,
-              (SELECT CAST(MIN(b.stock / re.qty_needed) AS INTEGER) 
+              (SELECT CAST(MIN((CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.stock * 1000 ELSE b.stock END) / re.qty_needed) AS INTEGER) 
                FROM resep re JOIN bahan_baku b ON re.bahan_baku_id = b.id 
                WHERE re.product_id = pi.product_id AND re.qty_needed > 0) as child_portions
             FROM paket_items pi
@@ -258,10 +258,11 @@ class Api {
         } else {
           // For regular: find insufficient ingredients
           final rows = await db.rawQuery('''
-            SELECT b.name, b.stock, r.qty_needed, b.unit
+            SELECT b.name, b.stock, r.qty_needed, b.unit,
+              (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.stock * 1000 ELSE b.stock END) as normalized_stock
             FROM resep r
             JOIN bahan_baku b ON r.bahan_baku_id = b.id
-            WHERE r.product_id = ? AND b.stock < r.qty_needed
+            WHERE r.product_id = ? AND (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.stock * 1000 ELSE b.stock END) < r.qty_needed
           ''', [productId]);
           return {'is_paket': false, 'items': rows.map((r) => Map<String, dynamic>.from(r)).toList()};
         }
@@ -843,7 +844,11 @@ class Api {
                 for (var r in childResep) {
                   final bbId = r['bahan_baku_id'];
                   final qtyNeeded = (r['qty_needed'] as num).toDouble();
-                  final deduction = qtyNeeded * childQty * (ri['quantity'] as double);
+                  final rawDeduction = qtyNeeded * childQty * (ri['quantity'] as double);
+                  // Unit-aware deduction: convert recipe base unit → bahan_baku master unit
+                  final bbRow = await txn.query('bahan_baku', columns: ['unit'], where: 'id = ?', whereArgs: [bbId]);
+                  final bbUnit = bbRow.isNotEmpty ? (bbRow.first['unit']?.toString().toLowerCase() ?? '') : '';
+                  final deduction = (bbUnit == 'kg' || bbUnit == 'liter' || bbUnit == 'l') ? rawDeduction / 1000 : rawDeduction;
                   await txn.rawUpdate('UPDATE bahan_baku SET stock = stock - ? WHERE id = ?', [deduction, bbId]);
                 }
               }
@@ -853,7 +858,11 @@ class Api {
               for (var r in resepRows) {
                 final bbId = r['bahan_baku_id'];
                 final qtyNeeded = (r['qty_needed'] as num).toDouble();
-                final deduction = qtyNeeded * (ri['quantity'] as double);
+                final rawDeduction = qtyNeeded * (ri['quantity'] as double);
+                // Unit-aware deduction: convert recipe base unit → bahan_baku master unit
+                final bbRow = await txn.query('bahan_baku', columns: ['unit'], where: 'id = ?', whereArgs: [bbId]);
+                final bbUnit = bbRow.isNotEmpty ? (bbRow.first['unit']?.toString().toLowerCase() ?? '') : '';
+                final deduction = (bbUnit == 'kg' || bbUnit == 'liter' || bbUnit == 'l') ? rawDeduction / 1000 : rawDeduction;
                 await txn.rawUpdate('UPDATE bahan_baku SET stock = stock - ? WHERE id = ?', [deduction, bbId]);
               }
             }
