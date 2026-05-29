@@ -11,7 +11,7 @@ import '../../core/local_db.dart';
 import '../../services/update_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
-import 'package:go_router/go_router.dart';
+
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -174,7 +174,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _isBackingUp = false);
   }
   
-  /// Pick a .db file for restore
+  /// Pick a .db file for restore — reads file immediately to avoid content URI expiry
   Future<void> _pickRestoreFile() async {
     FilePickerResult? result = await FilePicker.pickFiles(
       type: FileType.custom,
@@ -183,53 +183,67 @@ class _SettingsPageState extends State<SettingsPage> {
     );
 
     if (result != null && result.files.isNotEmpty) {
-      setState(() {
-        restoreFile = result.files.first;
-        restoreMsg = '';
-      });
+      final picked = result.files.first;
+      if (picked.path == null) {
+        if (mounted) showToast(context, 'File path tidak tersedia');
+        return;
+      }
+      
+      // Immediately copy to a safe temp location (Android content URIs can expire)
+      try {
+        final dbDir = LocalDb.cachedDbDir;
+        if (dbDir == null) {
+          if (mounted) showToast(context, 'Database belum diinisialisasi');
+          return;
+        }
+        final safeCopyPath = '$dbDir/kaypos_restore_staged.db';
+        File(picked.path!).copySync(safeCopyPath);
+        
+        setState(() {
+          restoreFile = picked;
+          _stagedRestorePath = safeCopyPath;
+          restoreMsg = '';
+        });
+      } catch (e) {
+        if (mounted) showToast(context, 'Gagal membaca file: $e');
+      }
     }
   }
+  
+  String? _stagedRestorePath;
 
-  /// RESTORE: Stage backup → exit app → swap on next startup
+  /// RESTORE: Stage backup → swap DB → soft restart app
   Future<void> _restoreDB() async {
-    if (restoreFile == null) return;
+    if (_stagedRestorePath == null) return;
     if (kIsWeb) {
       if (mounted) showToast(context, 'Restore tidak tersedia di versi Web.');
       return;
     }
-    
-    final sourcePath = restoreFile!.path;
-    if (sourcePath == null) {
-      showToast(context, 'File path tidak tersedia');
-      return;
-    }
 
-    // Get the cached DB directory BEFORE showing any dialog
     final dbDir = LocalDb.cachedDbDir;
     if (dbDir == null) {
       showToast(context, 'Database belum diinisialisasi');
       return;
     }
 
-    // Single dialog: confirm + stage + exit ALL inside the dialog's button handler
-    // This keeps the dialog visible/rendered during the copy (no Navigator.pop rebuild)
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogCtx) {
         bool isWorking = false;
+        String statusText = 'Menyalin database...';
         return StatefulBuilder(builder: (ctx, setDialogState) {
           return AlertDialog(
             title: Text(isWorking ? '⏳ Memproses...' : '⚠️ Konfirmasi Restore'),
             content: isWorking
-              ? const Row(children: [
-                  CircularProgressIndicator(),
-                  SizedBox(width: 20),
-                  Expanded(child: Text('Menyalin database...\nAplikasi akan ditutup otomatis.', style: TextStyle(fontSize: 14))),
+              ? Row(children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(width: 20),
+                  Expanded(child: Text('$statusText\nAplikasi akan restart otomatis.', style: const TextStyle(fontSize: 14))),
                 ])
               : const Text(
                   'PERHATIAN: Semua data saat ini akan DIGANTI dengan data dari file backup.\n\n'
-                  'Aplikasi akan DITUTUP secara otomatis.\n'
+                  'Aplikasi akan RESTART secara otomatis.\n'
                   'Saat dibuka kembali, database sudah terganti.\n\n'
                   'Lanjutkan?'
                 ),
@@ -240,40 +254,46 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               FilledButton(
                 onPressed: () {
-                  // Switch to loading state INSIDE the dialog
                   setDialogState(() => isWorking = true);
                   
-                  // Use addPostFrameCallback to ensure the spinner renders first
                   WidgetsBinding.instance.addPostFrameCallback((_) async {
                     try {
-                      // 1. Close current DB connection so file lock is released
+                      // 1. Close current DB connection
+                      setDialogState(() => statusText = 'Menutup database...');
                       await LocalDb.closeAndReset();
+                      await Future.delayed(const Duration(milliseconds: 300));
                       
-                      // Beri waktu sejenak agar OS benar-benar melepas lock file sqflite
-                      await Future.delayed(const Duration(milliseconds: 500));
+                      // 2. Rename staged file to the pending restore name
+                      //    _applyPendingRestore in LocalDb._init() will pick it up
+                      setDialogState(() => statusText = 'Menyiapkan restore...');
+                      final pendingPath = '$dbDir/kaypos_restore_pending.db';
+                      final stagedFile = File(_stagedRestorePath!);
+                      if (await stagedFile.exists()) {
+                        stagedFile.copySync(pendingPath);
+                        stagedFile.deleteSync(); // Clean up staging file
+                      }
                       
-                      // 2. Stage the new DB file
-                      final stagingPath = '$dbDir/kaypos_restore_pending.db';
-                      File(sourcePath).copySync(stagingPath);
-                      
-                      // 3. Trigger _init() to swap the DB and open it
+                      // 3. Reinitialize DB (this triggers _applyPendingRestore)
+                      setDialogState(() => statusText = 'Memulai ulang database...');
                       await LocalDb.instance;
                       
-                      // 4. In-app Soft Restart: Reset route and rebuild widget tree
+                      // 4. Soft restart the app
+                      setDialogState(() => statusText = 'Restart aplikasi...');
+                      await Future.delayed(const Duration(milliseconds: 300));
+                      
                       if (ctx.mounted) {
-                        GoRouter.of(ctx).go('/');
                         Phoenix.rebirth(ctx);
                       }
                     } catch (e) {
                       if (ctx.mounted) {
                         Navigator.pop(dialogCtx);
-                        showToast(context, '❌ Gagal: $e');
+                        showToast(context, '❌ Gagal restore: $e');
                       }
                     }
                   });
                 },
                 style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('Ya, Restore & Tutup App'),
+                child: const Text('Ya, Restore & Restart App'),
               ),
             ],
           );
