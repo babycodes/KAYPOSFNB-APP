@@ -78,7 +78,7 @@ class Api {
             p.is_active,
             COALESCE(p.is_paket, 0) as is_paket,
             CASE 
-              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * (SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
+              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id), 0)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
               ELSE IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0)
             END as total_hpp,
             (SELECT CAST(MIN(b.stock / r.qty_needed) AS INTEGER) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id AND r.qty_needed > 0) as available_portions
@@ -99,7 +99,12 @@ class Api {
           };
           if ((r['is_paket'] as num?)?.toInt() == 1) {
             try {
-              final paketItems = await db.rawQuery('SELECT * FROM paket_items WHERE paket_id = ?', [r['id']]);
+              final paketItems = await db.rawQuery('''
+                SELECT pi.*, p.name as product_name 
+                FROM paket_items pi 
+                JOIN products p ON pi.product_id = p.id 
+                WHERE pi.paket_id = ?
+              ''', [r['id']]);
               map['paket_items'] = paketItems;
               // Do NOT set available_portions here — paket stock is computed
               // dynamically on the client side via _getEffectiveStock() to avoid
@@ -132,7 +137,7 @@ class Api {
             c.icon as category_icon,
             p.is_active,
             CASE 
-              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * (SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
+              WHEN COALESCE(p.is_paket, 0) = 1 THEN IFNULL((SELECT SUM(pi.qty * IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = pi.product_id), 0)) FROM paket_items pi WHERE pi.paket_id = p.id), 0)
               ELSE IFNULL((SELECT SUM(r.qty_needed * b.cost_price) FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = p.id), 0)
             END as total_hpp
           FROM products p

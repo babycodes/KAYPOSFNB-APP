@@ -925,7 +925,7 @@ class _KasirScreenState extends State<KasirScreen> {
                     );
                   }
                 ),
-                if (comboProducts.isNotEmpty) Container(
+                if (filteredProducts.isNotEmpty && filteredProducts.any((p) => (p['is_paket'] as num?)?.toInt() == 1)) Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

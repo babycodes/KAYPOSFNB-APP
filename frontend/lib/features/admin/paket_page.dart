@@ -200,11 +200,10 @@ class _PaketPageState extends State<PaketPage> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
                         ),
-                        child: Row(children: [
+                        child: IntrinsicHeight(child: Row(children: [
                           // Category icon left strip
                           Container(
                             width: 6,
-                            height: 72,
                             decoration: BoxDecoration(
                               color: isActive ? cs.primary.withValues(alpha: 0.3) : cs.outlineVariant,
                               borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomLeft: Radius.circular(12)),
@@ -230,6 +229,24 @@ class _PaketPageState extends State<PaketPage> {
                                 Text(fmtPrice((p['price'] as num?)?.toDouble() ?? 0), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isActive ? cs.primary : cs.onSurfaceVariant)),
                                 Text('HPP: ${fmtPrice((p['total_hpp'] as num?)?.toDouble() ?? 0)}', style: TextStyle(fontSize: 11, color: cs.error)),
                               ]),
+                              // Package content badges
+                              if (p['paket_items'] is List && (p['paket_items'] as List).isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Wrap(spacing: 4, runSpacing: 4, children: [
+                                  for (final pi in p['paket_items'])
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade700,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${(pi['qty'] as num?)?.toInt() ?? 1}x ${pi['product_name'] ?? ''}',
+                                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.white),
+                                      ),
+                                    ),
+                                ]),
+                              ],
                             ]),
                           )),
                           // Actions: Desktop = buttons, Mobile = three dots
@@ -269,7 +286,7 @@ class _PaketPageState extends State<PaketPage> {
                               },
                             ),
                           ],
-                        ]),
+                        ])),
                       );
                     },
                   ),
