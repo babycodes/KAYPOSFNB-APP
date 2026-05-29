@@ -566,7 +566,7 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Harga per $_selectedUnit', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
+                  decoration: InputDecoration(labelText: 'Harga Modal per $_selectedUnit', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
               ]) : Row(children: [
@@ -578,7 +578,7 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                 const SizedBox(width: 12),
                 Expanded(child: TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Harga per $_selectedUnit', isDense: true, prefixText: 'Rp '),
+                  decoration: InputDecoration(labelText: 'Harga Modal per $_selectedUnit', isDense: true, prefixText: 'Rp '),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
               ]),

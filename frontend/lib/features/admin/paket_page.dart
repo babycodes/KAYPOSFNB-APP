@@ -487,6 +487,15 @@ class _RecipeModalState extends State<RecipeModal> {
   final _qtyCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  /// Maps master unit to recipe input unit for human-readable entry
+  /// Kg → gram, Liter → ml. Other units pass through unchanged.
+  String _recipeInputUnit(String masterUnit) {
+    final lower = masterUnit.toLowerCase();
+    if (lower == 'kg') return 'gram';
+    if (lower == 'liter' || lower == 'l') return 'ml';
+    return masterUnit;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -642,7 +651,7 @@ class _RecipeModalState extends State<RecipeModal> {
   void _editIngredientQty(dynamic ing) async {
     final currentQty = (ing['qty_needed'] as num?)?.toDouble() ?? 0;
     final editCtrl = TextEditingController(text: currentQty == currentQty.roundToDouble() ? '${currentQty.round()}' : currentQty.toString());
-    final unit = ing['bahan_unit']?.toString() ?? '';
+    final unit = _recipeInputUnit(ing['bahan_unit']?.toString() ?? '');
 
     final newQty = await showDialog<double>(
       context: context,
@@ -686,14 +695,17 @@ class _RecipeModalState extends State<RecipeModal> {
     for (var ing in _ingredients) {
       final cost = (ing['bahan_cost_price'] as num?)?.toDouble() ?? 0;
       final qty = (ing['qty_needed'] as num?)?.toDouble() ?? 0;
-      totalHpp += cost * qty;
+      final unit = (ing['bahan_unit'] ?? '').toString().toLowerCase();
+      final normalizedCost = (unit == 'kg' || unit == 'liter' || unit == 'l') ? cost / 1000 : cost;
+      totalHpp += normalizedCost * qty;
     }
 
     String selectedUnit = '';
     if (_selectedBahanId != null) {
       try {
         final b = _availableBahan.firstWhere((e) => e['id'] == _selectedBahanId);
-        selectedUnit = b['unit']?.toString() ?? '';
+        final masterUnit = b['unit']?.toString() ?? '';
+        selectedUnit = _recipeInputUnit(masterUnit);
       } catch (_) {}
     }
 
@@ -791,14 +803,19 @@ class _RecipeModalState extends State<RecipeModal> {
                       final ing = _ingredients[i];
                       final cost = (ing['bahan_cost_price'] as num?)?.toDouble() ?? 0;
                       final qty = (ing['qty_needed'] as num?)?.toDouble() ?? 0;
-                      final subtotal = cost * qty;
+                      final masterUnit = (ing['bahan_unit'] ?? '').toString();
+                      final lowerUnit = masterUnit.toLowerCase();
+                      final recipeUnit = _recipeInputUnit(masterUnit);
+                      final baseCost = (lowerUnit == 'kg' || lowerUnit == 'liter' || lowerUnit == 'l') ? cost / 1000 : cost;
+                      final biayaBahan = baseCost * qty;
+                      final qtyStr = qty == qty.roundToDouble() ? qty.round().toString() : qty.toStringAsFixed(2);
                       
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           leading: const Icon(Icons.science),
-                          title: Text('${ing['bahan_name']} - $qty ${ing['bahan_unit']}'),
-                          subtitle: Text('Modal per satuan: ${fmtPrice(cost)} | Subtotal: ${fmtPrice(subtotal)}'),
+                          title: Text('${ing['bahan_name']} — $qtyStr $recipeUnit'),
+                          subtitle: Text('Modal: ${fmtPrice(baseCost)}/$recipeUnit | Biaya Bahan: ${fmtPrice(biayaBahan)}'),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
