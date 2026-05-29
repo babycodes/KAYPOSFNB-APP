@@ -188,7 +188,7 @@ class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> {
                     }
 
                     return ListTile(
-                      title: Text(device.name ?? 'Unknown', maxLines: 1, overflow: TextOverflow.ellipsis),
+                      title: Text(device.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

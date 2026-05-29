@@ -389,7 +389,6 @@ class _ProdukFormDialogState extends State<ProdukFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final isMobile = MediaQuery.sizeOf(context).width < 600;
     
     return Dialog(

@@ -102,7 +102,7 @@ class PrinterService {
     
     final prefs = await SharedPreferences.getInstance();
     prefs.setString('printer_mac', device.address ?? '');
-    prefs.setString('printer_name', device.name ?? 'Unknown');
+    prefs.setString('printer_name', device.name);
     prefs.setString('printer_type', type == PrinterType.usb ? 'usb' : 'bluetooth');
     if (device.vendorId != null) prefs.setString('printer_vendorId', device.vendorId!);
     if (device.productId != null) prefs.setString('printer_productId', device.productId!);

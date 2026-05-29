@@ -681,7 +681,6 @@ class Api {
         final name = body?['name']?.toString().trim() ?? 'Kategori Baru';
         final icon = body?['icon']?.toString() ?? '📦';
         final sortOrder = (body?['sort_order'] as num?)?.toInt() ?? 0;
-        final unitsList = body?['units'] as List? ?? [];
         
         try {
           await db.transaction((txn) async {

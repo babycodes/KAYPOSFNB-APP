@@ -69,9 +69,6 @@ class _KasirScreenState extends State<KasirScreen> {
     }
     return '${fmtNum(stock)} $unit';
   }
-  static Map<String, dynamic>? _findUnit(List units, String unitName) {
-    try { return Map<String, dynamic>.from(units.firstWhere((u) => u['unit_name']?.toString() == unitName)); } catch (_) { return null; }
-  }
 
   double get cartTotal => cart.fold(0.0, (s, i) {
     final price = _safeNum(i['unit_price']);
