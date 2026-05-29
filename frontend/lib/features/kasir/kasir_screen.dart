@@ -936,7 +936,7 @@ class _KasirScreenState extends State<KasirScreen> {
                             children: activeNames.map((name) => Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(colors: [Colors.deepOrange, Colors.redAccent]),
+                                gradient: LinearGradient(colors: [Colors.green.shade600, Colors.green.shade700]),
                                 borderRadius: BorderRadius.circular(12),
                                 boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))],
                               ),

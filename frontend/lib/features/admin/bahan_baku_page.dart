@@ -431,9 +431,9 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     final costPrice = m != null ? (m['cost_price'] as num?)?.toDouble() ?? 0 : 0.0;
     final minAlert = m != null ? (m['min_stock_alert'] as num?)?.toDouble() ?? 0 : 0.0;
     
-    // Master Unit Architecture: show unit price directly (no total multiplication)
+    // Total Harga Beli Architecture: show total cost (stock × unit price)
     _stockCtrl = TextEditingController(text: m != null ? _fmtInit(stock) : '');
-    _costCtrl = TextEditingController(text: m != null ? _fmtInit(costPrice) : '');
+    _costCtrl = TextEditingController(text: m != null ? _fmtInit(stock * costPrice) : '');
     _minAlertCtrl = TextEditingController(text: m != null ? _fmtInit(minAlert) : '');
 
     if (m != null && _units.contains(dbUnit)) {
@@ -460,19 +460,20 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     setState(() => _isSaving = true);
 
     final qtyBeliStr = _stockCtrl.text.replaceAll(',', '.');
-    final unitPriceStr = _costCtrl.text.replaceAll(',', '.');
+    final totalPriceStr = _costCtrl.text.replaceAll(',', '.');
     
     final qtyBeli = double.tryParse(qtyBeliStr) ?? 0;
-    final unitPrice = double.tryParse(unitPriceStr) ?? 0;
+    final totalPrice = double.tryParse(totalPriceStr) ?? 0;
     
-    // Master Unit Architecture: save unit price directly (no division)
+    // Compute cost_price per unit from Total Harga Beli / Jumlah Stok
+    final double costPricePerUnit = qtyBeli > 0 ? totalPrice / qtyBeli : 0;
     final double minAlertInput = double.tryParse(_minAlertCtrl.text.replaceAll(',', '.')) ?? 0;
 
     final data = {
       'name': toTitleCase(_nameCtrl.text.trim()),
       'unit': _selectedUnit,  // Master unit locked as-is
       'stock': qtyBeli,
-      'cost_price': unitPrice,
+      'cost_price': costPricePerUnit,
       'min_stock_alert': minAlertInput,
       'kategori_bahan_id': _selectedKategoriId ?? 0,
     };
@@ -566,7 +567,7 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Harga Modal per $_selectedUnit', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
+                  decoration: InputDecoration(labelText: 'Total Harga Beli', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
               ]) : Row(children: [
@@ -578,19 +579,20 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                 const SizedBox(width: 12),
                 Expanded(child: TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Harga Modal per $_selectedUnit', isDense: true, prefixText: 'Rp '),
+                  decoration: InputDecoration(labelText: 'Total Harga Beli', isDense: true, prefixText: 'Rp '),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
               ]),
-              // Nilai Aset Tersisa (read-only, reactive to stock/price changes)
+              // Harga Modal per Satuan (read-only, computed from Total / Qty)
               if (isEdit) Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: ListenableBuilder(
                   listenable: Listenable.merge([_stockCtrl, _costCtrl]),
                   builder: (ctx, _) {
                     final curStock = double.tryParse(_stockCtrl.text.replaceAll(',', '.')) ?? 0;
-                    final curPrice = double.tryParse(_costCtrl.text.replaceAll(',', '.')) ?? 0;
-                    return Text('💰 Nilai Aset Tersisa: ${fmtPrice(curStock * curPrice)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary));
+                    final curTotal = double.tryParse(_costCtrl.text.replaceAll(',', '.')) ?? 0;
+                    final perUnit = curStock > 0 ? curTotal / curStock : 0.0;
+                    return Text('💰 Harga Modal per $_selectedUnit: ${fmtPrice(perUnit)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary));
                   },
                 ),
               ),
