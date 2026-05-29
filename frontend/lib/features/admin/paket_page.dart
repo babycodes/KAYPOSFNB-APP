@@ -118,6 +118,7 @@ class _PaketPageState extends State<PaketPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => isPaket ? PaketItemsModal(product: product) : RecipeModal(product: product),
     ).then((_) {
@@ -559,6 +560,7 @@ class _RecipeModalState extends State<RecipeModal> {
     showModalBottomSheet(
       context: parentContext,
       isScrollControlled: true,
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) {
         String search = '';
