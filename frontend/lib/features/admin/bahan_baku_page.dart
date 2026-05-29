@@ -83,7 +83,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
         return AlertDialog(
           title: Text('Restock: ${item['name']}'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Stok saat ini: ${(item['stock'] as num?)?.toDouble() ?? 0} $baseUnit', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Text('Stok saat ini: ${_formatStock((item['stock'] as num?)?.toDouble() ?? 0, baseUnit)}', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 16),
             Row(children: [
               Expanded(child: TextField(
@@ -366,10 +366,34 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
   }
 
   String _formatStock(double stock, String unit) {
-    if (unit == 'gram' && stock >= 1000) {
-      return '${_fmtNum(stock)} $unit (${_fmtNum(stock / 1000)} Kg)';
-    } else if (unit == 'ml' && stock >= 1000) {
-      return '${_fmtNum(stock)} $unit (${_fmtNum(stock / 1000)} Liter)';
+    final lower = unit.toLowerCase();
+    // Master unit Kg: show gram equivalent when < 1
+    if (lower == 'kg') {
+      if (stock < 1 && stock > 0) {
+        return '${_fmtNum(stock)} $unit (${_fmtNum(stock * 1000)} gram)';
+      }
+      return '${_fmtNum(stock)} $unit';
+    }
+    // Base unit gram: show Kg equivalent when >= 1000
+    if (lower == 'gram' || lower == 'gr' || lower == 'g') {
+      if (stock >= 1000) {
+        return '${_fmtNum(stock)} $unit (${_fmtNum(stock / 1000)} Kg)';
+      }
+      return '${_fmtNum(stock)} $unit';
+    }
+    // Master unit Liter: show ml equivalent when < 1
+    if (lower == 'liter' || lower == 'l') {
+      if (stock < 1 && stock > 0) {
+        return '${_fmtNum(stock)} $unit (${_fmtNum(stock * 1000)} ml)';
+      }
+      return '${_fmtNum(stock)} $unit';
+    }
+    // Base unit ml: show Liter equivalent when >= 1000
+    if (lower == 'ml') {
+      if (stock >= 1000) {
+        return '${_fmtNum(stock)} $unit (${_fmtNum(stock / 1000)} Liter)';
+      }
+      return '${_fmtNum(stock)} $unit';
     }
     return '${_fmtNum(stock)} $unit';
   }
@@ -405,39 +429,16 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     final dbUnit = m != null ? (m['unit'] ?? '').toString() : '';
     final stock = m != null ? (m['stock'] as num?)?.toDouble() ?? 0 : 0.0;
     final costPrice = m != null ? (m['cost_price'] as num?)?.toDouble() ?? 0 : 0.0;
+    final minAlert = m != null ? (m['min_stock_alert'] as num?)?.toDouble() ?? 0 : 0.0;
     
-    // Reverse conversion: show user-friendly units
-    double displayQty = stock;
-    double displayTotalCost = stock * costPrice;
-    String displayUnit = dbUnit;
+    // Master Unit Architecture: display raw DB values as-is (no unit mutation)
+    final displayTotalCost = stock * costPrice;
     
-    if (m != null) {
-      if (dbUnit == 'gram' && stock >= 1000) {
-        displayUnit = 'Kg';
-        displayQty = stock / 1000;
-      } else if (dbUnit == 'ml' && stock >= 1000) {
-        displayUnit = 'Liter';
-        displayQty = stock / 1000;
-      }
-    }
-    
-    // Reverse-convert min_stock_alert for display in user-friendly unit
-    double displayMinAlert = m != null ? (m['min_stock_alert'] as num?)?.toDouble() ?? 0 : 0;
-    if (m != null) {
-      if (dbUnit == 'gram' && stock >= 1000) {
-        displayMinAlert = displayMinAlert / 1000; // gram → Kg for display
-      } else if (dbUnit == 'ml' && stock >= 1000) {
-        displayMinAlert = displayMinAlert / 1000; // ml → Liter for display
-      }
-    }
-    
-    _stockCtrl = TextEditingController(text: m != null ? _fmtInit(displayQty) : '');
+    _stockCtrl = TextEditingController(text: m != null ? _fmtInit(stock) : '');
     _costCtrl = TextEditingController(text: m != null ? _fmtInit(displayTotalCost) : '');
-    _minAlertCtrl = TextEditingController(text: m != null ? _fmtInit(displayMinAlert) : '');
+    _minAlertCtrl = TextEditingController(text: m != null ? _fmtInit(minAlert) : '');
 
-    if (m != null && _units.contains(displayUnit)) {
-      _selectedUnit = displayUnit;
-    } else if (m != null && _units.contains(dbUnit)) {
+    if (m != null && _units.contains(dbUnit)) {
       _selectedUnit = dbUnit;
     } else if (m == null) {
       _selectedUnit = 'Kg';
@@ -466,34 +467,16 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     final qtyBeli = double.tryParse(qtyBeliStr) ?? 0;
     final totalHarga = double.tryParse(totalHargaStr) ?? 0;
     
-    String baseUnit = _selectedUnit;
-    double totalBaseQty = qtyBeli;
-    
-    if (_selectedUnit == 'Kg') {
-      baseUnit = 'gram';
-      totalBaseQty = qtyBeli * 1000;
-    } else if (_selectedUnit == 'Liter') {
-      baseUnit = 'ml';
-      totalBaseQty = qtyBeli * 1000;
-    }
-    
-    final pricePerBaseUnit = totalBaseQty > 0 ? totalHarga / totalBaseQty : 0.0;
-
-    // Convert min_stock_alert to base unit (same conversion as stock)
+    // Master Unit Architecture: save directly in the selected unit (NO conversion)
+    final pricePerUnit = qtyBeli > 0 ? totalHarga / qtyBeli : 0.0;
     final double minAlertInput = double.tryParse(_minAlertCtrl.text.replaceAll(',', '.')) ?? 0;
-    double minAlertBase = minAlertInput;
-    if (_selectedUnit == 'Kg') {
-      minAlertBase = minAlertInput * 1000; // Kg → gram
-    } else if (_selectedUnit == 'Liter') {
-      minAlertBase = minAlertInput * 1000; // Liter → ml
-    }
 
     final data = {
       'name': toTitleCase(_nameCtrl.text.trim()),
-      'unit': baseUnit,
-      'stock': totalBaseQty,
-      'cost_price': pricePerBaseUnit,
-      'min_stock_alert': minAlertBase,
+      'unit': _selectedUnit,  // Master unit locked as-is
+      'stock': qtyBeli,
+      'cost_price': pricePerUnit,
+      'min_stock_alert': minAlertInput,
       'kategori_bahan_id': _selectedKategoriId ?? 0,
     };
 

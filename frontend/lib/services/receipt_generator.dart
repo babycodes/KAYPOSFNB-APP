@@ -96,7 +96,8 @@ class ReceiptGenerator {
       int maxChars = paperSize == PaperSize.mm58 ? 32 : 48;
 
       if (isPaket) {
-        final paketName = '${qtyStr}x ${d['product_name'] ?? ''}';
+        // Line 1: Package Name (left) + Subtotal (right)
+        final paketName = d['product_name']?.toString() ?? '';
         final subtotalStr = _formatReceiptPrice(d['subtotal']);
         int combinedLen = paketName.length + subtotalStr.length;
         
@@ -108,25 +109,25 @@ class ReceiptGenerator {
           bytes += generator.text(subtotalStr, styles: const PosStyles(align: PosAlign.right, bold: true));
         }
         
+        // Line 2: Qty x Unit Price
+        final priceStr = _formatReceiptPrice(d['sold_price']);
+        bytes += generator.text('$qtyStr pcs x $priceStr', styles: const PosStyles(align: PosAlign.left));
+        
+        // Lines 3+: Indented children from addon_summary
         final addonSummary = d['addon_summary']?.toString() ?? '';
         if (addonSummary.isNotEmpty && addonSummary != '[]') {
           for (final line in addonSummary.split('\n')) {
-             String cleanedLine = line.replaceAll('  - ', '   ').replaceAll(' (Rp 0)', '');
-             String rightText = 'Rp 0';
-             int lineCombinedLen = cleanedLine.length + rightText.length;
-             if (lineCombinedLen < maxChars) {
-                String space = ' ' * (maxChars - lineCombinedLen);
-                bytes += generator.text('$cleanedLine$space$rightText', styles: const PosStyles(align: PosAlign.left));
-             } else {
-                bytes += generator.text(cleanedLine, styles: const PosStyles(align: PosAlign.left));
-                bytes += generator.text(rightText, styles: const PosStyles(align: PosAlign.right));
-             }
+            final trimmed = line.trim();
+            if (trimmed.isEmpty) continue;
+            // Normalize: ensure "  - Nx Name (Rp 0)" format
+            final childLine = trimmed.startsWith('-') ? '  $trimmed' : trimmed;
+            bytes += generator.text(childLine, styles: const PosStyles(align: PosAlign.left));
           }
         }
         
         final itemDiscount = (d['discount_amount'] as num?)?.toDouble() ?? 0.0;
         if (itemDiscount > 0) {
-          bytes += generator.text('  - Rp ${_formatReceiptPrice(itemDiscount)}', styles: const PosStyles(align: PosAlign.left));
+          bytes += generator.text('  Disc: -${_formatReceiptPrice(itemDiscount)}', styles: const PosStyles(align: PosAlign.left));
         }
       } else {
         if (lastProductId != d['product_id'] || d['product_id'] == null) {
