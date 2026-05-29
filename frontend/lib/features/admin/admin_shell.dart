@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/auth_provider.dart';
+import '../../core/api.dart';
 
 class AdminShell extends StatefulWidget {
   final Widget child;
@@ -13,6 +14,8 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   bool sidebarOpen = true;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  int _bahanHabisCount = 0;
+  int _bahanRendahCount = 0;
 
   final navItems = [
     {'href': '/admin', 'label': 'Dashboard', 'icon': Icons.dashboard},
@@ -26,6 +29,25 @@ class _AdminShellState extends State<AdminShell> {
     {'href': '/admin/karyawan', 'label': 'Karyawan', 'icon': Icons.people},
     {'href': '/admin/settings', 'label': 'Pengaturan', 'icon': Icons.settings},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBahanAlerts();
+  }
+
+  Future<void> _loadBahanAlerts() async {
+    try {
+      final alerts = await Api.get('/bahan-baku/alerts') as List;
+      if (!mounted) return;
+      int habis = 0, rendah = 0;
+      for (final b in alerts) {
+        final stock = (b['stock'] is num) ? (b['stock'] as num).toDouble() : 0.0;
+        if (stock <= 0) { habis++; } else { rendah++; }
+      }
+      setState(() { _bahanHabisCount = habis; _bahanRendahCount = rendah; });
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +143,22 @@ class _AdminShellState extends State<AdminShell> {
                 decoration: BoxDecoration(color: active ? cs.primaryContainer : null, borderRadius: BorderRadius.circular(12)),
                 child: Row(children: [
                   Icon(item['icon'] as IconData, size: 20, color: active ? cs.onPrimaryContainer : cs.onSurfaceVariant),
-                  if (showLabels) ...[const SizedBox(width: 12), Text(item['label'] as String, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: active ? cs.onPrimaryContainer : cs.onSurfaceVariant))],
+                  if (showLabels) ...[const SizedBox(width: 12), Expanded(child: Text(item['label'] as String, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: active ? cs.onPrimaryContainer : cs.onSurfaceVariant)))],
+                  // Badge for Bahan Baku
+                  if (item['href'] == '/admin/bahan-baku' && (_bahanHabisCount > 0 || _bahanRendahCount > 0))
+                    Container(
+                      margin: const EdgeInsets.only(left: 4),
+                      constraints: const BoxConstraints(minWidth: 20), height: 20,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: _bahanHabisCount > 0 ? Colors.red : Colors.amber.shade700,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(child: Text(
+                        '${_bahanHabisCount + _bahanRendahCount}',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                      )),
+                    ),
                 ])),
             )),
           );

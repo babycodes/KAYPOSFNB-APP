@@ -8,8 +8,9 @@ class ProductCard extends StatelessWidget {
   final int discountPercent;
   final String? promoName;
   final int effectiveStock;
+  final int baseStock;
   final Function(dynamic) onSelect;
-  const ProductCard({super.key, required this.product, required this.bookedQty, this.discountPercent = 0, this.promoName, this.effectiveStock = -1, required this.onSelect});
+  const ProductCard({super.key, required this.product, required this.bookedQty, this.discountPercent = 0, this.promoName, this.effectiveStock = -1, this.baseStock = -1, required this.onSelect});
 
   // Safe num parser — never crashes
   static double _safeDouble(dynamic v, [double fallback = 0.0]) {
@@ -72,13 +73,11 @@ class ProductCard extends StatelessWidget {
 
     final bool isPaket = (product is Map ? (product['is_paket'] as num?)?.toInt() : 0) == 1;
     // hasRecipe = true when this product has stock tracking (effectiveStock != -1)
-    // Works for both regular products (material-pool) and packages (child-derived).
     final bool hasRecipe = effectiveStock != -1;
     // soldOut = stock is at 0 and product has tracking
     final bool soldOut = hasRecipe && effectiveStock <= 0;
-    // Differentiate HABIS (absolute zero, no reservations) vs BOOKED (reserved in cart/hold)
-    final bool isBooked = soldOut && bookedQty > 0;
-    final bool isHabis = soldOut && !isBooked;
+    // HABIS = DB stock truly at 0 (baseStock <= 0). DI PESAN = reserved (baseStock > 0 but effectiveStock <= 0)
+    final bool isHabis = soldOut && baseStock <= 0;
 
     return Opacity(
       opacity: soldOut ? 0.4 : 1.0,
@@ -159,7 +158,7 @@ class ProductCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(color: isHabis ? cs.error : Colors.orange[800], borderRadius: BorderRadius.circular(4)),
-                    child: Text(isHabis ? 'HABIS' : 'DI KERANJANG', style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
+                    child: Text(isHabis ? 'HABIS' : 'DI PESAN', style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
                   ),
                 ]),
               )

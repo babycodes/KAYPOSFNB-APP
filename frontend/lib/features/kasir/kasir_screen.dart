@@ -104,6 +104,7 @@ class _KasirScreenState extends State<KasirScreen> {
       _loadData();
       _loadDashboard();
       _loadHeldCarts();
+      _loadStockAlerts();
     });
   }
 
@@ -124,6 +125,10 @@ class _KasirScreenState extends State<KasirScreen> {
   Map<String, List<Map<String, dynamic>>> _recipes = {};
   /// Material stocks indexed by bahan_baku_id.toString() → stock (double)
   Map<String, double> _materialStocks = {};
+
+  /// Stock alert counters for badge display
+  int _stockHabisCount = 0;
+  int _stockRendahCount = 0;
 
   Future<void> _loadData() async {
     try {
@@ -164,6 +169,19 @@ class _KasirScreenState extends State<KasirScreen> {
 
   Future<void> _loadHeldCarts() async {
     try { final r = await Api.get('/held-carts'); if (mounted) setState(() => heldCarts = r as List); } catch (_) {}
+  }
+
+  /// Load stock alert counts for badge display on Stok button.
+  Future<void> _loadStockAlerts() async {
+    try {
+      final alertBahan = await Api.get('/bahan-baku/alerts') as List;
+      if (!mounted) return;
+      int habis = 0, rendah = 0;
+      for (final b in alertBahan) {
+        if (_safeNum(b['stock']) <= 0) { habis++; } else { rendah++; }
+      }
+      setState(() { _stockHabisCount = habis; _stockRendahCount = rendah; });
+    } catch (_) {}
   }
 
   Future<void> _loadHistory() async {
@@ -590,6 +608,66 @@ class _KasirScreenState extends State<KasirScreen> {
     return result < 0 ? 0 : result; // ABSOLUTE CLAMP
   }
 
+  /// Returns the BASE stock from raw DB materials WITHOUT any cart/held deductions.
+  /// Used to differentiate "HABIS" (DB truly at 0) vs "DI PESAN" (reserved in cart/held).
+  int _getBaseStock(dynamic product) {
+    if (product is! Map) return -1;
+
+    // Package: compute from raw materials WITHOUT cart deductions
+    if ((product['is_paket'] as num?)?.toInt() == 1) {
+      final paketItems = product['paket_items'];
+      if (paketItems is! List || paketItems.isEmpty) return 0;
+
+      final Map<String, double> packageMaterialNeed = {};
+      bool hasAnyRecipeChild = false;
+      for (final pi in paketItems) {
+        if (pi is! Map) continue;
+        final childIdStr = pi['product_id']?.toString() ?? '';
+        if (childIdStr.isEmpty) continue;
+        final childQtyInPaket = _safeNum(pi['qty']);
+        if (childQtyInPaket <= 0) continue;
+        final childRecipe = _recipes[childIdStr];
+        if (childRecipe == null || childRecipe.isEmpty) continue;
+        hasAnyRecipeChild = true;
+        for (final ing in childRecipe) {
+          final mid = ing['bahan_baku_id']?.toString() ?? '';
+          final qtyNeeded = _safeNum(ing['qty_needed']);
+          if (mid.isNotEmpty && qtyNeeded > 0) {
+            packageMaterialNeed[mid] = (packageMaterialNeed[mid] ?? 0) + (childQtyInPaket * qtyNeeded);
+          }
+        }
+      }
+      if (!hasAnyRecipeChild || packageMaterialNeed.isEmpty) return 999;
+      int minPortions = 999999;
+      for (final entry in packageMaterialNeed.entries) {
+        final totalStock = _materialStocks[entry.key] ?? 0;
+        if (entry.value <= 0) continue;
+        final portions = (totalStock / entry.value).floor();
+        if (portions < minPortions) minPortions = portions;
+      }
+      return (minPortions == 999999) ? 999 : (minPortions < 0 ? 0 : minPortions);
+    }
+
+    // Regular product: compute from raw materials WITHOUT cart deductions
+    final String pid = product['id']?.toString() ?? '';
+    final recipe = _recipes[pid];
+    if (recipe == null || recipe.isEmpty) {
+      final rawPortions = product['available_portions'];
+      if (rawPortions == null) return -1;
+      return (rawPortions as num).toInt();
+    }
+    int minPortions = 999999;
+    for (final ing in recipe) {
+      final mid = ing['bahan_baku_id']?.toString() ?? '';
+      final qtyNeeded = _safeNum(ing['qty_needed']);
+      if (mid.isEmpty || qtyNeeded <= 0) continue;
+      final totalStock = _materialStocks[mid] ?? 0;
+      final portions = (totalStock / qtyNeeded).floor();
+      if (portions < minPortions) minPortions = portions;
+    }
+    int result = minPortions == 999999 ? -1 : minPortions;
+    return result < 0 ? 0 : result;
+  }
   void _addToCart(dynamic product, String unitName, num quantity, [String? addonSummary]) {
     final idx = cart.indexWhere((i) => i['product'] is Map && i['product']['id'] == product['id'] && i['selected_unit'] == unitName && (i['addon_summary'] ?? '') == (addonSummary ?? ''));
     if (idx >= 0) {
@@ -675,7 +753,7 @@ class _KasirScreenState extends State<KasirScreen> {
         if (activeCartLabel != null) {
           try { Api.delete('/held-carts/${activeCartLabel!}'); } catch (_) {}
         }
-        _loadDashboard(); _loadData();
+        _loadDashboard(); _loadData(); _loadStockAlerts();
         
         
         showDialog(context: context, builder: (_) => ReceiptModal(transaction: result['transaction'], details: List<Map<String, dynamic>>.from(result['details'])));
@@ -760,7 +838,8 @@ class _KasirScreenState extends State<KasirScreen> {
                       const SizedBox(width: 4),
                       _toolbarBtn(Icons.history, 'Riwayat', onTap: () { setState(() { _closeAllModals(); showHistory = true; }); _loadHistory(); }),
                       const SizedBox(width: 4),
-                      _toolbarBtn(Icons.notifications, 'Stok', onTap: _showStockAlert),
+                      _toolbarBtn(Icons.notifications, 'Stok', onTap: _showStockAlert,
+                        badge: (_stockHabisCount + _stockRendahCount) > 0 ? '${_stockHabisCount + _stockRendahCount}' : null),
                       const SizedBox(width: 4),
                       _toolbarBtn(Icons.person, auth.userName, onTap: () => setState(() { _closeAllModals(); showProfile = true; })),
                       const SizedBox(width: 4),
@@ -873,12 +952,14 @@ class _KasirScreenState extends State<KasirScreen> {
                           final product = filteredProducts[i];
                           final promoInfo = _getPromoInfo(product);
                           final effectiveStock = _getEffectiveStock(product);
+                          final baseStock = _getBaseStock(product);
                           return ProductCard(
                             product: product, 
                             bookedQty: _getCartQtyForProduct(product['id']).toDouble(), 
                             discountPercent: promoInfo.$1,
                             promoName: promoInfo.$2,
                             effectiveStock: effectiveStock,
+                            baseStock: baseStock,
                             onSelect: _handleProductSelect
                           );
                         },
