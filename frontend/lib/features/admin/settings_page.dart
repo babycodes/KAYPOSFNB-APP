@@ -26,7 +26,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool saving = false;
   String restoreMsg = '';
   bool _isBackingUp = false;
-  final bool _isRestoring = false;
+  bool _isRestoring = false;
 
   String _currentVersion = '';
   final UpdateService _updateService = UpdateService();
@@ -137,7 +137,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _isBackingUp = true);
     try {
       final dbPath = await getDatabasesPath();
-      final sourcePath = p.join(dbPath, 'kaypos_offline.db');
+      final sourcePath = p.join(dbPath, 'kayposfnb.db');
       final sourceFile = File(sourcePath);
       
       if (!await sourceFile.exists()) {
