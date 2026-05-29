@@ -737,8 +737,10 @@ class _KasirScreenState extends State<KasirScreen> {
           'product_id': c['product']['id'],
           'unit_name': c['selected_unit'],
           'quantity': c['quantity'],
+          'price': price,
           'discount_percent': discountPercent,
           'discount_amount': discountAmount,
+          if (c['addon_summary'] != null) 'addon_summary': c['addon_summary'],
         };
       }).toList();
       final result = await Api.post('/transactions', body: {

@@ -127,10 +127,10 @@ class _AdminShellState extends State<AdminShell> {
             message: showLabels ? '' : item['label'] as String,
             child: Padding(padding: const EdgeInsets.only(bottom: 4), child: InkWell(
               onTap: () {
-                // Close any open modals/bottom sheets before navigating
+                // Close ALL open modals/dialogs/bottom sheets before navigating
                 final rootNav = Navigator.of(context, rootNavigator: true);
-                if (rootNav.canPop()) {
-                  rootNav.popUntil((route) => route.isFirst || route is PageRoute);
+                while (rootNav.canPop()) {
+                  rootNav.pop();
                 }
                 // Then navigate
                 context.go(item['href'] as String);
@@ -170,8 +170,8 @@ class _AdminShellState extends State<AdminShell> {
             message: showLabels ? '' : 'Ke Kasir',
             child: InkWell(onTap: () {
               final rootNav = Navigator.of(context, rootNavigator: true);
-              if (rootNav.canPop()) {
-                rootNav.popUntil((route) => route.isFirst || route is PageRoute);
+              while (rootNav.canPop()) {
+                rootNav.pop();
               }
               context.go('/kasir');
             }, borderRadius: BorderRadius.circular(12),
@@ -197,8 +197,8 @@ class _AdminShellState extends State<AdminShell> {
               );
               if (confirm == true && context.mounted) {
                 final rootNav = Navigator.of(context, rootNavigator: true);
-                if (rootNav.canPop()) {
-                  rootNav.popUntil((route) => route.isFirst || route is PageRoute);
+                while (rootNav.canPop()) {
+                  rootNav.pop();
                 }
                 auth.logout(); 
                 context.go('/login'); 

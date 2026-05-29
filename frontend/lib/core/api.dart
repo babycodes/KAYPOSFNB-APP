@@ -776,9 +776,12 @@ class Api {
             final discountPercent = (item['discount_percent'] as num?)?.toDouble() ?? 0.0;
             final discountAmount = (item['discount_amount'] as num?)?.toDouble() ?? 0.0;
             
+            final isPaketProduct = (product['is_paket'] as num?)?.toInt() == 1;
+            
             resolvedItems.add({
               'product_id': productId,
               'product_name': product['name']?.toString() ?? 'Item',
+              'is_paket': isPaketProduct ? 1 : 0,
               'sold_price': soldPrice,
               'quantity': quantity,
               'subtotal': subtotal,

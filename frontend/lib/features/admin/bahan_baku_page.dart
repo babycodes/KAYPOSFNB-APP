@@ -421,9 +421,19 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
       }
     }
     
+    // Reverse-convert min_stock_alert for display in user-friendly unit
+    double displayMinAlert = m != null ? (m['min_stock_alert'] as num?)?.toDouble() ?? 0 : 0;
+    if (m != null) {
+      if (dbUnit == 'gram' && stock >= 1000) {
+        displayMinAlert = displayMinAlert / 1000; // gram → Kg for display
+      } else if (dbUnit == 'ml' && stock >= 1000) {
+        displayMinAlert = displayMinAlert / 1000; // ml → Liter for display
+      }
+    }
+    
     _stockCtrl = TextEditingController(text: m != null ? _fmtInit(displayQty) : '');
     _costCtrl = TextEditingController(text: m != null ? _fmtInit(displayTotalCost) : '');
-    _minAlertCtrl = TextEditingController(text: m != null ? _fmtInit((m['min_stock_alert'] as num?)?.toDouble() ?? 0) : '');
+    _minAlertCtrl = TextEditingController(text: m != null ? _fmtInit(displayMinAlert) : '');
 
     if (m != null && _units.contains(displayUnit)) {
       _selectedUnit = displayUnit;
@@ -469,12 +479,21 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     
     final pricePerBaseUnit = totalBaseQty > 0 ? totalHarga / totalBaseQty : 0.0;
 
+    // Convert min_stock_alert to base unit (same conversion as stock)
+    final double minAlertInput = double.tryParse(_minAlertCtrl.text.replaceAll(',', '.')) ?? 0;
+    double minAlertBase = minAlertInput;
+    if (_selectedUnit == 'Kg') {
+      minAlertBase = minAlertInput * 1000; // Kg → gram
+    } else if (_selectedUnit == 'Liter') {
+      minAlertBase = minAlertInput * 1000; // Liter → ml
+    }
+
     final data = {
       'name': toTitleCase(_nameCtrl.text.trim()),
       'unit': baseUnit,
       'stock': totalBaseQty,
       'cost_price': pricePerBaseUnit,
-      'min_stock_alert': double.tryParse(_minAlertCtrl.text.replaceAll(',', '.')) ?? 0,
+      'min_stock_alert': minAlertBase,
       'kategori_bahan_id': _selectedKategoriId ?? 0,
     };
 
