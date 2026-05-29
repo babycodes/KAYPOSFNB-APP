@@ -582,14 +582,17 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
               ]),
-              // Nilai Aset Tersisa (read-only, computed from current stock × unit price)
+              // Nilai Aset Tersisa (read-only, reactive to stock/price changes)
               if (isEdit) Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Builder(builder: (_) {
-                  final curStock = double.tryParse(_stockCtrl.text.replaceAll(',', '.')) ?? 0;
-                  final curPrice = double.tryParse(_costCtrl.text.replaceAll(',', '.')) ?? 0;
-                  return Text('💰 Nilai Aset Tersisa: ${fmtPrice(curStock * curPrice)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary));
-                }),
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([_stockCtrl, _costCtrl]),
+                  builder: (ctx, _) {
+                    final curStock = double.tryParse(_stockCtrl.text.replaceAll(',', '.')) ?? 0;
+                    final curPrice = double.tryParse(_costCtrl.text.replaceAll(',', '.')) ?? 0;
+                    return Text('💰 Nilai Aset Tersisa: ${fmtPrice(curStock * curPrice)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary));
+                  },
+                ),
               ),
               const SizedBox(height: 16),
 
