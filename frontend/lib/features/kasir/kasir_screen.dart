@@ -929,7 +929,20 @@ class _KasirScreenState extends State<KasirScreen> {
                         children: [
                           const Icon(Icons.local_offer, color: Colors.orange, size: 16),
                           const SizedBox(width: 8),
-                          Expanded(child: Text('🎁 Promo Diskon Tersedia', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 12))),
+                          const Text('🎁 Promo Aktif:', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 12)),
+                          const SizedBox(width: 6),
+                          Expanded(child: Wrap(
+                            spacing: 6, runSpacing: 4,
+                            children: activeNames.map((name) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(colors: [Colors.deepOrange, Colors.redAccent]),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))],
+                              ),
+                              child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                            )).toList(),
+                          )),
                         ],
                       ),
                     );

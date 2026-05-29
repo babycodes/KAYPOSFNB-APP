@@ -152,34 +152,36 @@ class ProductCard extends StatelessWidget {
                 )),
               ]),
 
-              // Badges
-              if (soldOut) Positioned(top: -2, right: -2,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(color: isHabis ? cs.error : Colors.orange[800], borderRadius: BorderRadius.circular(4)),
-                    child: Text(isHabis ? 'HABIS' : 'DI PESAN', style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
-                  ),
-                ]),
-              )
-              else if (isPaket) Positioned(top: -4, right: -4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Colors.deepOrange, Colors.deepPurple]),
-                    borderRadius: BorderRadius.circular(4),
-                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1))],
-                  ),
-                  child: const Text('PAKET', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: Colors.white)),
+              // Badges — render in a Row to support multiple simultaneous badges
+              if (soldOut || isPaket || discountPercent > 0)
+                Positioned(top: -4, right: -4,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    // Sold-out badge (highest priority, exclusive)
+                    if (soldOut) Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(color: isHabis ? cs.error : Colors.orange[800], borderRadius: BorderRadius.circular(4)),
+                      child: Text(isHabis ? 'HABIS' : 'DI PESAN', style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white)),
+                    ),
+                    // Discount badge (left side when paired with PAKET)
+                    if (!soldOut && discountPercent > 0) Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.amberAccent, borderRadius: BorderRadius.circular(4), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1))]),
+                      child: Text('-$discountPercent%', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.black)),
+                    ),
+                    // Spacing between discount and paket badges
+                    if (!soldOut && discountPercent > 0 && isPaket) const SizedBox(width: 4),
+                    // Paket badge (right side)
+                    if (!soldOut && isPaket) Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [Colors.deepOrange, Colors.deepPurple]),
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1))],
+                      ),
+                      child: const Text('PAKET', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: Colors.white)),
+                    ),
+                  ]),
                 ),
-              )
-              else if (discountPercent > 0) Positioned(top: -4, right: -4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.amberAccent, borderRadius: BorderRadius.circular(4), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1))]),
-                  child: Text('-$discountPercent%', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.black)),
-                )
-              ),
             ]),
           ),
         ),
