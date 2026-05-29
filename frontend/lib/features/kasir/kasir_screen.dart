@@ -55,6 +55,20 @@ class _KasirScreenState extends State<KasirScreen> {
     if (v is num) return v.toDouble();
     return double.tryParse(v.toString()) ?? fallback;
   }
+  /// Format stock for alert modal — shows gram/ml for fractional Kg/Liter
+  static String _formatAlertStock(double stock, String unit) {
+    final lower = unit.toLowerCase();
+    String fmtNum(double n) => n == n.roundToDouble() ? n.round().toString() : n.toStringAsFixed(2);
+    if (lower == 'kg') {
+      if (stock < 1 && stock > 0) return '${fmtNum(stock * 1000)} gram';
+      return '${fmtNum(stock)} $unit';
+    }
+    if (lower == 'liter' || lower == 'l') {
+      if (stock < 1 && stock > 0) return '${fmtNum(stock * 1000)} ml';
+      return '${fmtNum(stock)} $unit';
+    }
+    return '${fmtNum(stock)} $unit';
+  }
   static Map<String, dynamic>? _findUnit(List units, String unitName) {
     try { return Map<String, dynamic>.from(units.firstWhere((u) => u['unit_name']?.toString() == unitName)); } catch (_) { return null; }
   }
@@ -299,8 +313,8 @@ class _KasirScreenState extends State<KasirScreen> {
                                     child: const Text('RENDAH', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
                                   ),
                                   title: Text(item['name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                  subtitle: Text('Min: ${minAlert.round()} $unit', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-                                  trailing: Text('${stock.round()} $unit', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade800)),
+                                  subtitle: Text('Min: ${_formatAlertStock(minAlert, unit)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                                  trailing: Text(_formatAlertStock(stock, unit), style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade800)),
                                 );
                               },
                             ),

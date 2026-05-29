@@ -127,11 +127,10 @@ class _AdminShellState extends State<AdminShell> {
             message: showLabels ? '' : item['label'] as String,
             child: Padding(padding: const EdgeInsets.only(bottom: 4), child: InkWell(
               onTap: () {
-                // Close ALL open modals/dialogs/bottom sheets before navigating
-                final rootNav = Navigator.of(context, rootNavigator: true);
-                while (rootNav.canPop()) {
-                  rootNav.pop();
-                }
+                // Dismiss any open dialogs/modals/bottom sheets before navigating
+                // popUntil with (route) => route.isFirst pops all overlay routes
+                // while keeping the base GoRouter shell route intact
+                Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
                 // Then navigate
                 context.go(item['href'] as String);
                 if (isMobile && _scaffoldKey.currentState?.isDrawerOpen == true) {
@@ -169,10 +168,7 @@ class _AdminShellState extends State<AdminShell> {
           Tooltip(
             message: showLabels ? '' : 'Ke Kasir',
             child: InkWell(onTap: () {
-              final rootNav = Navigator.of(context, rootNavigator: true);
-              while (rootNav.canPop()) {
-                rootNav.pop();
-              }
+              Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
               context.go('/kasir');
             }, borderRadius: BorderRadius.circular(12),
               child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -196,10 +192,7 @@ class _AdminShellState extends State<AdminShell> {
                 ),
               );
               if (confirm == true && context.mounted) {
-                final rootNav = Navigator.of(context, rootNavigator: true);
-                while (rootNav.canPop()) {
-                  rootNav.pop();
-                }
+                Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
                 auth.logout(); 
                 context.go('/login'); 
               }
