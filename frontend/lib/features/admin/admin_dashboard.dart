@@ -1,5 +1,5 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../../core/api.dart';
 import '../../core/helpers.dart';
 
@@ -10,314 +10,421 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  Map<String, dynamic> summary = {'total_transactions': 0, 'total_sales': 0, 'total_profit': 0, 'avg_transaction': 0};
-  List<dynamic> lowStock = [];
-  List<dynamic> topProducts = [];
-  List<dynamic> chartData = [];
-  // Daily recap data
-  int _dailyTxCount = 0;
-  double _dailySales = 0;
-  int _dailyItemsSold = 0;
-  double _dailyProfit = 0;
+  bool _loading = true;
+  Map<String, dynamic> _summary = {};
+  List<dynamic> _chart28 = [];
+  List<dynamic> _topProducts = [];
+  List<dynamic> _topWaste = [];
+  int? _hoveredBarIndex;
 
   @override
-  void initState() { super.initState(); _load(); }
-
-  Future<void> _load() async {
-    try {
-      final results = await Future.wait([
-        Api.get('/transactions/today'),
-        Api.get('/inventory/low-stock'),
-        Api.get('/reports/products?days=7'),
-        Api.get('/reports/chart28'),
-      ]);
-
-      // Daily recap from today's transactions
-      int txCount = 0;
-      double sales = 0;
-      int itemsSold = 0;
-      double profit = 0;
-      try {
-        final todayStr = DateTime.now().toIso8601String().substring(0, 10);
-        final txRes = await Api.get('/transactions?date=$todayStr&limit=999');
-        final txList = (txRes['data'] is List) ? txRes['data'] as List : [];
-        txCount = txList.length;
-        for (var tx in txList) {
-          sales += _safeNum(tx['total_amount']);
-          final txItems = (tx['items'] is List) ? tx['items'] as List : [];
-          for (var item in txItems) {
-            itemsSold += _safeNum(item['quantity']).round();
-          }
-        }
-        // Use the pre-calculated profit from the /transactions/today endpoint
-        profit = _safeNum(summary['total_profit']);
-      } catch (_) {}
-
-      setState(() {
-        summary = results[0];
-        lowStock = results[1] as List;
-        topProducts = ((results[2] as List).take(5)).toList();
-        chartData = results[3] as List;
-        _dailyTxCount = txCount;
-        _dailySales = sales;
-        _dailyItemsSold = itemsSold;
-        _dailyProfit = profit;
-      });
-    } catch (_) {}
+  void initState() {
+    super.initState();
+    _load();
   }
 
-  static double _safeNum(dynamic v, [double fallback = 0.0]) {
-    if (v == null) return fallback;
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final results = await Future.wait([
+        Api.get('/reports/dashboard-summary'),
+        Api.get('/reports/chart28'),
+        Api.get('/reports/products?days=30'),
+        Api.get('/reports/top-waste'),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _summary = results[0] as Map<String, dynamic>;
+        _chart28 = results[1] as List;
+        _topProducts = ((results[2] as List).take(10)).toList();
+        _topWaste = results[3] as List;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  static double _safeNum(dynamic v) {
+    if (v == null) return 0;
     if (v is num) return v.toDouble();
-    return double.tryParse(v.toString()) ?? fallback;
+    return double.tryParse(v.toString()) ?? 0;
   }
 
   String _fmtK(num n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}jt';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(0)}rb';
-    return '$n';
+    if (n.abs() >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}jt';
+    if (n.abs() >= 1000) return '${(n / 1000).toStringAsFixed(0)}rb';
+    return n.round().toString();
   }
 
-  String _shortDate(String d) { final p = d.split('-'); return p.length >= 3 ? '${p[2]}/${p[1]}' : d; }
+  String _fmtNum(double n) {
+    if (n == n.roundToDouble()) return n.round().toString();
+    return n.toStringAsFixed(2);
+  }
+
+  String _fmtDynUnit(double qty, String masterUnit) {
+    final absQty = qty.abs();
+    final sign = qty < 0 ? '-' : '';
+    final uLower = masterUnit.toLowerCase().trim();
+    if (uLower == 'kg' && absQty > 0 && absQty < 1) return '$sign${_fmtNum(absQty * 1000)} gram';
+    if ((uLower == 'liter' || uLower == 'l') && absQty > 0 && absQty < 1) return '$sign${_fmtNum(absQty * 1000)} ml';
+    return '$sign${_fmtNum(absQty)} $masterUnit';
+  }
+
+  String _shortDate(String d) {
+    final p = d.split('-');
+    return p.length >= 3 ? '${p[2]}/${p[1]}' : d;
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.sizeOf(context).width > 800;
+
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(padding: const EdgeInsets.all(0), children: [
-        // Summary Cards
-        Row(children: [
-          _summaryCard('Penjualan', fmtPrice(summary['total_sales'] ?? 0), cs.primaryContainer.withValues(alpha: 0.3), cs.primary, cs),
-          const SizedBox(width: 8),
-          _summaryCard('Profit Bersih', fmtPrice(summary['total_profit'] ?? 0), Colors.green.withValues(alpha: 0.1), Colors.green, cs),
-          const SizedBox(width: 8),
-          _summaryCard('Transaksi', '${summary['total_transactions'] ?? 0}', cs.secondaryContainer.withValues(alpha: 0.3), cs.secondary, cs),
-        ]),
-        const SizedBox(height: 16),
-
-        // Charts — Responsive: chart + daily recap
-        LayoutBuilder(builder: (_, constraints) {
-          final isWide = constraints.maxWidth > 800;
-          final chart28Widget = _buildChart28(cs);
-          final recapWidget = _buildDailyRecap(cs);
-          
-          if (isWide) {
-            return IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Expanded(flex: 3, child: chart28Widget),
-              const SizedBox(width: 12),
-              Expanded(flex: 2, child: recapWidget),
-            ]));
-          } else {
-            return Column(children: [
-              chart28Widget,
-              const SizedBox(height: 12),
-              recapWidget,
-            ]);
-          }
-        }),
-        const SizedBox(height: 16),
-
-        // Low Stock + Top Products
-        LayoutBuilder(builder: (_, constraints) {
-          final isWide = constraints.maxWidth > 600;
-          final children = [
-            // Low Stock
-            Expanded(flex: 1, child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outlineVariant)),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [Icon(Icons.warning_amber, size: 16, color: cs.error), const SizedBox(width: 8),
-                  Text('Stok Rendah', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface))]),
-                const SizedBox(height: 8),
-                if (lowStock.isEmpty) Text('Semua stok aman 👍', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant))
-                else ...lowStock.take(8).map((item) => Container(
-                  margin: const EdgeInsets.only(bottom: 4), padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: cs.errorContainer.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8), border: Border.all(color: cs.error.withValues(alpha: 0.1))),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Expanded(child: Text(item['name'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
-                    Text('${_safeNum(item['stock']).round()} ${item['unit'] ?? ''}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.error)),
-                  ]),
-                )),
-              ]),
-            )),
-            SizedBox(width: isWide ? 12 : 0, height: isWide ? 0 : 12),
-            // Top Products
-            Expanded(flex: 1, child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outlineVariant)),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [Icon(Icons.emoji_events, size: 16, color: cs.primary), const SizedBox(width: 8),
-                  Text('Produk Terlaris (7 Hari)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface))]),
-                const SizedBox(height: 8),
-                if (topProducts.isEmpty) Text('Belum ada data penjualan', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant))
-                else ...topProducts.asMap().entries.map((e) => Container(
-                  margin: const EdgeInsets.only(bottom: 4), padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(8)),
-                  child: Row(children: [
-                    Container(width: 24, height: 24, decoration: BoxDecoration(color: cs.primaryContainer, shape: BoxShape.circle),
-                      child: Center(child: Text('${e.key + 1}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onPrimaryContainer)))),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(e.value['product_name'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
-                    Text(fmtPrice(e.value['total_revenue'] ?? 0), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary)),
-                  ]),
-                )),
-              ]),
-            )),
-          ];
-          return isWide ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: children) : Column(children: children.map((c) => c is Expanded ? SizedBox(width: double.infinity, child: c.child) : c).toList());
-        }),
+        // ── SECTION 1: Summary Cards ──
+        _buildSummaryCards(cs, isWide),
+        const SizedBox(height: 20),
+        // ── SECTION 2: 28-Day Trend Chart ──
+        _buildNativeChart(cs),
+        const SizedBox(height: 20),
+        // ── SECTION 3: Top Products + Top Waste ──
+        _buildBottomSection(cs, isWide),
+        const SizedBox(height: 24),
       ]),
     );
   }
 
-  Widget _buildChart28(ColorScheme cs) {
-    final allVals = chartData.expand((d) => [_safeNum(d['sales']), _safeNum(d['profit'])]);
-    final chartMax = allVals.isEmpty ? 1.0 : allVals.reduce((a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+  // ═══════════════════════════════════════════════════
+  // SECTION 1: Summary Cards
+  // ═══════════════════════════════════════════════════
+  Widget _buildSummaryCards(ColorScheme cs, bool isWide) {
+    final cards = [
+      _MetricData('Penjualan Hari Ini', fmtPrice(_safeNum(_summary['today_revenue'])), Icons.point_of_sale, const Color(0xFF2196F3), const Color(0xFFE3F2FD)),
+      _MetricData('Transaksi Hari Ini', '${(_safeNum(_summary['today_tx_count'])).round()}', Icons.receipt_long, const Color(0xFF7C4DFF), const Color(0xFFEDE7F6)),
+      _MetricData('Penjualan Bulan Ini', fmtPrice(_safeNum(_summary['monthly_revenue'])), Icons.trending_up, const Color(0xFF00BFA5), const Color(0xFFE0F2F1)),
+      _MetricData('HPP Bulan Ini', fmtPrice(_safeNum(_summary['monthly_cogs'])), Icons.account_balance_wallet, const Color(0xFFFF7043), const Color(0xFFFBE9E7)),
+      _MetricData('Profit Bulan Ini', fmtPrice(_safeNum(_summary['monthly_profit'])), Icons.savings, _safeNum(_summary['monthly_profit']) >= 0 ? const Color(0xFF43A047) : Colors.red, _safeNum(_summary['monthly_profit']) >= 0 ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE)),
+    ];
 
+    if (isWide) {
+      return Row(children: cards.map((m) => Expanded(child: Padding(
+        padding: EdgeInsets.only(right: m == cards.last ? 0 : 10),
+        child: _buildMetricCard(m, cs),
+      ))).toList());
+    }
+    // Mobile: 2-column grid
+    return Wrap(spacing: 10, runSpacing: 10, children: cards.map((m) => SizedBox(
+      width: (MediaQuery.sizeOf(context).width - 10) / 2 - 1,
+      child: _buildMetricCard(m, cs),
+    )).toList());
+  }
+
+  Widget _buildMetricCard(_MetricData m, ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.all(16),
-      height: 300,
-      decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outlineVariant)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(Icons.show_chart, size: 16, color: cs.onSurface), const SizedBox(width: 8),
-          Expanded(child: Text('Penjualan vs Profit (28 Hari)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface))),
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 12, height: 12, color: cs.primary), const SizedBox(width: 4),
-            const Text('Sales', style: TextStyle(fontSize: 10)), const SizedBox(width: 8),
-            Container(width: 12, height: 12, color: Colors.green), const SizedBox(width: 4),
-            const Text('Profit', style: TextStyle(fontSize: 10)),
-          ])
-        ]),
-        const SizedBox(height: 24),
-        if (chartData.isEmpty)
-          Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Belum ada data', style: TextStyle(color: cs.onSurfaceVariant))))
-        else
-          Expanded(child: BarChart(
-            BarChartData(
-              alignment: BarChartAlignment.spaceAround,
-              maxY: chartMax * 1.2,
-              barTouchData: BarTouchData(
-                touchTooltipData: BarTouchTooltipData(
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    final idx = group.x.toInt();
-                    if (idx < 0 || idx >= chartData.length) return null;
-                    return BarTooltipItem(
-                      '${_shortDate(chartData[idx]['date']?.toString() ?? '')}\n${_fmtK(rod.toY)}',
-                      const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    );
-                  }
-                ),
-              ),
-              titlesData: FlTitlesData(
-                show: true,
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    getTitlesWidget: (double value, TitleMeta meta) {
-                      final idx = value.toInt();
-                      if (idx < 0 || idx >= chartData.length) return const SizedBox();
-                      if (idx % 7 != 0 && idx != chartData.length - 1) return const SizedBox();
-                      return Padding(padding: const EdgeInsets.only(top: 8.0), child: Text(_shortDate(chartData[idx]['date']?.toString() ?? ''), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)));
-                    },
-                    reservedSize: 28,
-                  ),
-                ),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 40,
-                    getTitlesWidget: (value, meta) => Text(_fmtK(value), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
-                  ),
-                ),
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              ),
-              gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (value) => FlLine(color: cs.outlineVariant.withValues(alpha: 0.3), strokeWidth: 1)),
-              borderData: FlBorderData(show: false),
-              barGroups: chartData.asMap().entries.map((e) {
-                return BarChartGroupData(
-                  x: e.key,
-                  barRods: [
-                    BarChartRodData(
-                      toY: _safeNum(e.value['sales']),
-                      color: cs.primary.withValues(alpha: 0.8),
-                      width: 6,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    BarChartRodData(
-                      toY: _safeNum(e.value['profit']),
-                      color: Colors.green.withValues(alpha: 0.8),
-                      width: 6,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          )),
-      ]),
-    );
-  }
-
-  /// Daily Recap — text-based summary instead of bar chart
-  Widget _buildDailyRecap(ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outlineVariant)),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [m.bgColor, m.bgColor.withValues(alpha: 0.4)]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: m.color.withValues(alpha: 0.15)),
+        boxShadow: [BoxShadow(color: m.color.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4))],
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         Row(children: [
-          Icon(Icons.today, size: 16, color: cs.onSurface),
-          const SizedBox(width: 8),
-          Text('Rekap Hari Ini', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface)),
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(color: m.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+            child: Icon(m.icon, size: 18, color: m.color),
+          ),
+          const Spacer(),
         ]),
-        const SizedBox(height: 16),
-        _recapRow(Icons.receipt_long, 'Total Transaksi', '$_dailyTxCount', cs.primary, cs),
-        const SizedBox(height: 8),
-        _recapRow(Icons.attach_money, 'Pendapatan', fmtPrice(_dailySales), Colors.blue, cs),
-        const SizedBox(height: 8),
-        _recapRow(Icons.trending_up, 'Profit', fmtPrice(_dailyProfit), _dailyProfit >= 0 ? Colors.green : Colors.red, cs),
-        const SizedBox(height: 8),
-        _recapRow(Icons.inventory_2, 'Barang Terjual', '$_dailyItemsSold pcs', Colors.orange, cs),
-      ]),
-    );
-  }
-
-  Widget _recapRow(IconData icon, String label, String value, Color color, ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
-      ),
-      child: Row(children: [
-        Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, size: 18, color: color),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Text(label, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500))),
-        Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)))),
-      ]),
-    );
-  }
-
-  Widget _summaryCard(String label, String value, Color bg, Color textColor, ColorScheme cs) {
-    return Expanded(child: Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16), border: Border.all(color: textColor.withValues(alpha: 0.2))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+        const SizedBox(height: 12),
+        Text(m.label.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: m.color.withValues(alpha: 0.7), letterSpacing: 0.8)),
         const SizedBox(height: 4),
         FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
-          child: Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: textColor))),
+          child: Text(m.value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: m.color))),
       ]),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════
+  // SECTION 2: Native Bar Chart (28 Days)
+  // ═══════════════════════════════════════════════════
+  Widget _buildNativeChart(ColorScheme cs) {
+    if (_chart28.isEmpty) {
+      return Container(
+        height: 260,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outlineVariant)),
+        child: Center(child: Text('Belum ada data penjualan', style: TextStyle(color: cs.onSurfaceVariant))),
+      );
+    }
+
+    final maxSales = _chart28.map((d) => _safeNum(d['sales'])).reduce(max).clamp(1.0, double.infinity);
+    final maxProfit = _chart28.map((d) => _safeNum(d['profit'])).reduce(max).clamp(1.0, double.infinity);
+    final chartMax = max(maxSales, maxProfit);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      decoration: BoxDecoration(
+        color: cs.surfaceBright,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Header
+        Row(children: [
+          Icon(Icons.bar_chart, size: 18, color: cs.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Penjualan vs Profit (28 Hari)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface))),
+          _legendDot(cs.primary, 'Penjualan'),
+          const SizedBox(width: 12),
+          _legendDot(Colors.green.shade600, 'Profit'),
+        ]),
+        const SizedBox(height: 8),
+        // Y-axis labels + bars
+        SizedBox(
+          height: 220,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            // Y-axis
+            SizedBox(width: 44, height: 200, child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(_fmtK(chartMax), style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+              Text(_fmtK(chartMax * 0.75), style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+              Text(_fmtK(chartMax * 0.5), style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+              Text(_fmtK(chartMax * 0.25), style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+              Text('0', style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+            ])),
+            const SizedBox(width: 8),
+            // Bars area
+            Expanded(child: LayoutBuilder(builder: (_, constraints) {
+              return Stack(children: [
+                // Grid lines
+                ...List.generate(5, (i) => Positioned(
+                  left: 0, right: 0, bottom: (constraints.maxHeight - 20) * i / 4,
+                  child: Container(height: 0.5, color: cs.outlineVariant.withValues(alpha: 0.4)),
+                )),
+                // Bars
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: _chart28.asMap().entries.map((e) {
+                  final sales = _safeNum(e.value['sales']);
+                  final profit = _safeNum(e.value['profit']);
+                  final salesFraction = chartMax > 0 ? (sales / chartMax).clamp(0.0, 1.0) : 0.0;
+                  final profitFraction = chartMax > 0 ? (profit / chartMax).clamp(0.0, 1.0) : 0.0;
+                  final isHovered = _hoveredBarIndex == e.key;
+                  final dateStr = e.value['date']?.toString() ?? '';
+                  final showLabel = e.key % 7 == 0 || e.key == _chart28.length - 1;
+
+                  return Expanded(child: GestureDetector(
+                    onTapDown: (_) => setState(() => _hoveredBarIndex = e.key),
+                    onTapUp: (_) => Future.delayed(const Duration(seconds: 2), () { if (mounted) setState(() => _hoveredBarIndex = null); }),
+                    child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                      // Tooltip
+                      if (isHovered)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          margin: const EdgeInsets.only(bottom: 4),
+                          decoration: BoxDecoration(color: cs.inverseSurface, borderRadius: BorderRadius.circular(6)),
+                          child: Text('${_shortDate(dateStr)}\n${_fmtK(sales)} / ${_fmtK(profit)}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 8, color: cs.onInverseSurface, fontWeight: FontWeight.bold, height: 1.3)),
+                        ),
+                      // Bar pair
+                      SizedBox(height: constraints.maxHeight - 20, child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _bar(salesFraction, cs.primary.withValues(alpha: isHovered ? 1 : 0.75)),
+                          const SizedBox(width: 1),
+                          _bar(profitFraction, Colors.green.shade600.withValues(alpha: isHovered ? 1 : 0.7)),
+                        ],
+                      )),
+                      // X-axis label
+                      SizedBox(height: 20, child: showLabel
+                        ? Text(_shortDate(dateStr), style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant))
+                        : const SizedBox()),
+                    ]),
+                  ));
+                }).toList()),
+              ]);
+            })),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _bar(double fraction, Color color) {
+    return Expanded(child: FractionallySizedBox(
+      heightFactor: fraction > 0 ? fraction.clamp(0.01, 1.0) : 0.005,
+      alignment: Alignment.bottomCenter,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+        ),
+      ),
     ));
   }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+      const SizedBox(width: 4),
+      Text(label, style: const TextStyle(fontSize: 10)),
+    ]);
+  }
+
+  // ═══════════════════════════════════════════════════
+  // SECTION 3: Top Products + Top Waste
+  // ═══════════════════════════════════════════════════
+  Widget _buildBottomSection(ColorScheme cs, bool isWide) {
+    final productsWidget = _buildTopProducts(cs);
+    final wasteWidget = _buildTopWaste(cs);
+
+    if (isWide) {
+      return IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(flex: 1, child: productsWidget),
+        const SizedBox(width: 12),
+        Expanded(flex: 1, child: wasteWidget),
+      ]));
+    }
+    return Column(children: [productsWidget, const SizedBox(height: 12), wasteWidget]);
+  }
+
+  Widget _buildTopProducts(ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceBright,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 28, height: 28,
+            decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(8)),
+            child: Icon(Icons.emoji_events, size: 16, color: Colors.amber.shade800),
+          ),
+          const SizedBox(width: 10),
+          Text('10 Produk Terlaris', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface)),
+          const Spacer(),
+          Text('30 Hari', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
+        ]),
+        const SizedBox(height: 12),
+        if (_topProducts.isEmpty)
+          Padding(padding: const EdgeInsets.all(16), child: Center(child: Text('Belum ada data', style: TextStyle(color: cs.onSurfaceVariant))))
+        else
+          ..._topProducts.asMap().entries.map((e) {
+            final rank = e.key + 1;
+            final p = e.value;
+            final qty = _safeNum(p['total_qty']).round();
+            final revenue = _safeNum(p['total_revenue']);
+            final medalColor = rank == 1 ? Colors.amber : rank == 2 ? Colors.grey.shade400 : rank == 3 ? Colors.brown.shade300 : null;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: rank <= 3 ? medalColor!.withValues(alpha: 0.08) : cs.surfaceContainer,
+                borderRadius: BorderRadius.circular(10),
+                border: rank <= 3 ? Border.all(color: medalColor!.withValues(alpha: 0.2)) : null,
+              ),
+              child: Row(children: [
+                Container(
+                  width: 26, height: 26,
+                  decoration: BoxDecoration(
+                    color: medalColor ?? cs.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(child: Text('$rank', style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.bold,
+                    color: medalColor != null ? Colors.white : cs.onPrimaryContainer,
+                  ))),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(p['product_name']?.toString() ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                  Text('$qty terjual', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+                ])),
+                Text(fmtPrice(revenue), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary)),
+              ]),
+            );
+          }),
+      ]),
+    );
+  }
+
+  Widget _buildTopWaste(ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceBright,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 28, height: 28,
+            decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+            child: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade600),
+          ),
+          const SizedBox(width: 10),
+          Text('Top 5 Kerugian / Waste', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface)),
+          const Spacer(),
+          Text('Bulan Ini', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
+        ]),
+        const SizedBox(height: 12),
+        if (_topWaste.isEmpty)
+          Padding(padding: const EdgeInsets.all(16), child: Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.check_circle_outline, size: 40, color: Colors.green.shade300),
+              const SizedBox(height: 8),
+              Text('Tidak ada waste bulan ini 👍', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13)),
+            ]),
+          ))
+        else
+          ..._topWaste.asMap().entries.map((e) {
+            final w = e.value;
+            final qty = _safeNum(w['total_qty']);
+            final loss = _safeNum(w['total_loss']);
+            final unit = w['unit']?.toString() ?? '';
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.shade100),
+              ),
+              child: Row(children: [
+                Container(
+                  width: 26, height: 26,
+                  decoration: BoxDecoration(color: Colors.red.shade100, shape: BoxShape.circle),
+                  child: Center(child: Text('${e.key + 1}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red.shade700))),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(w['name']?.toString() ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                  Text(_fmtDynUnit(qty, unit), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+                ])),
+                Text('-${fmtPrice(loss)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+              ]),
+            );
+          }),
+      ]),
+    );
+  }
+}
+
+class _MetricData {
+  final String label, value;
+  final IconData icon;
+  final Color color, bgColor;
+  const _MetricData(this.label, this.value, this.icon, this.color, this.bgColor);
 }

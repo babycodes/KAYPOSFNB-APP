@@ -464,6 +464,90 @@ class Api {
         return rows.map((r) => Map<String, dynamic>.from(r)).toList();
       }
 
+      // --- REPORTS: DASHBOARD SUMMARY ---
+      if (path == '/reports/dashboard-summary') {
+        final now = DateTime.now();
+        final todayStart = '${now.toIso8601String().substring(0, 10)} 00:00:00';
+        final monthPrefix = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+
+        // Today's revenue & count (exclude voided)
+        final todayRows = await db.rawQuery('''
+          SELECT COUNT(*) as cnt, COALESCE(SUM(total_amount), 0) as revenue
+          FROM transactions
+          WHERE created_at >= ? AND (status IS NULL OR status != 'voided')
+        ''', [todayStart]);
+        final todayRevenue = (todayRows.first['revenue'] as num?)?.toDouble() ?? 0;
+        final todayTxCount = (todayRows.first['cnt'] as num?)?.toInt() ?? 0;
+
+        // Monthly revenue (exclude voided)
+        final monthRows = await db.rawQuery('''
+          SELECT COALESCE(SUM(total_amount), 0) as revenue
+          FROM transactions
+          WHERE created_at LIKE ? AND (status IS NULL OR status != 'voided')
+        ''', ['$monthPrefix%']);
+        final monthlyRevenue = (monthRows.first['revenue'] as num?)?.toDouble() ?? 0;
+
+        // Monthly COGS (HPP) — BOM-based: resep.qty_needed * bahan_baku.cost_price * effectiveQty
+        double monthlyCogs = 0;
+        try {
+          final txIds = await db.rawQuery(
+            "SELECT id FROM transactions WHERE created_at LIKE ? AND (status IS NULL OR status != 'voided')",
+            ['$monthPrefix%'],
+          );
+          for (var tx in txIds) {
+            final items = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [tx['id']]);
+            for (var item in items) {
+              final qty = (item['quantity'] as num?)?.toDouble() ?? 0;
+              final refundedQty = (item['refunded_qty'] as num?)?.toDouble() ?? 0;
+              final effectiveQty = qty - refundedQty;
+              if (effectiveQty <= 0) continue;
+              final productId = item['product_id'];
+              final hppRows = await db.rawQuery(
+                'SELECT IFNULL(SUM(r.qty_needed * b.cost_price), 0) as hpp FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = ?',
+                [productId],
+              );
+              final hppPerUnit = (hppRows.first['hpp'] as num?)?.toDouble() ?? 0;
+              monthlyCogs += hppPerUnit * effectiveQty;
+            }
+          }
+        } catch (_) {}
+
+        final monthlyProfit = monthlyRevenue - monthlyCogs;
+
+        return {
+          'today_revenue': todayRevenue,
+          'today_tx_count': todayTxCount,
+          'monthly_revenue': monthlyRevenue,
+          'monthly_cogs': monthlyCogs,
+          'monthly_profit': monthlyProfit,
+        };
+      }
+
+      // --- REPORTS: TOP WASTE (Top 5 by financial loss) ---
+      if (path == '/reports/top-waste') {
+        final now = DateTime.now();
+        final monthPrefix = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+        final rows = await db.rawQuery('''
+          SELECT il.bahan_baku_id,
+                 b.name, b.unit,
+                 COALESCE(SUM(ABS(il.qty_change)), 0) AS total_qty,
+                 COALESCE(SUM(ABS(il.financial_value)), 0) AS total_loss
+          FROM inventory_ledger il
+          JOIN bahan_baku b ON b.id = il.bahan_baku_id
+          WHERE il.transaction_type = 'WASTE' AND il.timestamp LIKE ?
+          GROUP BY il.bahan_baku_id
+          ORDER BY total_loss DESC
+          LIMIT 5
+        ''', ['$monthPrefix%']);
+        return rows.map((r) => {
+          'bahan_baku_id': r['bahan_baku_id'],
+          'name': r['name']?.toString() ?? '',
+          'unit': r['unit']?.toString() ?? '',
+          'total_qty': (r['total_qty'] as num?)?.toDouble() ?? 0,
+          'total_loss': (r['total_loss'] as num?)?.toDouble() ?? 0,
+        }).toList();
+      }
+
       // --- REPORTS: CHART 28 DAYS ---
       if (path == '/reports/chart28') {
         final past28 = DateTime.now().subtract(const Duration(days: 28)).toIso8601String().substring(0, 10);
