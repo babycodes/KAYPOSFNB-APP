@@ -403,13 +403,23 @@ class Api {
             WHERE td.transaction_id = ?
           ''', [t['id']]);
           List<Map<String, dynamic>> enrichedDetails = [];
+          double refundedAmount = 0;
           for (var d in details) {
             final dm = Map<String, dynamic>.from(d);
             dm['unit_used'] = dm['unit_used'] ?? 'pcs';
             enrichedDetails.add(dm);
+
+            final refundedQty = (dm['refunded_qty'] as num?)?.toDouble() ?? 0;
+            if (refundedQty > 0) {
+              final soldPrice = (dm['sold_price'] as num?)?.toDouble() ?? 0;
+              final discountPct = (dm['discount_percent'] as num?)?.toDouble() ?? 0;
+              final effectivePrice = soldPrice * (1 - discountPct / 100);
+              refundedAmount += refundedQty * effectivePrice;
+            }
           }
           final m = Map<String, dynamic>.from(t);
           m['items'] = enrichedDetails;
+          m['refunded_amount'] = refundedAmount;
           results.add(m);
         }
         

@@ -40,8 +40,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
         _topWaste = results[3] as List;
         _loading = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      debugPrint('Dashboard Load Error: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 

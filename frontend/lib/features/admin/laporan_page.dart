@@ -506,7 +506,11 @@ class _LaporanPageState extends State<LaporanPage> {
           ]))),
           DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(time))),
           DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(tx['cashier_name'] ?? '-'))),
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(fmtPrice(tx['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: txStatus == 'voided' ? cs.error : cs.primary, decoration: txStatus == 'voided' ? TextDecoration.lineThrough : null)))),
+          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(fmtPrice(tx['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: txStatus == 'voided' ? cs.error : cs.primary, decoration: txStatus == 'voided' ? TextDecoration.lineThrough : null)),
+            if (tx['refunded_amount'] != null && tx['refunded_amount'] > 0)
+              Text('- ${fmtPrice(tx['refunded_amount'])} (Refund)', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+          ]))),
           DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
             Text(tx['discount_total'] != null && tx['discount_total'] > 0 ? fmtPrice(tx['discount_total']) : '-', style: const TextStyle(color: Colors.green, fontSize: 13)),
             if (tx['discount_total'] != null && tx['discount_total'] > 0)
@@ -535,9 +539,13 @@ class _LaporanPageState extends State<LaporanPage> {
             Text(time, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
           ]),
           const SizedBox(height: 4),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(tx['cashier_name'] ?? '-', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-            Text(fmtPrice(tx['total_amount']), style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.primary)),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(fmtPrice(tx['total_amount']), style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.primary)),
+              if (tx['refunded_amount'] != null && tx['refunded_amount'] > 0)
+                Text('- ${fmtPrice(tx['refunded_amount'])} (Refund)', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+            ]),
           ]),
         ]))));
     });
