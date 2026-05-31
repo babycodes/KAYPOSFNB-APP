@@ -14,6 +14,8 @@ class _KartuStokPageState extends State<KartuStokPage> {
   bool _isLoading = true;
   int? _selectedKategoriId;
   late DateTimeRange _dateRange;
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -169,6 +171,10 @@ class _KartuStokPageState extends State<KartuStokPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isMobile = MediaQuery.sizeOf(context).width < 768;
+    // Filtered data based on search
+    final filteredData = _searchQuery.isEmpty
+      ? _data
+      : _data.where((d) => (d['name']?.toString() ?? '').toLowerCase().contains(_searchQuery.toLowerCase())).toList();
 
     // Summary totals
     double sumWasteValue = 0, sumRestockValue = 0;
@@ -178,7 +184,7 @@ class _KartuStokPageState extends State<KartuStokPage> {
     }
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // ── Header: Date Range + Filters ──
+      // ── Header: Date Range + Search + Filters ──
       Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
         FilledButton.icon(
           onPressed: _pickDateRange,
@@ -186,10 +192,21 @@ class _KartuStokPageState extends State<KartuStokPage> {
           label: Text('${_fmtDateShort(_dateRange.start)} — ${_fmtDateShort(_dateRange.end)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
           style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
         ),
+        SizedBox(width: isMobile ? double.infinity : 200, height: 36, child: TextField(
+          controller: _searchCtrl,
+          onChanged: (v) => setState(() => _searchQuery = v),
+          decoration: InputDecoration(
+            hintText: 'Cari bahan...', isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            prefixIcon: const Icon(Icons.search, size: 18),
+            suffixIcon: _searchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, size: 16), onPressed: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); }) : null,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.outlineVariant)),
+          ),
+          style: const TextStyle(fontSize: 13),
+        )),
         // Summary chips
         _summaryChip(cs, '📦 Restock', fmtPrice(sumRestockValue), Colors.green),
         _summaryChip(cs, '🗑️ Waste', fmtPrice(sumWasteValue), Colors.red),
-        _summaryChip(cs, '${_data.length} bahan', null, null),
+        _summaryChip(cs, '${filteredData.length}/${_data.length} bahan', null, null),
       ]),
       const SizedBox(height: 8),
       // ── Category Filter Chips ──
@@ -210,15 +227,15 @@ class _KartuStokPageState extends State<KartuStokPage> {
       // ── Body ──
       Expanded(child: _isLoading
         ? const Center(child: CircularProgressIndicator())
-        : _data.isEmpty
+        : filteredData.isEmpty
           ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
               Icon(Icons.fact_check_outlined, size: 64, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
               const SizedBox(height: 16),
-              Text('Belum ada data ledger', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
+              Text(_searchQuery.isNotEmpty ? 'Tidak ditemukan "$_searchQuery"' : 'Belum ada data ledger', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
             ]))
           : Center(child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: isMobile ? _buildMobileList(cs) : _buildDesktopTable(cs),
+              constraints: const BoxConstraints(maxWidth: 960),
+              child: isMobile ? _buildMobileList(cs, filteredData) : _buildDesktopTable(cs, filteredData),
             )),
       ),
     ]);
@@ -236,7 +253,7 @@ class _KartuStokPageState extends State<KartuStokPage> {
   }
 
   // ── Desktop: DataTable ──
-  Widget _buildDesktopTable(ColorScheme cs) {
+  Widget _buildDesktopTable(ColorScheme cs, List<dynamic> data) {
     return Container(
       decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outlineVariant)),
       child: ClipRRect(borderRadius: BorderRadius.circular(16), child: ListView(children: [
@@ -253,7 +270,7 @@ class _KartuStokPageState extends State<KartuStokPage> {
             DataColumn(label: Text('Sisa Sistem', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
             DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
           ],
-          rows: _data.map((d) {
+          rows: data.map((d) {
             final unit = d['unit']?.toString() ?? '';
             final totalIn = (d['total_in'] as num?)?.toDouble() ?? 0;
             final totalOut = (d['total_out'] as num?)?.toDouble() ?? 0;
@@ -287,11 +304,11 @@ class _KartuStokPageState extends State<KartuStokPage> {
   }
 
   // ── Mobile: Card List ──
-  Widget _buildMobileList(ColorScheme cs) {
+  Widget _buildMobileList(ColorScheme cs, List<dynamic> data) {
     return ListView.separated(
-      itemCount: _data.length, separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemCount: data.length, separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
-        final d = _data[i];
+        final d = data[i];
         final unit = d['unit']?.toString() ?? '';
         final totalIn = (d['total_in'] as num?)?.toDouble() ?? 0;
         final totalOut = (d['total_out'] as num?)?.toDouble() ?? 0;

@@ -118,11 +118,10 @@ class _LaporanPageState extends State<LaporanPage> {
         context: context,
         barrierDismissible: true,
         builder: (ctx) {
-          return StatefulBuilder(builder: (ctx, setDState) {
-            final status = txData['status']?.toString() ?? 'completed';
-            return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              child: Container(
+          final status = txData['status']?.toString() ?? 'completed';
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            child: Container(
                 width: 520,
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
@@ -178,7 +177,6 @@ class _LaporanPageState extends State<LaporanPage> {
                           final d = details[i];
                           final qty = (d['quantity'] as num?)?.toDouble() ?? 0;
                           final refundedQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0;
-                          final remainingQty = qty - refundedQty;
                           final soldPrice = (d['sold_price'] as num?)?.toDouble() ?? 0;
                           final discountPct = (d['discount_percent'] as num?)?.toDouble() ?? 0;
                           final effectivePrice = soldPrice * (1 - discountPct / 100);
@@ -193,84 +191,16 @@ class _LaporanPageState extends State<LaporanPage> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(d['product_name']?.toString() ?? '-', style: TextStyle(fontWeight: FontWeight.w600, decoration: isFullyRefunded ? TextDecoration.lineThrough : null, color: isFullyRefunded ? cs.onSurfaceVariant : null)),
+                                      Text(d['product_name']?.toString() ?? '-', style: TextStyle(fontWeight: FontWeight.w600, decoration: isFullyRefunded ? TextDecoration.lineThrough : null, color: isFullyRefunded ? Colors.grey : null)),
                                       Row(children: [
-                                        Text('${qty.round()} ${d['unit_used'] ?? 'pcs'}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                                        Text('${qty.round()} ${d['unit_used'] ?? 'pcs'} × ${fmtPrice(soldPrice)}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                                         if (refundedQty > 0)
                                           Text('  (refund: ${refundedQty.round()})', style: TextStyle(fontSize: 11, color: Colors.red.shade600, fontWeight: FontWeight.bold)),
                                       ]),
                                     ],
                                   ),
                                 ),
-                                Text(fmtPrice(effectiveSubtotal), style: TextStyle(fontWeight: FontWeight.bold, decoration: isFullyRefunded ? TextDecoration.lineThrough : null)),
-                                // Refund button (only if items remain)
-                                if (remainingQty > 0 && status != 'voided')
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 8),
-                                    child: SizedBox(
-                                      height: 28, width: 28,
-                                      child: IconButton(
-                                        padding: EdgeInsets.zero,
-                                        iconSize: 16,
-                                        icon: Icon(Icons.undo, color: Colors.red.shade400),
-                                        tooltip: 'Refund item ini',
-                                        onPressed: () async {
-                                          final qtyCtrl = TextEditingController(text: remainingQty.round().toString());
-                                          final confirmed = await showDialog<bool>(context: ctx, builder: (dlgCtx) {
-                                            return AlertDialog(
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                              title: Text('Refund: ${d['product_name']}', style: const TextStyle(fontSize: 16)),
-                                              content: Column(mainAxisSize: MainAxisSize.min, children: [
-                                                Text('Sisa yang bisa di-refund: ${remainingQty.round()}', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
-                                                const SizedBox(height: 12),
-                                                TextField(controller: qtyCtrl, decoration: InputDecoration(
-                                                  labelText: 'Jumlah refund', isDense: true, suffixText: 'pcs',
-                                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                                ), keyboardType: const TextInputType.numberWithOptions(decimal: false)),
-                                                const SizedBox(height: 8),
-                                                ListenableBuilder(listenable: qtyCtrl, builder: (_, _w) {
-                                                  final rQty = double.tryParse(qtyCtrl.text) ?? 0;
-                                                  final refundAmt = effectivePrice * rQty;
-                                                  if (rQty <= 0) return const SizedBox.shrink();
-                                                  return Container(
-                                                    padding: const EdgeInsets.all(8),
-                                                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                                                    child: Text('Pengembalian: ${fmtPrice(refundAmt)}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700)),
-                                                  );
-                                                }),
-                                              ]),
-                                              actions: [
-                                                TextButton(onPressed: () => Navigator.pop(dlgCtx, false), child: const Text('Batal')),
-                                                FilledButton(
-                                                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                                                  onPressed: () => Navigator.pop(dlgCtx, true),
-                                                  child: const Text('Konfirmasi Refund'),
-                                                ),
-                                              ],
-                                            );
-                                          });
-                                          if (confirmed != true) return;
-                                          final rQty = double.tryParse(qtyCtrl.text) ?? 0;
-                                          if (rQty <= 0 || rQty > remainingQty) return;
-                                          try {
-                                            await Api.post('/transactions/${txData['id']}/refund', body: {
-                                              'items': [{'detail_id': d['id'], 'qty_to_refund': rQty}],
-                                            });
-                                            // Reload data
-                                            final newRes = await Api.get('/transactions/${txData['id']}');
-                                            setDState(() {
-                                              txData = newRes['transaction'] as Map<String, dynamic>? ?? txData;
-                                              details = newRes['details'] as List? ?? details;
-                                            });
-                                            _loadData();
-                                            if (mounted) showAdminToast(context, '✅ Refund berhasil');
-                                          } catch (e) {
-                                            if (mounted) showAdminToast(context, '❌ $e');
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                  ),
+                                Text(fmtPrice(effectiveSubtotal), style: TextStyle(fontWeight: FontWeight.bold, decoration: isFullyRefunded ? TextDecoration.lineThrough : null, color: isFullyRefunded ? Colors.grey : null)),
                               ],
                             ),
                           );
@@ -315,7 +245,6 @@ class _LaporanPageState extends State<LaporanPage> {
                 ),
               ),
             );
-          });
         }
       );
     } catch (e) {

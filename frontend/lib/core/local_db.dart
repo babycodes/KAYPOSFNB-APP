@@ -115,6 +115,38 @@ class LocalDb {
             ON inventory_ledger (bahan_baku_id, timestamp)
           ''');
         } catch (_) {}
+        // Migrate CHECK constraint to include REFUND for existing DBs
+        try {
+          // Test if REFUND type is allowed; if not, recreate table
+          await db.execute("INSERT INTO inventory_ledger (bahan_baku_id, transaction_type, qty_change) VALUES (-999, 'REFUND', 0)");
+          await db.execute("DELETE FROM inventory_ledger WHERE bahan_baku_id = -999");
+        } catch (_) {
+          // CHECK constraint blocked 'REFUND' → recreate table
+          try {
+            await db.execute('ALTER TABLE inventory_ledger RENAME TO _old_inventory_ledger');
+            await db.execute('''
+              CREATE TABLE inventory_ledger (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                bahan_baku_id     INTEGER NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
+                timestamp         TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+                transaction_type  TEXT    NOT NULL CHECK(transaction_type IN ('RESTOCK','SALE','WASTE','ADJUSTMENT','REFUND')),
+                qty_change        REAL    NOT NULL,
+                financial_value   REAL    NOT NULL DEFAULT 0,
+                notes             TEXT    DEFAULT ''
+              )
+            ''');
+            await db.execute('''
+              INSERT INTO inventory_ledger (id, bahan_baku_id, timestamp, transaction_type, qty_change, financial_value, notes)
+              SELECT id, bahan_baku_id, timestamp, transaction_type, qty_change, financial_value, notes
+              FROM _old_inventory_ledger
+            ''');
+            await db.execute('DROP TABLE _old_inventory_ledger');
+            await db.execute('''
+              CREATE INDEX IF NOT EXISTS idx_ledger_bahan_ts
+              ON inventory_ledger (bahan_baku_id, timestamp)
+            ''');
+          } catch (_) {}
+        }
         // Module: Partial Refund support columns
         try { await db.execute("ALTER TABLE transactions ADD COLUMN status TEXT DEFAULT 'completed'"); } catch (_) {}
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN refunded_qty REAL DEFAULT 0'); } catch (_) {}
