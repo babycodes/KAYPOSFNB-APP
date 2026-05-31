@@ -1088,18 +1088,41 @@ class _KasirScreenState extends State<KasirScreen> {
               Flexible(child: txHistory.isEmpty
                 ? const Padding(padding: EdgeInsets.all(32), child: Text('Belum ada transaksi hari ini'))
                 : ListView.builder(shrinkWrap: true, itemCount: txHistory.length, padding: const EdgeInsets.all(12),
-                    itemBuilder: (_, i) { final tx = txHistory[i]; return Container(margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(12)),
+                    itemBuilder: (_, i) { final tx = txHistory[i];
+                      final txStatus = tx['status']?.toString() ?? 'completed';
+                      final isVoided = txStatus == 'voided';
+                      final isPartial = txStatus == 'partial_refund';
+                      return Container(margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isVoided ? Colors.red.shade50 : isPartial ? Colors.orange.shade50 : cs.surfaceContainer,
+                        borderRadius: BorderRadius.circular(12),
+                        border: isVoided ? Border.all(color: Colors.red.shade200) : isPartial ? Border.all(color: Colors.orange.shade200) : null,
+                      ),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('#${tx['id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)), Text('${tx['created_at'] ?? ''}'.split(' ').last.length >= 5 ? '${tx['created_at']}'.split(' ').last.substring(0, 5) : '', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant))]),
+                        Row(children: [
+                          Text('#${tx['id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          if (isVoided) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text('VOID', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)))]
+                          else if (isPartial) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)), child: const Text('REFUND', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)))],
+                          const Spacer(),
+                          Text('${tx['created_at'] ?? ''}'.split(' ').last.length >= 5 ? '${tx['created_at']}'.split(' ').last.substring(0, 5) : '', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+                        ]),
                         const SizedBox(height: 4),
-                        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(tx['cashier_name'] ?? '-', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)), Text(fmtPrice(tx['total_amount'] ?? 0), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: cs.primary))]),
+                        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                          Text(tx['cashier_name'] ?? '-', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                          Text(fmtPrice(tx['total_amount'] ?? 0), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: isVoided ? cs.error : cs.primary, decoration: isVoided ? TextDecoration.lineThrough : null)),
+                        ]),
                         const SizedBox(height: 4),
                         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Bayar: ${fmtPrice(tx['paid_amount'] ?? 0)}', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)), Text('Kembali: ${fmtPrice(tx['change_amount'] ?? 0)}', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant))]),
                         const SizedBox(height: 8),
-                        SizedBox(width: double.infinity, height: 32, child: FilledButton(onPressed: () => _reprintReceipt(tx['id']),
-                          style: FilledButton.styleFrom(backgroundColor: cs.primaryContainer, foregroundColor: cs.onPrimaryContainer, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                          child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.print, size: 12), SizedBox(width: 4), Text('Lihat / Cetak Ulang', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))]))),
+                        Row(children: [
+                          Expanded(child: SizedBox(height: 32, child: FilledButton(onPressed: () => _reprintReceipt(tx['id']),
+                            style: FilledButton.styleFrom(backgroundColor: cs.primaryContainer, foregroundColor: cs.onPrimaryContainer, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                            child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.print, size: 12), SizedBox(width: 4), Text('Cetak Ulang', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))])))),
+                          const SizedBox(width: 8),
+                          Expanded(child: SizedBox(height: 32, child: FilledButton(onPressed: () => _showKasirTxDetail(tx),
+                            style: FilledButton.styleFrom(backgroundColor: isVoided ? cs.errorContainer : cs.secondaryContainer, foregroundColor: isVoided ? cs.onErrorContainer : cs.onSecondaryContainer, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                            child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.receipt_long, size: 12), SizedBox(width: 4), Text('Detail & Refund', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))])))),
+                        ]),
                       ])); })),
             ]))))],
       // Held carts overlay
@@ -1317,6 +1340,156 @@ class _KasirScreenState extends State<KasirScreen> {
         const SizedBox(height: 4),
         Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: textColor)),
       ])));
+  }
+
+  /// ── Cashier: Transaction Detail with Item-Level Refund ──
+  Future<void> _showKasirTxDetail(Map<String, dynamic> tx) async {
+    try {
+      final res = await Api.get('/transactions/${tx['id']}');
+      var txData = res['transaction'] as Map<String, dynamic>? ?? tx;
+      var details = (res['details'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [];
+      if (!mounted) return;
+      final cs = Theme.of(context).colorScheme;
+
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => StatefulBuilder(builder: (ctx, setDState) {
+          final status = txData['status']?.toString() ?? 'completed';
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 460, maxHeight: MediaQuery.sizeOf(context).height * 0.85),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                // ── Header ──
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+                  decoration: BoxDecoration(
+                    color: status == 'voided' ? Colors.red.shade50 : cs.surfaceContainerHighest,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Row(children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Text('Transaksi #${txData['id']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        if (status == 'voided') ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)), child: const Text('VOID', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)))]
+                        else if (status == 'partial_refund') ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(6)), child: const Text('PARTIAL REFUND', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)))],
+                      ]),
+                      const SizedBox(height: 4),
+                      Text('${txData['created_at'] ?? ''} • ${txData['cashier_name'] ?? ''}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                    ])),
+                    IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.pop(ctx)),
+                  ]),
+                ),
+                const Divider(height: 1),
+                // ── Item List with Refund Buttons ──
+                Flexible(child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  itemCount: details.length,
+                  separatorBuilder: (_, _i) => Divider(height: 16, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                  itemBuilder: (_, i) {
+                    final d = details[i];
+                    final qty = (d['quantity'] as num?)?.toDouble() ?? 0;
+                    final refundedQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0;
+                    final remainingQty = qty - refundedQty;
+                    final soldPrice = (d['sold_price'] as num?)?.toDouble() ?? 0;
+                    final discountPct = (d['discount_percent'] as num?)?.toDouble() ?? 0;
+                    final effectivePrice = soldPrice * (1 - discountPct / 100);
+                    final effectiveSubtotal = effectivePrice * remainingQty;
+                    final isFullyRefunded = refundedQty >= qty;
+
+                    return Row(children: [
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(d['product_name']?.toString() ?? '-', style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13,
+                          decoration: isFullyRefunded ? TextDecoration.lineThrough : null,
+                          color: isFullyRefunded ? cs.onSurfaceVariant : null)),
+                        Row(children: [
+                          Text('${qty.round()} pcs × ${fmtPrice(soldPrice)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                          if (refundedQty > 0) Text('  (refund: ${refundedQty.round()})', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade600)),
+                        ]),
+                      ])),
+                      Text(fmtPrice(effectiveSubtotal), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, decoration: isFullyRefunded ? TextDecoration.lineThrough : null)),
+                      // Refund button
+                      if (remainingQty > 0 && status != 'voided')
+                        Padding(padding: const EdgeInsets.only(left: 8), child: SizedBox(width: 30, height: 30,
+                          child: IconButton(padding: EdgeInsets.zero, iconSize: 16,
+                            icon: Icon(Icons.undo, color: Colors.red.shade400),
+                            tooltip: 'Refund',
+                            onPressed: () async {
+                              final qtyCtrl = TextEditingController(text: remainingQty.round().toString());
+                              final confirmed = await showDialog<bool>(context: ctx, builder: (dlgCtx) => AlertDialog(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                title: Text('Refund: ${d['product_name']}', style: const TextStyle(fontSize: 15)),
+                                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                                  Text('Maks: ${remainingQty.round()} pcs', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                                  const SizedBox(height: 10),
+                                  TextField(controller: qtyCtrl, decoration: InputDecoration(
+                                    labelText: 'Jumlah refund', isDense: true, suffixText: 'pcs',
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  ), keyboardType: const TextInputType.numberWithOptions(decimal: false)),
+                                  const SizedBox(height: 8),
+                                  ListenableBuilder(listenable: qtyCtrl, builder: (_, __) {
+                                    final rQty = double.tryParse(qtyCtrl.text) ?? 0;
+                                    if (rQty <= 0) return const SizedBox.shrink();
+                                    return Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+                                      child: Text('Pengembalian: ${fmtPrice(effectivePrice * rQty)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red.shade700)));
+                                  }),
+                                ]),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(dlgCtx, false), child: const Text('Batal')),
+                                  FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                                    onPressed: () => Navigator.pop(dlgCtx, true), child: const Text('Konfirmasi Refund')),
+                                ],
+                              ));
+                              if (confirmed != true) return;
+                              final rQty = double.tryParse(qtyCtrl.text) ?? 0;
+                              if (rQty <= 0 || rQty > remainingQty) return;
+                              try {
+                                await Api.post('/transactions/${txData['id']}/refund', body: {
+                                  'items': [{'detail_id': d['id'], 'qty_to_refund': rQty}],
+                                });
+                                // Reload dialog data
+                                final newRes = await Api.get('/transactions/${txData['id']}');
+                                setDState(() {
+                                  txData = newRes['transaction'] as Map<String, dynamic>? ?? txData;
+                                  details = (newRes['details'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? details;
+                                });
+                                // Refresh parent data
+                                _loadData(); _loadHistory(); _loadDashboard(); _loadStockAlerts();
+                                if (mounted) showToast(context, '✅ Refund berhasil');
+                              } catch (e) {
+                                if (mounted) showToast(context, '❌ ${e.toString().replaceFirst("Exception: ", "")}');
+                              }
+                            },
+                          ),
+                        )),
+                    ]);
+                  },
+                )),
+                const Divider(height: 1),
+                // ── Footer Totals ──
+                Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('Total', style: TextStyle(fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
+                    Text(fmtPrice(txData['total_amount'] ?? 0), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: status == 'voided' ? cs.error : cs.primary)),
+                  ]),
+                  const SizedBox(height: 4),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('Bayar', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                    Text(fmtPrice(txData['paid_amount'] ?? 0), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ]),
+                ])),
+              ]),
+            ),
+          );
+        }),
+      );
+    } catch (e) {
+      if (mounted) showToast(context, 'Gagal memuat detail: $e');
+    }
   }
 
   Future<void> _reprintReceipt(dynamic txId) async {
