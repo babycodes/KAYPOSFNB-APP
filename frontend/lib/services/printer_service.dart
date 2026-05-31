@@ -131,6 +131,9 @@ class PrinterService {
         final file = File('/dev/usb/lp0');
         await file.writeAsBytes(bytes, mode: FileMode.append);
       } catch (e) {
+        if (e is FileSystemException || e is PathNotFoundException) {
+          throw Exception("Gagal mencetak: Printer tidak terhubung atau /dev/usb/lp0 tidak ditemukan.");
+        }
         throw Exception("Gagal print ke /dev/usb/lp0. Pastikan user masuk group 'lp': $e");
       }
       return;

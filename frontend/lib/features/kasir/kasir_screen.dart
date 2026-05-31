@@ -1409,7 +1409,7 @@ class _KasirScreenState extends State<KasirScreen> {
                 final item = items[i];
                 final qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
                 final qtyStr = qty == qty.truncateToDouble() ? qty.truncate().toString() : qty.toStringAsFixed(2);
-                final name = item['product_name']?.toString() ?? '';
+                final name = (item['product'] is Map) ? (item['product']['name']?.toString() ?? '') : (item['product_name']?.toString() ?? '');
                 final addonSummary = item['addon_summary']?.toString() ?? '';
                 
                 return Padding(

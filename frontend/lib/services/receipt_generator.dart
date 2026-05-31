@@ -97,7 +97,10 @@ class ReceiptGenerator {
 
       if (isPaket) {
         // Line 1: Package Name (left) + Subtotal (right)
-        final paketName = d['product_name']?.toString() ?? '';
+        final refundedQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0.0;
+        final isFullyRefunded = refundedQty >= qty;
+        final refTag = isFullyRefunded ? ' (Refund)' : (refundedQty > 0 ? ' (Ref: ${refundedQty.round()})' : '');
+        final paketName = (d['product_name']?.toString() ?? '') + refTag;
         final subtotalStr = _formatReceiptPrice(d['subtotal']);
         int combinedLen = paketName.length + subtotalStr.length;
         
@@ -130,8 +133,13 @@ class ReceiptGenerator {
           bytes += generator.text('  Disc: -${_formatReceiptPrice(itemDiscount)}', styles: const PosStyles(align: PosAlign.left));
         }
       } else {
+        final refundedQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0.0;
+        final isFullyRefunded = refundedQty >= qty;
+        final refTag = isFullyRefunded ? ' (Refund)' : (refundedQty > 0 ? ' (Ref: ${refundedQty.round()})' : '');
+
         if (lastProductId != d['product_id'] || d['product_id'] == null) {
-          bytes += generator.text(d['product_name']?.toString() ?? '', styles: const PosStyles(bold: true));
+          final prodName = (d['product_name']?.toString() ?? '') + refTag;
+          bytes += generator.text(prodName, styles: const PosStyles(bold: true));
           lastProductId = d['product_id'];
         }
         
@@ -171,8 +179,18 @@ class ReceiptGenerator {
     bytes += generator.hr(ch: '-');
 
     // Totals
+    double refundedAmount = 0.0;
+    for (var d in details) {
+      final soldPrice = (d['sold_price'] as num?)?.toDouble() ?? 0.0;
+      final discountPct = (d['discount_percent'] as num?)?.toDouble() ?? 0.0;
+      final effectivePrice = soldPrice * (1 - discountPct / 100);
+      final rQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0.0;
+      refundedAmount += effectivePrice * rQty;
+    }
+
     final totalAmount = (transaction['total_amount'] as num?)?.toDouble() ?? 0.0;
     final totalDiscount = (transaction['discount_total'] as num?)?.toDouble() ?? 0.0;
+    final originalTotal = totalAmount + refundedAmount;
     
     double systemPromo = 0.0;
     for (var d in details) {
@@ -184,10 +202,21 @@ class ReceiptGenerator {
 
     final hargaAkhir = totalAmount - totalDiscount;
 
-    bytes += generator.row([
-      PosColumn(text: 'Harga Awal', width: 6),
-      PosColumn(text: fmtPrice(totalAmount), width: 6, styles: const PosStyles(align: PosAlign.right)),
-    ]);
+    if (refundedAmount > 0) {
+      bytes += generator.row([
+        PosColumn(text: 'Harga Awal', width: 6),
+        PosColumn(text: fmtPrice(originalTotal), width: 6, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+      bytes += generator.row([
+        PosColumn(text: 'Di-refund', width: 6),
+        PosColumn(text: '-${fmtPrice(refundedAmount)}', width: 6, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    } else {
+      bytes += generator.row([
+        PosColumn(text: 'Harga Awal', width: 6),
+        PosColumn(text: fmtPrice(totalAmount), width: 6, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
 
     if (systemPromo > 0) {
       bytes += generator.row([
@@ -261,7 +290,7 @@ class ReceiptGenerator {
     for (var item in items) {
       final qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
       final qtyStr = qty == qty.truncateToDouble() ? qty.truncate().toString() : qty.toStringAsFixed(2);
-      final name = item['product_name']?.toString() ?? '';
+      final name = (item['product'] is Map) ? (item['product']['name']?.toString() ?? '') : (item['product_name']?.toString() ?? '');
       
       bytes += generator.text('$qtyStr x $name', styles: const PosStyles(align: PosAlign.left, bold: true));
       
