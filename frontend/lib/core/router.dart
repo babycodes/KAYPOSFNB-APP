@@ -15,6 +15,7 @@ import '../features/admin/karyawan_page.dart';
 import '../features/admin/diskon_page.dart';
 import '../features/admin/settings_page.dart';
 import '../features/admin/paket_page.dart';
+import '../features/admin/kartu_stok_page.dart';
 
 CustomTransitionPage _fadeTransition(Widget child) {
   return CustomTransitionPage(
@@ -42,6 +43,7 @@ final appRouter = GoRouter(
         GoRoute(path: '/admin/kategori', pageBuilder: (context, state) => _fadeTransition(const KategoriPage())),
         GoRoute(path: '/admin/kategori-bahan', pageBuilder: (context, state) => _fadeTransition(const KategoriBahanPage())),
         GoRoute(path: '/admin/bahan-baku', pageBuilder: (context, state) => _fadeTransition(const BahanBakuPage())),
+        GoRoute(path: '/admin/kartu-stok', pageBuilder: (context, state) => _fadeTransition(const KartuStokPage())),
         GoRoute(path: '/admin/laporan', pageBuilder: (context, state) => _fadeTransition(const LaporanPage())),
         GoRoute(path: '/admin/karyawan', pageBuilder: (context, state) => _fadeTransition(const KaryawanPage())),
         GoRoute(path: '/admin/diskon', pageBuilder: (context, state) => _fadeTransition(const DiskonPage())),

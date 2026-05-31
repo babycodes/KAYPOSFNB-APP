@@ -586,6 +586,112 @@ class Api {
           return map;
         }).toList();
       }
+      // --- REPORTS: KARTU STOK (Inventory Ledger per bahan_baku) ---
+      if (path.startsWith('/reports/kartu-stok')) {
+        String? dateStart;
+        String? dateEnd;
+        int? kategoriId;
+        if (path.contains('?')) {
+          final query = path.split('?').last;
+          for (final part in query.split('&')) {
+            final kv = part.split('=');
+            if (kv.length == 2) {
+              if (kv[0] == 'start_date') dateStart = kv[1];
+              if (kv[0] == 'end_date') dateEnd = kv[1];
+              if (kv[0] == 'kategori_id') kategoriId = int.tryParse(kv[1]);
+            }
+          }
+        }
+        // Default: current month 1st → today
+        final now = DateTime.now();
+        dateStart ??= '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
+        dateEnd ??= '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+        // Base query: all bahan_baku (optionally filtered by category)
+        final bahanWhere = kategoriId != null ? 'WHERE b.kategori_bahan_id = ?' : '';
+        final bahanArgs = kategoriId != null ? [kategoriId] : <dynamic>[];
+
+        final bahanRows = await db.rawQuery('''
+          SELECT b.id, b.name, b.unit, b.stock as system_stock, b.cost_price,
+                 COALESCE(kb.name, b.kategori, 'Lainnya') as kategori_name,
+                 b.kategori_bahan_id
+          FROM bahan_baku b
+          LEFT JOIN kategori_bahan kb ON b.kategori_bahan_id = kb.id
+          $bahanWhere
+          ORDER BY b.name ASC
+        ''', bahanArgs);
+
+        final tsStart = '$dateStart 00:00:00';
+        final tsEnd = '$dateEnd 23:59:59';
+
+        List<Map<String, dynamic>> result = [];
+        for (final bahan in bahanRows) {
+          final bbId = (bahan['id'] as num).toInt();
+
+          // Aggregate ledger by transaction_type for this material + date range
+          final ledger = await db.rawQuery('''
+            SELECT
+              transaction_type,
+              COALESCE(SUM(qty_change), 0) AS total_qty,
+              COALESCE(SUM(financial_value), 0) AS total_value,
+              COUNT(*) AS entry_count
+            FROM inventory_ledger
+            WHERE bahan_baku_id = ?
+              AND timestamp >= ? AND timestamp <= ?
+            GROUP BY transaction_type
+          ''', [bbId, tsStart, tsEnd]);
+
+          double totalIn = 0, totalOut = 0, totalWaste = 0, totalAdjustment = 0;
+          double restockValue = 0, wasteValue = 0, adjustmentValue = 0;
+          int restockCount = 0, saleCount = 0, wasteCount = 0, adjCount = 0;
+
+          for (final row in ledger) {
+            final type = row['transaction_type']?.toString() ?? '';
+            final qty = (row['total_qty'] as num?)?.toDouble() ?? 0;
+            final val = (row['total_value'] as num?)?.toDouble() ?? 0;
+            final cnt = (row['entry_count'] as num?)?.toInt() ?? 0;
+            switch (type) {
+              case 'RESTOCK':
+                totalIn = qty;
+                restockValue = val;
+                restockCount = cnt;
+              case 'SALE':
+                totalOut = qty.abs();
+                saleCount = cnt;
+              case 'WASTE':
+                totalWaste = qty.abs();
+                wasteValue = val;
+                wasteCount = cnt;
+              case 'ADJUSTMENT':
+                totalAdjustment = qty;
+                adjustmentValue = val;
+                adjCount = cnt;
+            }
+          }
+
+          result.add({
+            'id': bbId,
+            'name': bahan['name'],
+            'unit': bahan['unit'],
+            'kategori_name': bahan['kategori_name'],
+            'kategori_bahan_id': bahan['kategori_bahan_id'],
+            'system_stock': (bahan['system_stock'] as num?)?.toDouble() ?? 0,
+            'cost_price': (bahan['cost_price'] as num?)?.toDouble() ?? 0,
+            'total_in': totalIn,
+            'total_out': totalOut,
+            'total_waste': totalWaste,
+            'total_adjustment': totalAdjustment,
+            'restock_value': restockValue,
+            'waste_value': wasteValue,
+            'adjustment_value': adjustmentValue,
+            'restock_count': restockCount,
+            'sale_count': saleCount,
+            'waste_count': wasteCount,
+            'adjustment_count': adjCount,
+          });
+        }
+        return {'data': result, 'start_date': dateStart, 'end_date': dateEnd};
+      }
 
       throw Exception('Endpoint GET $path belum diimplementasikan di Offline Router');
     } catch (e) {
@@ -849,6 +955,14 @@ class Api {
                   final bbUnit = bbRow.isNotEmpty ? (bbRow.first['unit']?.toString().toLowerCase() ?? '') : '';
                   final deduction = (bbUnit == 'kg' || bbUnit == 'liter' || bbUnit == 'l') ? rawDeduction / 1000 : rawDeduction;
                   await txn.rawUpdate('UPDATE bahan_baku SET stock = stock - ? WHERE id = ?', [deduction, bbId]);
+                  // 📋 Inventory Ledger: record SALE deduction
+                  try { await txn.insert('inventory_ledger', {
+                    'bahan_baku_id': bbId,
+                    'transaction_type': 'SALE',
+                    'qty_change': -deduction,
+                    'financial_value': 0,
+                    'notes': 'Auto-deduct: ${ri['product_name']}',
+                  }); } catch (_) {}
                 }
               }
             } else {
@@ -863,6 +977,14 @@ class Api {
                 final bbUnit = bbRow.isNotEmpty ? (bbRow.first['unit']?.toString().toLowerCase() ?? '') : '';
                 final deduction = (bbUnit == 'kg' || bbUnit == 'liter' || bbUnit == 'l') ? rawDeduction / 1000 : rawDeduction;
                 await txn.rawUpdate('UPDATE bahan_baku SET stock = stock - ? WHERE id = ?', [deduction, bbId]);
+                // 📋 Inventory Ledger: record SALE deduction
+                try { await txn.insert('inventory_ledger', {
+                  'bahan_baku_id': bbId,
+                  'transaction_type': 'SALE',
+                  'qty_change': -deduction,
+                  'financial_value': 0,
+                  'notes': 'Auto-deduct: ${ri['product_name']}',
+                }); } catch (_) {}
               }
             }
           }
@@ -1022,6 +1144,51 @@ class Api {
           'product_id': body?['product_id'],
           'qty': (body?['qty'] as num?)?.toInt() ?? 1,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
+        return {'success': true};
+      }
+      // --- INVENTORY: STOCK OPNAME / ADJUSTMENT ---
+      if (path == '/inventory/opname') {
+        final bbId = (body?['bahan_baku_id'] as num?)?.toInt();
+        final actualStock = (body?['actual_physical_stock'] as num?)?.toDouble();
+        final notes = body?['notes']?.toString() ?? '';
+
+        if (bbId == null || actualStock == null) {
+          throw Exception('bahan_baku_id dan actual_physical_stock wajib diisi');
+        }
+        if (actualStock < 0) throw Exception('Stok fisik tidak boleh negatif');
+
+        await db.transaction((txn) async {
+          // Fetch current DB stock and cost_price
+          final bbRow = await txn.query('bahan_baku',
+              columns: ['stock', 'cost_price'],
+              where: 'id = ?',
+              whereArgs: [bbId]);
+          if (bbRow.isEmpty) throw Exception('Bahan baku tidak ditemukan');
+
+          final currentStock = (bbRow.first['stock'] as num?)?.toDouble() ?? 0;
+          final costPrice = (bbRow.first['cost_price'] as num?)?.toDouble() ?? 0;
+
+          // Calculate discrepancy
+          final qtyChange = actualStock - currentStock;
+          // Financial impact: positive if surplus (gain), negative if shrinkage (loss)
+          final financialValue = qtyChange * costPrice;
+
+          // Update bahan_baku stock to the physical count
+          await txn.update('bahan_baku',
+              {'stock': actualStock},
+              where: 'id = ?',
+              whereArgs: [bbId]);
+
+          // Insert ADJUSTMENT ledger row
+          await txn.insert('inventory_ledger', {
+            'bahan_baku_id': bbId,
+            'transaction_type': 'ADJUSTMENT',
+            'qty_change': qtyChange,
+            'financial_value': financialValue,
+            'notes': 'Stock Opname: ${notes.isEmpty ? "Penyesuaian stok" : notes}',
+          });
+        });
+
         return {'success': true};
       }
 

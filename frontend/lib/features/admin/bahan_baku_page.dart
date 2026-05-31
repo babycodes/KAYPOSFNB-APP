@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/api.dart';
 import '../../core/helpers.dart';
+import '../../core/local_db.dart';
 import '../kasir/dialogs/confirm_dialog.dart';
+import 'waste_report_dialog.dart';
 
 class BahanBakuPage extends StatefulWidget {
   const BahanBakuPage({super.key});
@@ -132,6 +134,17 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                   'stock': newStock,
                   'cost_price': newCostPrice,
                 });
+                // 📋 Inventory Ledger: record RESTOCK
+                try {
+                  final db = await LocalDb.instance;
+                  await db.insert('inventory_ledger', {
+                    'bahan_baku_id': item['id'],
+                    'transaction_type': 'RESTOCK',
+                    'qty_change': addQty, // Already in master unit
+                    'financial_value': addCost,
+                    'notes': 'Admin Restock',
+                  });
+                } catch (_) {}
                 if (mounted) Navigator.pop(dialogContext);
                 _loadData();
               } catch (e) {
@@ -194,6 +207,15 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                 isDense: true, filled: true, fillColor: cs.surfaceBright,
               ),
             )),
+            const SizedBox(width: 8),
+            FilledButton.tonalIcon(
+              onPressed: () => WasteReportDialog.show(context, onSaved: _loadData),
+              icon: Icon(Icons.delete_sweep, size: 18, color: Colors.orange.shade700),
+              label: const Text('Lapor Waste', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
           ]),
         ),
         const SizedBox(height: 8),

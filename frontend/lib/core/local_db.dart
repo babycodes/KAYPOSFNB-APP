@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
+import '../services/inventory_ledger_service.dart';
 
 class LocalDb {
   static Database? _db;
@@ -97,6 +98,8 @@ class LocalDb {
             }
           }
         } catch (_) {}
+        // Module: Inventory Ledger (Stock Opname & Kartu Stok)
+        try { await InventoryLedgerService.ensureTable(); } catch (_) {}
       },
       onCreate: (db, version) async {
         // ──────────────────────────────────────────────────
