@@ -331,11 +331,26 @@ class Api {
           }
         } catch (_) {}
         
+        final cashierRows = await db.rawQuery('''
+          SELECT cashier_name, COUNT(id) as total_transactions, SUM(total_amount) as total_sales
+          FROM transactions
+          WHERE created_at >= ? AND (status IS NULL OR status != 'voided')
+          GROUP BY cashier_name
+          ORDER BY total_sales DESC
+        ''', [todayStart]);
+
+        final cashierBreakdown = cashierRows.map((r) => {
+          'cashier_name': r['cashier_name']?.toString() ?? 'Kasir Offline',
+          'total_transactions': (r['total_transactions'] as num?)?.toInt() ?? 0,
+          'total_sales': (r['total_sales'] as num?)?.toDouble() ?? 0.0,
+        }).toList();
+        
         return {
           'total_transactions': txRows.length,
           'total_sales': totalSales,
           'total_profit': totalProfit,
           'avg_transaction': txRows.isEmpty ? 0 : totalSales / txRows.length,
+          'cashier_breakdown': cashierBreakdown,
         };
       }
 

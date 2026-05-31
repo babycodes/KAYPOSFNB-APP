@@ -1076,6 +1076,56 @@ class _KasirScreenState extends State<KasirScreen> {
                 const SizedBox(width: 8),
                 _statCard('Rata-Rata', fmtPrice(todayStats['avg_transaction'] ?? 0), cs.tertiaryContainer.withValues(alpha: 0.3), cs.tertiary),
               ]),
+              if (todayStats['cashier_breakdown'] != null && (todayStats['cashier_breakdown'] as List).isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Rincian per Kasir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                ),
+                const SizedBox(height: 8),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: (todayStats['cashier_breakdown'] as List).length,
+                    itemBuilder: (context, index) {
+                      final item = (todayStats['cashier_breakdown'] as List)[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: cs.primaryContainer,
+                              child: Icon(Icons.person, size: 16, color: cs.onPrimaryContainer),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item['cashier_name']?.toString() ?? 'Kasir Offline', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  Text('${item['total_transactions']} transaksi', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              fmtPrice(item['total_sales'] ?? 0),
+                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: cs.primary),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ])))))],
       // History overlay
       if (showHistory) ...[_overlay(() => setState(() => showHistory = false)),
