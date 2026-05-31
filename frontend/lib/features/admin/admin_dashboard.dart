@@ -122,36 +122,38 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: _buildMetricCard(m, cs),
       ))).toList());
     }
-    // Mobile: 2-column grid
-    return Wrap(spacing: 10, runSpacing: 10, children: cards.map((m) => SizedBox(
-      width: (MediaQuery.sizeOf(context).width - 10) / 2 - 1,
-      child: _buildMetricCard(m, cs),
-    )).toList());
+    // Mobile: 2-column grid responding to actual available width
+    return LayoutBuilder(builder: (context, constraints) {
+      final w = (constraints.maxWidth - 10) / 2;
+      return Wrap(
+        spacing: 10, runSpacing: 10,
+        children: cards.map((m) => SizedBox(width: w, child: _buildMetricCard(m, cs))).toList(),
+      );
+    });
   }
 
   Widget _buildMetricCard(_MetricData m, ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [m.bgColor, m.bgColor.withValues(alpha: 0.4)]),
+        color: m.color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: m.color.withValues(alpha: 0.15)),
-        boxShadow: [BoxShadow(color: m.color.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4))],
+        border: Border.all(color: m.color.withValues(alpha: 0.2)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         Row(children: [
           Container(
             width: 36, height: 36,
-            decoration: BoxDecoration(color: m.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(color: m.color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(10)),
             child: Icon(m.icon, size: 18, color: m.color),
           ),
           const Spacer(),
         ]),
         const SizedBox(height: 12),
-        Text(m.label.toUpperCase(), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.black54, letterSpacing: 0.8)),
+        Text(m.label.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: cs.onSurfaceVariant, letterSpacing: 0.8)),
         const SizedBox(height: 4),
         FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
-          child: Text(m.value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black87))),
+          child: Text(m.value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: cs.onSurface))),
       ]),
     );
   }
@@ -262,16 +264,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _bar(double fraction, Color color) {
-    return Expanded(child: FractionallySizedBox(
+    return FractionallySizedBox(
       heightFactor: fraction > 0 ? fraction.clamp(0.01, 1.0) : 0.005,
       alignment: Alignment.bottomCenter,
       child: Container(
+        width: 10,
         decoration: BoxDecoration(
           color: color,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
         ),
       ),
-    ));
+    );
   }
 
   Widget _legendDot(Color color, String label) {
@@ -401,22 +404,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.red.shade50.withValues(alpha: 0.5),
+                color: cs.errorContainer.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.red.shade100),
+                border: Border.all(color: cs.error.withValues(alpha: 0.2)),
               ),
               child: Row(children: [
                 Container(
                   width: 26, height: 26,
-                  decoration: BoxDecoration(color: Colors.red.shade100, shape: BoxShape.circle),
-                  child: Center(child: Text('${e.key + 1}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red.shade700))),
+                  decoration: BoxDecoration(color: cs.errorContainer, shape: BoxShape.circle),
+                  child: Center(child: Text('${e.key + 1}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: cs.error))),
                 ),
                 const SizedBox(width: 10),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(w['name']?.toString() ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
                   Text(_fmtDynUnit(qty, unit), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
                 ])),
-                Text('-${fmtPrice(loss)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                Text('-${fmtPrice(loss)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.error)),
               ]),
             );
           }),
