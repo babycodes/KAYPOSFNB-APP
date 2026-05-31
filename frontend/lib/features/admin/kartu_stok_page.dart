@@ -51,7 +51,7 @@ class _KartuStokPageState extends State<KartuStokPage> {
 
   Future<void> _pickDateRange() async {
     final result = await showDateRangePicker(
-      context: context, firstDate: DateTime(2024), lastDate: DateTime.now(), initialDateRange: _dateRange,
+      context: context, firstDate: DateTime(2020), lastDate: DateTime(2030, 12, 31), initialDateRange: _dateRange,
     );
     if (result != null) { setState(() => _dateRange = result); _loadData(); }
   }

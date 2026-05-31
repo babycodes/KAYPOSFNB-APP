@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/api.dart';
+import '../../core/auth_provider.dart';
 import '../../core/helpers.dart';
 import '../../core/local_db.dart';
 
@@ -43,12 +45,14 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
   int? _selectedProductId;
   final _prodQtyCtrl = TextEditingController(text: '1');
   String _prodReason = 'Tumpah';
+  final _prodCustomReasonCtrl = TextEditingController();
 
   // ── Tab B: Bahan Mentah ──
   int? _selectedBahanId;
   final _bahanQtyCtrl = TextEditingController();
   String _bahanReason = 'Basi';
   String _selectedBahanInputUnit = '';
+  final _bahanCustomReasonCtrl = TextEditingController();
 
   static const _prodReasons = ['Tumpah', 'Salah Bikin', 'Basi', 'Lainnya'];
   static const _bahanReasons = ['Basi', 'Jatuh', 'Rusak', 'Lainnya'];
@@ -63,6 +67,8 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
   void dispose() {
     _prodQtyCtrl.dispose();
     _bahanQtyCtrl.dispose();
+    _prodCustomReasonCtrl.dispose();
+    _bahanCustomReasonCtrl.dispose();
     super.dispose();
   }
 
@@ -87,6 +93,24 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
     }
   }
 
+  /// Resolves the final reason string, using custom text if "Lainnya" is selected.
+  String _resolveReason(String dropdownValue, TextEditingController customCtrl) {
+    if (dropdownValue == 'Lainnya') {
+      final custom = customCtrl.text.trim();
+      return custom.isEmpty ? 'Lainnya' : custom;
+    }
+    return dropdownValue;
+  }
+
+  /// Gets the current user name for audit trail.
+  String _getUserName() {
+    try {
+      return context.read<AuthProvider>().userName;
+    } catch (_) {
+      return 'Unknown';
+    }
+  }
+
   // ──────────────────────────────────────────────────
   // TAB A LOGIC: Produk Jadi (Finished Product Waste)
   // ──────────────────────────────────────────────────
@@ -95,14 +119,17 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
     final qty = double.tryParse(_prodQtyCtrl.text.replaceAll(',', '.')) ?? 0;
     if (qty <= 0) return;
 
+    final reason = _resolveReason(_prodReason, _prodCustomReasonCtrl);
+    final userName = _getUserName();
+
     setState(() => _isSaving = true);
 
     try {
       final db = await LocalDb.instance;
-      final productName = _products
-          .firstWhere((p) => p['id'] == _selectedProductId,
-              orElse: () => {'name': 'Unknown'})['name']
-          ?.toString() ?? 'Unknown';
+      final matchingProducts = _products.where((p) => p['id'] == _selectedProductId);
+      final productName = matchingProducts.isNotEmpty
+          ? matchingProducts.first['name']?.toString() ?? 'Unknown'
+          : 'Unknown';
 
       // Query resep (BOM) for this product
       final resepRows = await db.query('resep',
@@ -149,7 +176,7 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
             'transaction_type': 'WASTE',
             'qty_change': -deduction,
             'financial_value': financialLoss,
-            'notes': 'Produk Gagal: $productName - $_prodReason',
+            'notes': 'Produk Gagal: $productName - $reason [Oleh: $userName]',
           });
         }
       });
@@ -175,14 +202,16 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
     final inputQty = double.tryParse(_bahanQtyCtrl.text.replaceAll(',', '.')) ?? 0;
     if (inputQty <= 0) return;
 
+    final reason = _resolveReason(_bahanReason, _bahanCustomReasonCtrl);
+    final userName = _getUserName();
+
     setState(() => _isSaving = true);
 
     try {
       final db = await LocalDb.instance;
-      final bahan = _bahanBaku.firstWhere(
-          (b) => b['id'] == _selectedBahanId,
-          orElse: () => null);
-      if (bahan == null) throw Exception('Bahan tidak ditemukan');
+      final matchingBahan = _bahanBaku.where((b) => b['id'] == _selectedBahanId);
+      if (matchingBahan.isEmpty) throw Exception('Bahan tidak ditemukan');
+      final bahan = matchingBahan.first;
 
       final masterUnit = bahan['unit']?.toString() ?? '';
       final costPrice = (bahan['cost_price'] as num?)?.toDouble() ?? 0;
@@ -207,7 +236,7 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
           'transaction_type': 'WASTE',
           'qty_change': -deductionInMasterUnit,
           'financial_value': financialLoss,
-          'notes': 'Bahan Rusak: $bahanName - $_bahanReason',
+          'notes': 'Bahan Rusak: $bahanName - $reason [Oleh: $userName]',
         });
       });
 
@@ -260,7 +289,7 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         width: 520,
-        height: 520,
+        height: 560,
         padding: const EdgeInsets.only(top: 20, left: 24, right: 24, bottom: 16),
         child: DefaultTabController(
           length: 2,
@@ -429,6 +458,21 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
             },
           ),
 
+          // Custom reason input (shown when "Lainnya" is selected)
+          if (_prodReason == 'Lainnya') ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: _prodCustomReasonCtrl,
+              decoration: InputDecoration(
+                labelText: 'Tuliskan alasan',
+                isDense: true,
+                hintText: 'Contoh: Tumpah dari dispenser',
+                prefixIcon: const Icon(Icons.edit_note, size: 20),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+
           const SizedBox(height: 20),
 
           // Submit button
@@ -461,12 +505,14 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
   // TAB B UI: Bahan Mentah
   // ──────────────────────────────────────────────────
   Widget _buildRawMaterialTab(ColorScheme cs) {
-    // Resolve selected bahan info
-    final selectedBahan = _selectedBahanId != null
-        ? _bahanBaku.cast<Map<String, dynamic>?>().firstWhere(
-            (b) => b != null && b['id'] == _selectedBahanId,
-            orElse: () => null)
-        : null;
+    // Resolve selected bahan info — FIX: use .where().firstOrNull to avoid type error
+    Map<String, dynamic>? selectedBahan;
+    if (_selectedBahanId != null) {
+      final matches = _bahanBaku.where((b) => b['id'] == _selectedBahanId);
+      if (matches.isNotEmpty) {
+        selectedBahan = Map<String, dynamic>.from(matches.first);
+      }
+    }
     final baseUnit = selectedBahan?['unit']?.toString() ?? '';
     final stock = (selectedBahan?['stock'] as num?)?.toDouble() ?? 0;
     final costPrice = (selectedBahan?['cost_price'] as num?)?.toDouble() ?? 0;
@@ -519,13 +565,15 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
             }).toList(),
             onChanged: (v) {
               if (v != null) {
-                final bahan = _bahanBaku.firstWhere((b) => b['id'] == v);
-                final unit = bahan['unit']?.toString() ?? '';
-                final options = _getUnitOptions(unit);
-                setState(() {
-                  _selectedBahanId = v;
-                  _selectedBahanInputUnit = options.first;
-                });
+                final matches = _bahanBaku.where((b) => b['id'] == v);
+                if (matches.isNotEmpty) {
+                  final unit = matches.first['unit']?.toString() ?? '';
+                  final options = _getUnitOptions(unit);
+                  setState(() {
+                    _selectedBahanId = v;
+                    _selectedBahanInputUnit = options.first;
+                  });
+                }
               }
             },
           ),
@@ -597,7 +645,7 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
               padding: const EdgeInsets.only(top: 8),
               child: ListenableBuilder(
                 listenable: _bahanQtyCtrl,
-                builder: (_, __) {
+                builder: (_, _w) {
                   final inputQty = double.tryParse(_bahanQtyCtrl.text.replaceAll(',', '.')) ?? 0;
                   final multiplier = _getUnitMultiplier(_selectedBahanInputUnit, baseUnit);
                   final wasteInMaster = inputQty * multiplier;
@@ -644,6 +692,21 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
               if (v != null) setState(() => _bahanReason = v);
             },
           ),
+
+          // Custom reason input (shown when "Lainnya" is selected)
+          if (_bahanReason == 'Lainnya') ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: _bahanCustomReasonCtrl,
+              decoration: InputDecoration(
+                labelText: 'Tuliskan alasan',
+                isDense: true,
+                hintText: 'Contoh: Terkontaminasi bahan kimia',
+                prefixIcon: const Icon(Icons.edit_note, size: 20),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
 
           const SizedBox(height: 20),
 

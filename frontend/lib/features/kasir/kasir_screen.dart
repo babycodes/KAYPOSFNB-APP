@@ -15,6 +15,7 @@ import 'dialogs/confirm_dialog.dart';
 import 'dialogs/printer_settings_dialog.dart';
 import '../auth/lock_screen.dart';
 import '../../services/printer_service.dart';
+import '../admin/waste_report_dialog.dart';
 
 class KasirScreen extends StatefulWidget {
   const KasirScreen({super.key});
@@ -864,6 +865,11 @@ class _KasirScreenState extends State<KasirScreen> {
                       _toolbarBtn(Icons.notifications, 'Stok', onTap: _showStockAlert,
                         badge: (_stockHabisCount + _stockRendahCount) > 0 ? '${_stockHabisCount + _stockRendahCount}' : null),
                       const SizedBox(width: 4),
+                      _toolbarBtn(Icons.delete_sweep, 'Waste', onTap: () {
+                        setState(() => _closeAllModals());
+                        WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
+                      }),
+                      const SizedBox(width: 4),
                       _toolbarBtn(Icons.person, auth.userName, onTap: () => setState(() { _closeAllModals(); showProfile = true; })),
                       const SizedBox(width: 4),
                       _toolbarBtn(Icons.print, 'Printer', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
@@ -875,6 +881,11 @@ class _KasirScreenState extends State<KasirScreen> {
                         badge: heldCarts.length.toString(), onTap: () { setState(() { _closeAllModals(); showHeldCarts = true; }); _loadHeldCarts(); }),
                     ],
                     if (isMobile) ...[
+                      const SizedBox(width: 4),
+                      _toolbarBtn(Icons.delete_sweep, '', onTap: () {
+                        setState(() => _closeAllModals());
+                        WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
+                      }),
                       const SizedBox(width: 4),
                       _toolbarBtn(Icons.print, '', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
                     ],
