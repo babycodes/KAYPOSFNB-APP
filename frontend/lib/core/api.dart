@@ -292,7 +292,9 @@ class Api {
       // --- TRANSACTIONS: STATS (TODAY) ---
       if (path == '/transactions/today') {
         final todayStart = '${DateTime.now().toIso8601String().substring(0, 10)} 00:00:00';
-        final txRows = await db.query('transactions', where: 'created_at >= ?', whereArgs: [todayStart]);
+        final txRows = await db.query('transactions',
+          where: "created_at >= ? AND (status IS NULL OR status != 'voided')",
+          whereArgs: [todayStart]);
         
         double totalSales = 0;
         double totalProfit = 0;
@@ -301,8 +303,13 @@ class Api {
           totalSales += (tx['total_amount'] as num?)?.toDouble() ?? 0;
           final details = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [tx['id']]);
           for (var item in details) {
-            final subtotal = (item['subtotal'] as num?)?.toDouble() ?? 0;
+            final soldPrice = (item['sold_price'] as num?)?.toDouble() ?? 0;
             final qty = (item['quantity'] as num?)?.toDouble() ?? 0;
+            final refundedQty = (item['refunded_qty'] as num?)?.toDouble() ?? 0;
+            final effectiveQty = qty - refundedQty;
+            if (effectiveQty <= 0) continue;
+            final discountPct = (item['discount_percent'] as num?)?.toDouble() ?? 0;
+            final effectiveSubtotal = soldPrice * (1 - discountPct / 100) * effectiveQty;
             // Calculate HPP from BOM (resep + bahan_baku)
             final productId = item['product_id'];
             double hppPerUnit = 0;
@@ -313,7 +320,7 @@ class Api {
               );
               hppPerUnit = (hppRows.first['hpp'] as num?)?.toDouble() ?? 0;
             } catch (_) {}
-            totalProfit += subtotal - (hppPerUnit * qty);
+            totalProfit += effectiveSubtotal - (hppPerUnit * effectiveQty);
           }
         }
         
@@ -461,11 +468,11 @@ class Api {
       if (path == '/reports/chart28') {
         final past28 = DateTime.now().subtract(const Duration(days: 28)).toIso8601String().substring(0, 10);
         
-        // Get daily sales
+        // Get daily sales (exclude voided)
         final salesRows = await db.rawQuery('''
           SELECT date(created_at) as date, COALESCE(SUM(total_amount), 0) as sales
           FROM transactions
-          WHERE date(created_at) >= ?
+          WHERE date(created_at) >= ? AND (status IS NULL OR status != 'voided')
           GROUP BY date(created_at)
           ORDER BY date ASC
         ''', [past28]);
@@ -480,21 +487,26 @@ class Api {
           double dayProfit = 0;
           try {
             final txRows = await db.rawQuery(
-              "SELECT id FROM transactions WHERE date(created_at) = ?",
+              "SELECT id FROM transactions WHERE date(created_at) = ? AND (status IS NULL OR status != 'voided')",
               [dateStr]
             );
             for (var tx in txRows) {
               final items = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [tx['id']]);
               for (var item in items) {
-                final subtotal = (item['subtotal'] as num?)?.toDouble() ?? 0;
+                final soldPrice = (item['sold_price'] as num?)?.toDouble() ?? 0;
                 final qty = (item['quantity'] as num?)?.toDouble() ?? 0;
+                final refundedQty = (item['refunded_qty'] as num?)?.toDouble() ?? 0;
+                final effectiveQty = qty - refundedQty;
+                if (effectiveQty <= 0) continue;
+                final discountPct = (item['discount_percent'] as num?)?.toDouble() ?? 0;
+                final effectiveSubtotal = soldPrice * (1 - discountPct / 100) * effectiveQty;
                 final productId = item['product_id'];
                 final hppRows = await db.rawQuery(
                   'SELECT IFNULL(SUM(r.qty_needed * b.cost_price), 0) as hpp FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = ?',
                   [productId]
                 );
                 final hppPerUnit = (hppRows.first['hpp'] as num?)?.toDouble() ?? 0;
-                dayProfit += subtotal - (hppPerUnit * qty);
+                dayProfit += effectiveSubtotal - (hppPerUnit * effectiveQty);
               }
             }
           } catch (_) {}
@@ -504,12 +516,15 @@ class Api {
         return result;
       }
 
-      // --- REPORTS: TOP PRODUCTS ---
+      // --- REPORTS: TOP PRODUCTS (exclude voided, use effective qty) ---
       if (path.startsWith('/reports/products')) {
         final rows = await db.rawQuery('''
-          SELECT d.product_id, d.product_name, COALESCE(SUM(d.quantity),0) as total_qty, COALESCE(SUM(d.subtotal),0) as total_revenue
+          SELECT d.product_id, d.product_name,
+                 COALESCE(SUM(d.quantity - d.refunded_qty), 0) as total_qty,
+                 COALESCE(SUM((d.sold_price * (1 - d.discount_percent / 100.0)) * (d.quantity - d.refunded_qty)), 0) as total_revenue
           FROM transaction_details d
           JOIN transactions t ON t.id = d.transaction_id
+          WHERE (t.status IS NULL OR t.status != 'voided')
           GROUP BY d.product_id, d.product_name
           ORDER BY total_revenue DESC
           LIMIT 10
@@ -544,10 +559,10 @@ class Api {
         
         final prefix = '$yearParam-$monthParam';
         
-        // Summary
+        // Summary (exclude voided)
         final sumRows = await db.rawQuery('''
           SELECT COUNT(*) as cnt, COALESCE(SUM(total_amount), 0) as sales
-          FROM transactions WHERE created_at LIKE ?
+          FROM transactions WHERE created_at LIKE ? AND (status IS NULL OR status != 'voided')
         ''', ['$prefix%']);
         
         final summary = {
@@ -555,10 +570,10 @@ class Api {
           'total_sales': (sumRows.first['sales'] as num?)?.toDouble() ?? 0.0,
         };
         
-        // Daily breakdown
+        // Daily breakdown (exclude voided)
         final dailyRows = await db.rawQuery('''
           SELECT date(created_at) as date, COUNT(*) as count, COALESCE(SUM(total_amount), 0) as sales
-          FROM transactions WHERE created_at LIKE ?
+          FROM transactions WHERE created_at LIKE ? AND (status IS NULL OR status != 'voided')
           GROUP BY date(created_at) ORDER BY date ASC
         ''', ['$prefix%']);
         
@@ -1190,6 +1205,119 @@ class Api {
         });
 
         return {'success': true};
+      }
+      // --- TRANSACTIONS: PARTIAL REFUND ---
+      final refundMatch = RegExp(r'^/transactions/(\d+)/refund$').firstMatch(path);
+      if (refundMatch != null) {
+        final txId = int.parse(refundMatch.group(1)!);
+        final items = (body?['items'] as List?) ?? [];
+        if (items.isEmpty) throw Exception('Tidak ada item untuk di-refund');
+
+        double totalRefundAmount = 0;
+
+        await db.transaction((txn) async {
+          // Verify transaction exists and is not fully voided
+          final txRows = await txn.query('transactions', where: 'id = ?', whereArgs: [txId]);
+          if (txRows.isEmpty) throw Exception('Transaksi tidak ditemukan');
+          final txStatus = txRows.first['status']?.toString() ?? 'completed';
+          if (txStatus == 'voided') throw Exception('Transaksi sudah di-void seluruhnya');
+
+          for (final item in items) {
+            final detailId = (item['detail_id'] as num?)?.toInt();
+            final qtyToRefund = (item['qty_to_refund'] as num?)?.toDouble() ?? 0;
+            if (detailId == null || qtyToRefund <= 0) continue;
+
+            // Fetch detail row
+            final detailRows = await txn.query('transaction_details',
+                where: 'id = ? AND transaction_id = ?', whereArgs: [detailId, txId]);
+            if (detailRows.isEmpty) throw Exception('Detail item #$detailId tidak ditemukan');
+            final detail = detailRows.first;
+
+            final qty = (detail['quantity'] as num?)?.toDouble() ?? 0;
+            final alreadyRefunded = (detail['refunded_qty'] as num?)?.toDouble() ?? 0;
+            final soldPrice = (detail['sold_price'] as num?)?.toDouble() ?? 0;
+            final discountPercent = (detail['discount_percent'] as num?)?.toDouble() ?? 0;
+            final productId = (detail['product_id'] as num?)?.toInt() ?? 0;
+            final productName = detail['product_name']?.toString() ?? '';
+
+            // Validate
+            if (alreadyRefunded + qtyToRefund > qty) {
+              throw Exception('Refund melebihi qty asli untuk "$productName" (sisa: ${qty - alreadyRefunded})');
+            }
+
+            // Calculate monetary refund (price after discount)
+            final priceAfterDiscount = soldPrice * (1 - discountPercent / 100);
+            final itemRefund = priceAfterDiscount * qtyToRefund;
+            totalRefundAmount += itemRefund;
+
+            // Update refunded_qty
+            await txn.rawUpdate(
+                'UPDATE transaction_details SET refunded_qty = refunded_qty + ? WHERE id = ?',
+                [qtyToRefund, detailId]);
+
+            // ── INVENTORY REVERSAL: Add stock back using same BOM logic as checkout ──
+            final productRow = await txn.query('products', columns: ['is_paket'], where: 'id = ?', whereArgs: [productId]);
+            final isPaket = productRow.isNotEmpty && (productRow.first['is_paket'] as num?)?.toInt() == 1;
+
+            if (isPaket) {
+              // Paket: reverse each child product's recipe
+              final paketChildren = await txn.query('paket_items', where: 'paket_id = ?', whereArgs: [productId]);
+              for (var child in paketChildren) {
+                final childProductId = child['product_id'];
+                final childQty = (child['qty'] as num?)?.toInt() ?? 1;
+                final childResep = await txn.query('resep', where: 'product_id = ?', whereArgs: [childProductId]);
+                for (var r in childResep) {
+                  final bbId = r['bahan_baku_id'];
+                  final qtyNeeded = (r['qty_needed'] as num).toDouble();
+                  final rawReturn = qtyNeeded * childQty * qtyToRefund;
+                  final bbRow = await txn.query('bahan_baku', columns: ['unit'], where: 'id = ?', whereArgs: [bbId]);
+                  final bbUnit = bbRow.isNotEmpty ? (bbRow.first['unit']?.toString().toLowerCase() ?? '') : '';
+                  final returnQty = (bbUnit == 'kg' || bbUnit == 'liter' || bbUnit == 'l') ? rawReturn / 1000 : rawReturn;
+                  await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [returnQty, bbId]);
+                  try { await txn.insert('inventory_ledger', {
+                    'bahan_baku_id': bbId, 'transaction_type': 'ADJUSTMENT',
+                    'qty_change': returnQty, 'financial_value': 0,
+                    'notes': 'Refund Item: $productName (Tx #$txId)',
+                  }); } catch (_) {}
+                }
+              }
+            } else {
+              // Regular: reverse from bahan_baku based on resep
+              final resepRows = await txn.query('resep', where: 'product_id = ?', whereArgs: [productId]);
+              for (var r in resepRows) {
+                final bbId = r['bahan_baku_id'];
+                final qtyNeeded = (r['qty_needed'] as num).toDouble();
+                final rawReturn = qtyNeeded * qtyToRefund;
+                final bbRow = await txn.query('bahan_baku', columns: ['unit'], where: 'id = ?', whereArgs: [bbId]);
+                final bbUnit = bbRow.isNotEmpty ? (bbRow.first['unit']?.toString().toLowerCase() ?? '') : '';
+                final returnQty = (bbUnit == 'kg' || bbUnit == 'liter' || bbUnit == 'l') ? rawReturn / 1000 : rawReturn;
+                await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [returnQty, bbId]);
+                try { await txn.insert('inventory_ledger', {
+                  'bahan_baku_id': bbId, 'transaction_type': 'ADJUSTMENT',
+                  'qty_change': returnQty, 'financial_value': 0,
+                  'notes': 'Refund Item: $productName (Tx #$txId)',
+                }); } catch (_) {}
+              }
+            }
+          }
+
+          // Deduct refund from transaction total_amount
+          await txn.rawUpdate(
+              'UPDATE transactions SET total_amount = MAX(0, total_amount - ?) WHERE id = ?',
+              [totalRefundAmount, txId]);
+
+          // Determine new status: check if ALL items fully refunded
+          final allDetails = await txn.query('transaction_details', where: 'transaction_id = ?', whereArgs: [txId]);
+          bool allFullyRefunded = allDetails.every((d) {
+            final q = (d['quantity'] as num?)?.toDouble() ?? 0;
+            final r = (d['refunded_qty'] as num?)?.toDouble() ?? 0;
+            return r >= q;
+          });
+          final newStatus = allFullyRefunded ? 'voided' : 'partial_refund';
+          await txn.update('transactions', {'status': newStatus}, where: 'id = ?', whereArgs: [txId]);
+        });
+
+        return {'success': true, 'refund_amount': totalRefundAmount};
       }
 
       throw Exception('Endpoint POST $path belum diimplementasikan di Offline Router');

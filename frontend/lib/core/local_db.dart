@@ -115,6 +115,9 @@ class LocalDb {
             ON inventory_ledger (bahan_baku_id, timestamp)
           ''');
         } catch (_) {}
+        // Module: Partial Refund support columns
+        try { await db.execute("ALTER TABLE transactions ADD COLUMN status TEXT DEFAULT 'completed'"); } catch (_) {}
+        try { await db.execute('ALTER TABLE transaction_details ADD COLUMN refunded_qty REAL DEFAULT 0'); } catch (_) {}
       },
       onCreate: (db, version) async {
         // ──────────────────────────────────────────────────
@@ -315,6 +318,7 @@ class LocalDb {
             change_amount REAL NOT NULL,
             payment_method TEXT DEFAULT 'cash',
             note TEXT,
+            status TEXT DEFAULT 'completed',
             created_at TEXT DEFAULT (datetime('now','localtime'))
           )
         ''');
@@ -333,7 +337,8 @@ class LocalDb {
             subtotal REAL NOT NULL,
             addon_summary TEXT DEFAULT '[]',
             discount_percent REAL DEFAULT 0,
-            discount_amount REAL DEFAULT 0
+            discount_amount REAL DEFAULT 0,
+            refunded_qty REAL DEFAULT 0
           )
         ''');
 

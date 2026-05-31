@@ -108,7 +108,8 @@ class _LaporanPageState extends State<LaporanPage> {
   Future<void> _showDetailDialog(Map<String, dynamic> tx) async {
     try {
       final res = await Api.get('/transactions/${tx['id']}');
-      final details = res['details'] as List? ?? [];
+      var txData = res['transaction'] as Map<String, dynamic>? ?? tx;
+      var details = res['details'] as List? ?? [];
       
       if (!mounted) return;
       final cs = Theme.of(context).colorScheme;
@@ -117,114 +118,204 @@ class _LaporanPageState extends State<LaporanPage> {
         context: context,
         barrierDismissible: true,
         builder: (ctx) {
-          return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            child: Container(
-              width: 500,
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Detail Transaksi #${tx['id']}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: cs.onSurface)),
-                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    elevation: 0,
-                    color: cs.surfaceContainerHighest,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                            Text('Waktu', style: TextStyle(color: cs.onSurfaceVariant)),
-                            Text('${tx['created_at']}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          ]),
-                          const SizedBox(height: 8),
-                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                            Text('Kasir', style: TextStyle(color: cs.onSurfaceVariant)),
-                            Text(tx['cashier_name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          ]),
-                        ],
-                      ),
+          return StatefulBuilder(builder: (ctx, setDState) {
+            final status = txData['status']?.toString() ?? 'completed';
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              child: Container(
+                width: 520,
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with status badge
+                    Row(
+                      children: [
+                        Expanded(child: Text('Detail Transaksi #${txData['id']}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: cs.onSurface))),
+                        if (status == 'voided')
+                          Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(8)),
+                            child: Text('VOID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red.shade800)))
+                        else if (status == 'partial_refund')
+                          Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(8)),
+                            child: Text('PARTIAL REFUND', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade800))),
+                        const SizedBox(width: 8),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Daftar Produk', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-                  const SizedBox(height: 8),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: details.length,
-                      separatorBuilder: (ctx, idx) => Divider(color: cs.outlineVariant.withValues(alpha: 0.5)),
-                      itemBuilder: (ctx, i) {
-                        final d = details[i];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(d['product_name']?.toString() ?? '-', style: const TextStyle(fontWeight: FontWeight.w600)),
-                                    Text('${d['quantity']} ${d['unit_used']}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                                  ],
-                                ),
-                              ),
-                              Text(fmtPrice(d['subtotal']), style: const TextStyle(fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    elevation: 0,
-                    color: cs.surfaceContainerHighest,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          if (tx['discount_total'] != null && tx['discount_total'] > 0) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      elevation: 0,
+                      color: cs.surfaceContainerHighest,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          children: [
                             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Text('Diskon', style: TextStyle(color: cs.onSurfaceVariant)),
-                              Text('-${fmtPrice(tx['discount_total'])}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                              Text('Waktu', style: TextStyle(color: cs.onSurfaceVariant)),
+                              Text('${txData['created_at']}', style: const TextStyle(fontWeight: FontWeight.w600)),
                             ]),
                             const SizedBox(height: 8),
+                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                              Text('Kasir', style: TextStyle(color: cs.onSurfaceVariant)),
+                              Text(txData['cashier_name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.w600)),
+                            ]),
                           ],
-                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                            Text('Total Akhir', style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.bold)),
-                            Text(fmtPrice(tx['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: cs.primary)),
-                          ]),
-                          const SizedBox(height: 8),
-                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                            Text('Bayar', style: TextStyle(color: cs.onSurfaceVariant)),
-                            Text(fmtPrice(tx['paid_amount']), style: const TextStyle(fontWeight: FontWeight.bold)),
-                          ]),
-                          const SizedBox(height: 8),
-                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                            Text('Kembali', style: TextStyle(color: cs.onSurfaceVariant)),
-                            Text(fmtPrice(tx['change_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: cs.secondary)),
-                          ]),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    Text('Daftar Produk', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: details.length,
+                        separatorBuilder: (ctx, idx) => Divider(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                        itemBuilder: (ctx, i) {
+                          final d = details[i];
+                          final qty = (d['quantity'] as num?)?.toDouble() ?? 0;
+                          final refundedQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0;
+                          final remainingQty = qty - refundedQty;
+                          final soldPrice = (d['sold_price'] as num?)?.toDouble() ?? 0;
+                          final discountPct = (d['discount_percent'] as num?)?.toDouble() ?? 0;
+                          final effectivePrice = soldPrice * (1 - discountPct / 100);
+                          final effectiveSubtotal = effectivePrice * (qty - refundedQty);
+                          final isFullyRefunded = refundedQty >= qty;
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6.0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(d['product_name']?.toString() ?? '-', style: TextStyle(fontWeight: FontWeight.w600, decoration: isFullyRefunded ? TextDecoration.lineThrough : null, color: isFullyRefunded ? cs.onSurfaceVariant : null)),
+                                      Row(children: [
+                                        Text('${qty.round()} ${d['unit_used'] ?? 'pcs'}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                                        if (refundedQty > 0)
+                                          Text('  (refund: ${refundedQty.round()})', style: TextStyle(fontSize: 11, color: Colors.red.shade600, fontWeight: FontWeight.bold)),
+                                      ]),
+                                    ],
+                                  ),
+                                ),
+                                Text(fmtPrice(effectiveSubtotal), style: TextStyle(fontWeight: FontWeight.bold, decoration: isFullyRefunded ? TextDecoration.lineThrough : null)),
+                                // Refund button (only if items remain)
+                                if (remainingQty > 0 && status != 'voided')
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8),
+                                    child: SizedBox(
+                                      height: 28, width: 28,
+                                      child: IconButton(
+                                        padding: EdgeInsets.zero,
+                                        iconSize: 16,
+                                        icon: Icon(Icons.undo, color: Colors.red.shade400),
+                                        tooltip: 'Refund item ini',
+                                        onPressed: () async {
+                                          final qtyCtrl = TextEditingController(text: remainingQty.round().toString());
+                                          final confirmed = await showDialog<bool>(context: ctx, builder: (dlgCtx) {
+                                            return AlertDialog(
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                              title: Text('Refund: ${d['product_name']}', style: const TextStyle(fontSize: 16)),
+                                              content: Column(mainAxisSize: MainAxisSize.min, children: [
+                                                Text('Sisa yang bisa di-refund: ${remainingQty.round()}', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+                                                const SizedBox(height: 12),
+                                                TextField(controller: qtyCtrl, decoration: InputDecoration(
+                                                  labelText: 'Jumlah refund', isDense: true, suffixText: 'pcs',
+                                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                                ), keyboardType: const TextInputType.numberWithOptions(decimal: false)),
+                                                const SizedBox(height: 8),
+                                                ListenableBuilder(listenable: qtyCtrl, builder: (_, _w) {
+                                                  final rQty = double.tryParse(qtyCtrl.text) ?? 0;
+                                                  final refundAmt = effectivePrice * rQty;
+                                                  if (rQty <= 0) return const SizedBox.shrink();
+                                                  return Container(
+                                                    padding: const EdgeInsets.all(8),
+                                                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+                                                    child: Text('Pengembalian: ${fmtPrice(refundAmt)}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                                                  );
+                                                }),
+                                              ]),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.pop(dlgCtx, false), child: const Text('Batal')),
+                                                FilledButton(
+                                                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                                                  onPressed: () => Navigator.pop(dlgCtx, true),
+                                                  child: const Text('Konfirmasi Refund'),
+                                                ),
+                                              ],
+                                            );
+                                          });
+                                          if (confirmed != true) return;
+                                          final rQty = double.tryParse(qtyCtrl.text) ?? 0;
+                                          if (rQty <= 0 || rQty > remainingQty) return;
+                                          try {
+                                            await Api.post('/transactions/${txData['id']}/refund', body: {
+                                              'items': [{'detail_id': d['id'], 'qty_to_refund': rQty}],
+                                            });
+                                            // Reload data
+                                            final newRes = await Api.get('/transactions/${txData['id']}');
+                                            setDState(() {
+                                              txData = newRes['transaction'] as Map<String, dynamic>? ?? txData;
+                                              details = newRes['details'] as List? ?? details;
+                                            });
+                                            _loadData();
+                                            if (mounted) showAdminToast(context, '✅ Refund berhasil');
+                                          } catch (e) {
+                                            if (mounted) showAdminToast(context, '❌ $e');
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      elevation: 0,
+                      color: cs.surfaceContainerHighest,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          children: [
+                            if (txData['discount_total'] != null && txData['discount_total'] > 0) ...[
+                              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                                Text('Diskon', style: TextStyle(color: cs.onSurfaceVariant)),
+                                Text('-${fmtPrice(txData['discount_total'])}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                              ]),
+                              const SizedBox(height: 8),
+                            ],
+                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                              Text('Total Akhir', style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                              Text(fmtPrice(txData['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: status == 'voided' ? cs.error : cs.primary)),
+                            ]),
+                            const SizedBox(height: 8),
+                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                              Text('Bayar', style: TextStyle(color: cs.onSurfaceVariant)),
+                              Text(fmtPrice(txData['paid_amount']), style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ]),
+                            const SizedBox(height: 8),
+                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                              Text('Kembali', style: TextStyle(color: cs.onSurfaceVariant)),
+                              Text(fmtPrice(txData['change_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: cs.secondary)),
+                            ]),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
+            );
+          });
         }
       );
     } catch (e) {
@@ -471,13 +562,22 @@ class _LaporanPageState extends State<LaporanPage> {
     for (var tx in transactions) {
       final ca = (tx['created_at'] ?? '').toString();
       final time = ca.contains(' ') ? ca.split(' ')[1] : ca;
+      final txStatus = tx['status']?.toString() ?? 'completed';
       rows.add(DataRow(
-        color: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.hovered) ? cs.surfaceContainer.withValues(alpha: 0.3) : null),
+        color: WidgetStateProperty.resolveWith((states) {
+          if (txStatus == 'voided') return Colors.red.shade50.withValues(alpha: 0.3);
+          if (txStatus == 'partial_refund') return Colors.orange.shade50.withValues(alpha: 0.3);
+          return states.contains(WidgetState.hovered) ? cs.surfaceContainer.withValues(alpha: 0.3) : null;
+        }),
         cells: [
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text('#${tx['id']}', style: TextStyle(color: cs.onSurfaceVariant, fontFamily: 'monospace')))),
+          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text('#${tx['id']}', style: TextStyle(color: cs.onSurfaceVariant, fontFamily: 'monospace')),
+            if (txStatus == 'voided') ...[const SizedBox(width: 4), Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text('VOID', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)))]
+            else if (txStatus == 'partial_refund') ...[const SizedBox(width: 4), Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)), child: const Text('REFUND', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)))],
+          ]))),
           DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(time))),
           DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(tx['cashier_name'] ?? '-'))),
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(fmtPrice(tx['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary)))),
+          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(fmtPrice(tx['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: txStatus == 'voided' ? cs.error : cs.primary, decoration: txStatus == 'voided' ? TextDecoration.lineThrough : null)))),
           DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
             Text(tx['discount_total'] != null && tx['discount_total'] > 0 ? fmtPrice(tx['discount_total']) : '-', style: const TextStyle(color: Colors.green, fontSize: 13)),
             if (tx['discount_total'] != null && tx['discount_total'] > 0)
