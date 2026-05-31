@@ -822,79 +822,79 @@ class _KasirScreenState extends State<KasirScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(color: cs.surface, border: Border(bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3)))),
           child: Row(children: [
-            // Category dropdown
-            Builder(builder: (ctx) {
-              final dropdown = Container(height: 36, constraints: isMobile ? null : const BoxConstraints(maxWidth: 220), padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5))),
-                child: DropdownButtonHideUnderline(child: DropdownButton<int?>(
-                  value: selectedCategory, isExpanded: true, isDense: true,
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('📦 Semua Kategori')),
-                    const DropdownMenuItem(value: -999, child: Text('🎁 Promo', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold))),
-                    const DropdownMenuItem(value: -998, child: Text('🎁 Paket Combo', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold))),
-                    ...categories.map((c) {
-                      final cId = (c['id'] is int) ? c['id'] as int : int.tryParse(c['id']?.toString() ?? '') ?? 0;
-                      return DropdownMenuItem(value: cId, child: Text('${c['icon'] ?? '📦'} ${c['name'] ?? ''}'));
-                    }),
+            // LEFT SIDE: Category & Search
+            Expanded(
+              flex: 1,
+              child: Row(
+                children: [
+                  // Category Dropdown
+                  Flexible(
+                    flex: isMobile ? 1 : 0,
+                    child: Container(height: 36, constraints: isMobile ? null : const BoxConstraints(maxWidth: 220), padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5))),
+                      child: DropdownButtonHideUnderline(child: DropdownButton<int?>(
+                        value: selectedCategory, isExpanded: true, isDense: true,
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('📦 Semua Kategori')),
+                          const DropdownMenuItem(value: -999, child: Text('🎁 Promo', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold))),
+                          const DropdownMenuItem(value: -998, child: Text('🎁 Paket Combo', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold))),
+                          ...categories.map((c) {
+                            final cId = (c['id'] is int) ? c['id'] as int : int.tryParse(c['id']?.toString() ?? '') ?? 0;
+                            return DropdownMenuItem(value: cId, child: Text('${c['icon'] ?? '📦'} ${c['name'] ?? ''}'));
+                          }),
+                        ],
+                        onChanged: (v) => setState(() => selectedCategory = v),
+                      ))),
+                  ),
+                  if (isMobile) const Spacer() else ...[
+                    const SizedBox(width: 8),
+                    // Desktop search
+                    Expanded(child: Padding(padding: const EdgeInsets.only(right: 12), child: SizedBox(height: 36, child: TextField(
+                      onChanged: (v) => setState(() => searchQuery = v),
+                      style: TextStyle(fontSize: 13, color: cs.onSurface),
+                      decoration: const InputDecoration(hintText: 'Cari produk...', prefixIcon: Icon(Icons.search, size: 18), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 0)),
+                    )))),
                   ],
-                  onChanged: (v) => setState(() => selectedCategory = v),
-                )));
-              return isMobile ? Expanded(child: dropdown) : dropdown;
-            }),
-            const SizedBox(width: 8),
-            // Desktop search
-            if (!isMobile) Expanded(child: Padding(padding: const EdgeInsets.only(right: 12), child: SizedBox(height: 40, child: TextField(
-              onChanged: (v) => setState(() => searchQuery = v),
-              style: TextStyle(fontSize: 13, color: cs.onSurface),
-              decoration: const InputDecoration(hintText: 'Cari produk...', prefixIcon: Icon(Icons.search, size: 18)),
-            )))),
+                ],
+              ),
+            ),
             
-            // Action buttons wrapped in Flexible to prevent overflow
+            // RIGHT SIDE: Action Buttons
             Flexible(
+              flex: 2,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    if (!isMobile) ...[
-                      const SizedBox(width: 8),
-                      _toolbarBtn(Icons.pie_chart, 'Rekap', onTap: () { setState(() { _closeAllModals(); showDashboard = true; }); _loadDashboard(); }),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.history, 'Riwayat', onTap: () { setState(() { _closeAllModals(); showHistory = true; }); _loadHistory(); }),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.notifications, 'Stok', onTap: _showStockAlert,
-                        badge: (_stockHabisCount + _stockRendahCount) > 0 ? '${_stockHabisCount + _stockRendahCount}' : null),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.delete_sweep, 'Waste', onTap: () {
-                        setState(() => _closeAllModals());
-                        WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
-                      }),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.person, auth.userName, onTap: () => setState(() { _closeAllModals(); showProfile = true; })),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.print, 'Printer', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
-                    ],
-                    // Held carts indicator
+                    _toolbarBtn(Icons.pie_chart, isMobile ? '' : 'Rekap', onTap: () { setState(() { _closeAllModals(); showDashboard = true; }); _loadDashboard(); }),
+                    const SizedBox(width: 4),
+                    _toolbarBtn(Icons.history, isMobile ? '' : 'Riwayat', onTap: () { setState(() { _closeAllModals(); showHistory = true; }); _loadHistory(); }),
+                    const SizedBox(width: 4),
+                    _toolbarBtn(Icons.notifications, isMobile ? '' : 'Stok', onTap: _showStockAlert,
+                      badge: (_stockHabisCount + _stockRendahCount) > 0 ? '${_stockHabisCount + _stockRendahCount}' : null),
+                    const SizedBox(width: 4),
+                    _toolbarBtn(Icons.delete_sweep, isMobile ? '' : 'Waste', onTap: () {
+                      setState(() => _closeAllModals());
+                      WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
+                    }),
+                    const SizedBox(width: 4),
+                    _toolbarBtn(Icons.person, isMobile ? '' : auth.userName, onTap: () => setState(() { _closeAllModals(); showProfile = true; })),
+                    const SizedBox(width: 4),
+                    _toolbarBtn(Icons.print, isMobile ? '' : 'Printer', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
                     if (heldCarts.isNotEmpty) ...[
                       const SizedBox(width: 4),
                       _toolbarBtn(Icons.access_time, isMobile ? '' : 'Ditahan', color: cs.secondaryContainer, textColor: cs.onSecondaryContainer,
                         badge: heldCarts.length.toString(), onTap: () { setState(() { _closeAllModals(); showHeldCarts = true; }); _loadHeldCarts(); }),
                     ],
-                    if (isMobile) ...[
+                    if (auth.isAdmin) ...[
                       const SizedBox(width: 4),
-                      _toolbarBtn(Icons.delete_sweep, '', onTap: () {
-                        setState(() => _closeAllModals());
-                        WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
-                      }),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.print, '', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
+                      _toolbarBtn(Icons.settings, isMobile ? '' : 'Admin', color: cs.tertiaryContainer, textColor: cs.onTertiaryContainer, onTap: () => context.go('/admin'))
                     ],
-                    if (!isMobile) ...[
-                      if (auth.isAdmin) ...[const SizedBox(width: 4), _toolbarBtn(Icons.settings, 'Admin', color: cs.tertiaryContainer, textColor: cs.onTertiaryContainer, onTap: () => context.go('/admin'))],
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.logout, 'Keluar', color: cs.errorContainer.withValues(alpha: 0.5), textColor: cs.error, onTap: _handleLogout),
-                    ],
+                    const SizedBox(width: 4),
+                    _toolbarBtn(Icons.logout, isMobile ? '' : 'Keluar', color: cs.errorContainer.withValues(alpha: 0.5), textColor: cs.error, onTap: _handleLogout),
                     const SizedBox(width: 4),
                     // Lock button
                     InkWell(onTap: () { context.read<AuthProvider>().lock(); },
