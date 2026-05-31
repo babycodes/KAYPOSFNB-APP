@@ -104,7 +104,7 @@ class LocalDb {
               id                INTEGER PRIMARY KEY AUTOINCREMENT,
               bahan_baku_id     INTEGER NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
               timestamp         TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
-              transaction_type  TEXT    NOT NULL CHECK(transaction_type IN ('RESTOCK','SALE','WASTE','ADJUSTMENT')),
+              transaction_type  TEXT    NOT NULL CHECK(transaction_type IN ('RESTOCK','SALE','WASTE','ADJUSTMENT','REFUND')),
               qty_change        REAL    NOT NULL,
               financial_value   REAL    NOT NULL DEFAULT 0,
               notes             TEXT    DEFAULT ''
@@ -375,7 +375,7 @@ class LocalDb {
             id                INTEGER PRIMARY KEY AUTOINCREMENT,
             bahan_baku_id     INTEGER NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
             timestamp         TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
-            transaction_type  TEXT    NOT NULL CHECK(transaction_type IN ('RESTOCK','SALE','WASTE','ADJUSTMENT')),
+            transaction_type  TEXT    NOT NULL CHECK(transaction_type IN ('RESTOCK','SALE','WASTE','ADJUSTMENT','REFUND')),
             qty_change        REAL    NOT NULL,
             financial_value   REAL    NOT NULL DEFAULT 0,
             notes             TEXT    DEFAULT ''

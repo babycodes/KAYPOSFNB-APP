@@ -247,8 +247,9 @@ class _KartuStokPageState extends State<KartuStokPage> {
             DataColumn(label: Text('Bahan', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('Masuk', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
             DataColumn(label: Text('Terjual', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+            DataColumn(label: Text('Dikembalikan', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
             DataColumn(label: Text('Terbuang', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-            DataColumn(label: Text('Selisih', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+            DataColumn(label: Text('Selisih Opname', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
             DataColumn(label: Text('Sisa Sistem', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
             DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
           ],
@@ -258,6 +259,7 @@ class _KartuStokPageState extends State<KartuStokPage> {
             final totalOut = (d['total_out'] as num?)?.toDouble() ?? 0;
             final totalWaste = (d['total_waste'] as num?)?.toDouble() ?? 0;
             final totalAdj = (d['total_adjustment'] as num?)?.toDouble() ?? 0;
+            final totalRefund = (d['total_refund'] as num?)?.toDouble() ?? 0;
             final sysStock = (d['system_stock'] as num?)?.toDouble() ?? 0;
 
             return DataRow(cells: [
@@ -267,6 +269,7 @@ class _KartuStokPageState extends State<KartuStokPage> {
               ])),
               DataCell(Text(totalIn > 0 ? '+${_fmtDynUnit(totalIn, unit)}' : '-', style: TextStyle(color: totalIn > 0 ? Colors.green.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
               DataCell(Text(totalOut > 0 ? '-${_fmtDynUnit(totalOut, unit)}' : '-', style: TextStyle(color: totalOut > 0 ? Colors.orange.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
+              DataCell(Text(totalRefund > 0 ? '+${_fmtDynUnit(totalRefund, unit)}' : '-', style: TextStyle(color: totalRefund > 0 ? Colors.blue.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
               DataCell(Text(totalWaste > 0 ? '-${_fmtDynUnit(totalWaste, unit)}' : '-', style: TextStyle(color: totalWaste > 0 ? Colors.red.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
               DataCell(Text(totalAdj != 0 ? '${totalAdj > 0 ? "+" : ""}${_fmtDynUnit(totalAdj, unit)}' : '-', style: TextStyle(color: totalAdj > 0 ? Colors.blue : totalAdj < 0 ? Colors.red : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
               DataCell(Text(_fmtDynUnit(sysStock, unit), style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary))),
@@ -294,6 +297,7 @@ class _KartuStokPageState extends State<KartuStokPage> {
         final totalOut = (d['total_out'] as num?)?.toDouble() ?? 0;
         final totalWaste = (d['total_waste'] as num?)?.toDouble() ?? 0;
         final totalAdj = (d['total_adjustment'] as num?)?.toDouble() ?? 0;
+        final totalRefund = (d['total_refund'] as num?)?.toDouble() ?? 0;
         final sysStock = (d['system_stock'] as num?)?.toDouble() ?? 0;
 
         return Container(
@@ -316,8 +320,9 @@ class _KartuStokPageState extends State<KartuStokPage> {
             Wrap(spacing: 8, runSpacing: 4, children: [
               _metricChip('Masuk', totalIn > 0 ? '+${_fmtDynUnit(totalIn, unit)}' : '-', Colors.green),
               _metricChip('Terjual', totalOut > 0 ? '-${_fmtDynUnit(totalOut, unit)}' : '-', Colors.orange),
+              if (totalRefund > 0) _metricChip('Dikembalikan', '+${_fmtDynUnit(totalRefund, unit)}', Colors.blue),
               _metricChip('Terbuang', totalWaste > 0 ? '-${_fmtDynUnit(totalWaste, unit)}' : '-', Colors.red),
-              if (totalAdj != 0) _metricChip('Selisih', '${totalAdj > 0 ? "+" : ""}${_fmtDynUnit(totalAdj, unit)}', Colors.blue),
+              if (totalAdj != 0) _metricChip('Selisih Opname', '${totalAdj > 0 ? "+" : ""}${_fmtDynUnit(totalAdj, unit)}', Colors.purple),
             ]),
             const SizedBox(height: 8),
             SizedBox(width: double.infinity, height: 32, child: FilledButton.tonalIcon(

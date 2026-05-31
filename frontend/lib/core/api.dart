@@ -656,9 +656,9 @@ class Api {
             GROUP BY transaction_type
           ''', [bbId, tsStart, tsEnd]);
 
-          double totalIn = 0, totalOut = 0, totalWaste = 0, totalAdjustment = 0;
+          double totalIn = 0, totalOut = 0, totalWaste = 0, totalAdjustment = 0, totalRefund = 0;
           double restockValue = 0, wasteValue = 0, adjustmentValue = 0;
-          int restockCount = 0, saleCount = 0, wasteCount = 0, adjCount = 0;
+          int restockCount = 0, saleCount = 0, wasteCount = 0, adjCount = 0, refundCount = 0;
 
           for (final row in ledger) {
             final type = row['transaction_type']?.toString() ?? '';
@@ -681,6 +681,9 @@ class Api {
                 totalAdjustment = qty;
                 adjustmentValue = val;
                 adjCount = cnt;
+              case 'REFUND':
+                totalRefund = qty;
+                refundCount = cnt;
             }
           }
 
@@ -696,6 +699,7 @@ class Api {
             'total_out': totalOut,
             'total_waste': totalWaste,
             'total_adjustment': totalAdjustment,
+            'total_refund': totalRefund,
             'restock_value': restockValue,
             'waste_value': wasteValue,
             'adjustment_value': adjustmentValue,
@@ -703,6 +707,7 @@ class Api {
             'sale_count': saleCount,
             'waste_count': wasteCount,
             'adjustment_count': adjCount,
+            'refund_count': refundCount,
           });
         }
         return {'data': result, 'start_date': dateStart, 'end_date': dateEnd};
@@ -1275,7 +1280,7 @@ class Api {
                   final returnQty = (bbUnit == 'kg' || bbUnit == 'liter' || bbUnit == 'l') ? rawReturn / 1000 : rawReturn;
                   await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [returnQty, bbId]);
                   try { await txn.insert('inventory_ledger', {
-                    'bahan_baku_id': bbId, 'transaction_type': 'ADJUSTMENT',
+                  'bahan_baku_id': bbId, 'transaction_type': 'REFUND',
                     'qty_change': returnQty, 'financial_value': 0,
                     'notes': 'Refund Item: $productName (Tx #$txId)',
                   }); } catch (_) {}
@@ -1293,7 +1298,7 @@ class Api {
                 final returnQty = (bbUnit == 'kg' || bbUnit == 'liter' || bbUnit == 'l') ? rawReturn / 1000 : rawReturn;
                 await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [returnQty, bbId]);
                 try { await txn.insert('inventory_ledger', {
-                  'bahan_baku_id': bbId, 'transaction_type': 'ADJUSTMENT',
+                  'bahan_baku_id': bbId, 'transaction_type': 'REFUND',
                   'qty_change': returnQty, 'financial_value': 0,
                   'notes': 'Refund Item: $productName (Tx #$txId)',
                 }); } catch (_) {}
