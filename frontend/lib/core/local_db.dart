@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
-import '../services/inventory_ledger_service.dart';
 
 class LocalDb {
   static Database? _db;
@@ -99,7 +98,23 @@ class LocalDb {
           }
         } catch (_) {}
         // Module: Inventory Ledger (Stock Opname & Kartu Stok)
-        try { await InventoryLedgerService.ensureTable(); } catch (_) {}
+        try {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS inventory_ledger (
+              id                INTEGER PRIMARY KEY AUTOINCREMENT,
+              bahan_baku_id     INTEGER NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
+              timestamp         TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+              transaction_type  TEXT    NOT NULL CHECK(transaction_type IN ('RESTOCK','SALE','WASTE','ADJUSTMENT')),
+              qty_change        REAL    NOT NULL,
+              financial_value   REAL    NOT NULL DEFAULT 0,
+              notes             TEXT    DEFAULT ''
+            )
+          ''');
+          await db.execute('''
+            CREATE INDEX IF NOT EXISTS idx_ledger_bahan_ts
+            ON inventory_ledger (bahan_baku_id, timestamp)
+          ''');
+        } catch (_) {}
       },
       onCreate: (db, version) async {
         // ──────────────────────────────────────────────────
@@ -345,6 +360,25 @@ class LocalDb {
             key TEXT PRIMARY KEY,
             value TEXT
           )
+        ''');
+
+        // ──────────────────────────────────────────────────
+        // 15. Inventory Ledger (Stock Opname & Kartu Stok)
+        // ──────────────────────────────────────────────────
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS inventory_ledger (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            bahan_baku_id     INTEGER NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
+            timestamp         TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+            transaction_type  TEXT    NOT NULL CHECK(transaction_type IN ('RESTOCK','SALE','WASTE','ADJUSTMENT')),
+            qty_change        REAL    NOT NULL,
+            financial_value   REAL    NOT NULL DEFAULT 0,
+            notes             TEXT    DEFAULT ''
+          )
+        ''');
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_ledger_bahan_ts
+          ON inventory_ledger (bahan_baku_id, timestamp)
         ''');
 
         // ══════════════════════════════════════════════════

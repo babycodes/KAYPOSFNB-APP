@@ -18,9 +18,12 @@ import '../core/local_db.dart';
 class InventoryLedgerService {
   // ──────────────────────────────────────────────────
   // 1. TABLE CREATION
-  //    Called once during DB initialization (onOpen).
-  //    Safe to call multiple times — uses IF NOT EXISTS.
+  //    ⚠️ DEPRECATED: Do NOT call this during DB init.
+  //    The table is now created inline in local_db.dart
+  //    (both onOpen and onCreate) to avoid a deadlock
+  //    caused by re-entering LocalDb.instance.
   // ──────────────────────────────────────────────────
+  @Deprecated('Table creation moved to local_db.dart to avoid init deadlock. Do not call.')
   static Future<void> ensureTable() async {
     final db = await LocalDb.instance;
     await db.execute('''
