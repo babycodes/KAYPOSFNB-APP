@@ -298,31 +298,37 @@ class Api {
         
         double totalSales = 0;
         double totalProfit = 0;
-        
-        for (var tx in txRows) {
-          totalSales += (tx['total_amount'] as num?)?.toDouble() ?? 0;
-          final details = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [tx['id']]);
-          for (var item in details) {
-            final soldPrice = (item['sold_price'] as num?)?.toDouble() ?? 0;
-            final qty = (item['quantity'] as num?)?.toDouble() ?? 0;
-            final refundedQty = (item['refunded_qty'] as num?)?.toDouble() ?? 0;
-            final effectiveQty = qty - refundedQty;
-            if (effectiveQty <= 0) continue;
-            final discountPct = (item['discount_percent'] as num?)?.toDouble() ?? 0;
-            final effectiveSubtotal = soldPrice * (1 - discountPct / 100) * effectiveQty;
-            // Calculate HPP from BOM (resep + bahan_baku)
-            final productId = item['product_id'];
-            double hppPerUnit = 0;
-            try {
-              final hppRows = await db.rawQuery(
-                'SELECT IFNULL(SUM(r.qty_needed * b.cost_price), 0) as hpp FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = ?',
-                [productId]
-              );
-              hppPerUnit = (hppRows.first['hpp'] as num?)?.toDouble() ?? 0;
-            } catch (_) {}
-            totalProfit += effectiveSubtotal - (hppPerUnit * effectiveQty);
+        try {
+          final statsRows = await db.rawQuery('''
+            WITH ProductCOGS AS (
+              SELECT r.product_id, SUM(r.qty_needed * b.cost_price) as hpp_per_unit
+              FROM resep r
+              JOIN bahan_baku b ON r.bahan_baku_id = b.id
+              GROUP BY r.product_id
+            ),
+            TotalCOGS AS (
+              SELECT SUM((td.quantity - COALESCE(td.refunded_qty, 0)) * pc.hpp_per_unit) as cogs
+              FROM transaction_details td
+              JOIN transactions t ON td.transaction_id = t.id
+              JOIN ProductCOGS pc ON td.product_id = pc.product_id
+              WHERE t.created_at >= ? AND (t.status IS NULL OR t.status != 'voided')
+            ),
+            TotalSales AS (
+              SELECT SUM(total_amount) as sales
+              FROM transactions
+              WHERE created_at >= ? AND (status IS NULL OR status != 'voided')
+            )
+            SELECT s.sales, COALESCE(c.cogs, 0) as cogs
+            FROM TotalSales s
+            LEFT JOIN TotalCOGS c ON 1=1
+          ''', [todayStart, todayStart]);
+          
+          if (statsRows.isNotEmpty) {
+            totalSales = (statsRows.first['sales'] as num?)?.toDouble() ?? 0.0;
+            final totalCogs = (statsRows.first['cogs'] as num?)?.toDouble() ?? 0.0;
+            totalProfit = totalSales - totalCogs;
           }
-        }
+        } catch (_) {}
         
         return {
           'total_transactions': txRows.length,
@@ -497,30 +503,26 @@ class Api {
         ''', ['$monthPrefix%']);
         final monthlyRevenue = (monthRows.first['revenue'] as num?)?.toDouble() ?? 0;
 
-        // Monthly COGS (HPP) — BOM-based: resep.qty_needed * bahan_baku.cost_price * effectiveQty
+        // Monthly COGS (HPP) — BOM-based via CTE
         double monthlyCogs = 0;
         try {
-          final txIds = await db.rawQuery(
-            "SELECT id FROM transactions WHERE created_at LIKE ? AND (status IS NULL OR status != 'voided')",
-            ['$monthPrefix%'],
-          );
-          for (var tx in txIds) {
-            final items = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [tx['id']]);
-            for (var item in items) {
-              final qty = (item['quantity'] as num?)?.toDouble() ?? 0;
-              final refundedQty = (item['refunded_qty'] as num?)?.toDouble() ?? 0;
-              final effectiveQty = qty - refundedQty;
-              if (effectiveQty <= 0) continue;
-              final productId = item['product_id'];
-              final hppRows = await db.rawQuery(
-                'SELECT IFNULL(SUM(r.qty_needed * b.cost_price), 0) as hpp FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = ?',
-                [productId],
-              );
-              final hppPerUnit = (hppRows.first['hpp'] as num?)?.toDouble() ?? 0;
-              monthlyCogs += hppPerUnit * effectiveQty;
-            }
-          }
-        } catch (_) {}
+          final cogsRows = await db.rawQuery('''
+            WITH ProductCOGS AS (
+              SELECT r.product_id, SUM(r.qty_needed * b.cost_price) as hpp_per_unit
+              FROM resep r
+              JOIN bahan_baku b ON r.bahan_baku_id = b.id
+              GROUP BY r.product_id
+            )
+            SELECT COALESCE(SUM((td.quantity - COALESCE(td.refunded_qty, 0)) * pc.hpp_per_unit), 0) as total_cogs
+            FROM transaction_details td
+            JOIN transactions t ON td.transaction_id = t.id
+            JOIN ProductCOGS pc ON td.product_id = pc.product_id
+            WHERE t.created_at LIKE ? AND (t.status IS NULL OR t.status != 'voided')
+          ''', ['$monthPrefix%']);
+          monthlyCogs = (cogsRows.first['total_cogs'] as num?)?.toDouble() ?? 0;
+        } catch (e) {
+          debugPrint('Error calculating monthly COGS: \$e');
+        }
 
         final monthlyProfit = monthlyRevenue - monthlyCogs;
 
@@ -562,50 +564,44 @@ class Api {
       if (path == '/reports/chart28') {
         final past28 = DateTime.now().subtract(const Duration(days: 28)).toIso8601String().substring(0, 10);
         
-        // Get daily sales (exclude voided)
-        final salesRows = await db.rawQuery('''
-          SELECT date(created_at) as date, COALESCE(SUM(total_amount), 0) as sales
-          FROM transactions
-          WHERE date(created_at) >= ? AND (status IS NULL OR status != 'voided')
-          GROUP BY date(created_at)
-          ORDER BY date ASC
-        ''', [past28]);
+        // Get daily sales and COGS using CTE
+        final chartRows = await db.rawQuery('''
+          WITH ProductCOGS AS (
+            SELECT r.product_id, SUM(r.qty_needed * b.cost_price) as hpp_per_unit
+            FROM resep r
+            JOIN bahan_baku b ON r.bahan_baku_id = b.id
+            GROUP BY r.product_id
+          ),
+          DailyCOGS AS (
+            SELECT date(t.created_at) as date, 
+                   SUM((td.quantity - COALESCE(td.refunded_qty, 0)) * pc.hpp_per_unit) as cogs
+            FROM transaction_details td
+            JOIN transactions t ON td.transaction_id = t.id
+            JOIN ProductCOGS pc ON td.product_id = pc.product_id
+            WHERE date(t.created_at) >= ? AND (t.status IS NULL OR t.status != 'voided')
+            GROUP BY date(t.created_at)
+          ),
+          DailySales AS (
+            SELECT date(created_at) as date, SUM(total_amount) as sales
+            FROM transactions
+            WHERE date(created_at) >= ? AND (status IS NULL OR status != 'voided')
+            GROUP BY date(created_at)
+          )
+          SELECT s.date, s.sales, COALESCE(c.cogs, 0) as cogs
+          FROM DailySales s
+          LEFT JOIN DailyCOGS c ON s.date = c.date
+          ORDER BY s.date ASC
+        ''', [past28, past28]);
         
-        // Calculate profit per day using BOM-based HPP
         List<Map<String, dynamic>> result = [];
-        for (var row in salesRows) {
-          final dateStr = row['date']?.toString() ?? '';
+        for (var row in chartRows) {
           final sales = (row['sales'] as num?)?.toDouble() ?? 0.0;
-          
-          // Get total HPP for this day
-          double dayProfit = 0;
-          try {
-            final txRows = await db.rawQuery(
-              "SELECT id FROM transactions WHERE date(created_at) = ? AND (status IS NULL OR status != 'voided')",
-              [dateStr]
-            );
-            for (var tx in txRows) {
-              final items = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [tx['id']]);
-              for (var item in items) {
-                final soldPrice = (item['sold_price'] as num?)?.toDouble() ?? 0;
-                final qty = (item['quantity'] as num?)?.toDouble() ?? 0;
-                final refundedQty = (item['refunded_qty'] as num?)?.toDouble() ?? 0;
-                final effectiveQty = qty - refundedQty;
-                if (effectiveQty <= 0) continue;
-                final discountPct = (item['discount_percent'] as num?)?.toDouble() ?? 0;
-                final effectiveSubtotal = soldPrice * (1 - discountPct / 100) * effectiveQty;
-                final productId = item['product_id'];
-                final hppRows = await db.rawQuery(
-                  'SELECT IFNULL(SUM(r.qty_needed * b.cost_price), 0) as hpp FROM resep r JOIN bahan_baku b ON r.bahan_baku_id = b.id WHERE r.product_id = ?',
-                  [productId]
-                );
-                final hppPerUnit = (hppRows.first['hpp'] as num?)?.toDouble() ?? 0;
-                dayProfit += effectiveSubtotal - (hppPerUnit * effectiveQty);
-              }
-            }
-          } catch (_) {}
-          
-          result.add({'date': dateStr, 'sales': sales, 'profit': dayProfit});
+          final cogs = (row['cogs'] as num?)?.toDouble() ?? 0.0;
+          result.add({
+            'date': row['date']?.toString() ?? '',
+            'sales': sales,
+            'profit': sales - cogs,
+          });
         }
         return result;
       }

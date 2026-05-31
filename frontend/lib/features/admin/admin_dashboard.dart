@@ -148,10 +148,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const Spacer(),
         ]),
         const SizedBox(height: 12),
-        Text(m.label.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: m.color.withValues(alpha: 0.7), letterSpacing: 0.8)),
+        Text(m.label.toUpperCase(), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.black54, letterSpacing: 0.8)),
         const SizedBox(height: 4),
         FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
-          child: Text(m.value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: m.color))),
+          child: Text(m.value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black87))),
       ]),
     );
   }
