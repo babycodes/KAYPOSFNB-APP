@@ -852,58 +852,59 @@ class _KasirScreenState extends State<KasirScreen> {
             
             // Action buttons wrapped in Flexible to prevent overflow
             Flexible(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (!isMobile) ...[
-                      const SizedBox(width: 8),
-                      _toolbarBtn(Icons.pie_chart, 'Rekap', onTap: () { setState(() { _closeAllModals(); showDashboard = true; }); _loadDashboard(); }),
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!isMobile) ...[
+                        const SizedBox(width: 8),
+                        _toolbarBtn(Icons.pie_chart, 'Rekap', onTap: () { setState(() { _closeAllModals(); showDashboard = true; }); _loadDashboard(); }),
+                        const SizedBox(width: 4),
+                        _toolbarBtn(Icons.history, 'Riwayat', onTap: () { setState(() { _closeAllModals(); showHistory = true; }); _loadHistory(); }),
+                        const SizedBox(width: 4),
+                        _toolbarBtn(Icons.notifications, 'Stok', onTap: _showStockAlert,
+                          badge: (_stockHabisCount + _stockRendahCount) > 0 ? '${_stockHabisCount + _stockRendahCount}' : null),
+                        const SizedBox(width: 4),
+                        _toolbarBtn(Icons.delete_sweep, 'Waste', onTap: () {
+                          setState(() => _closeAllModals());
+                          WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
+                        }),
+                        const SizedBox(width: 4),
+                        _toolbarBtn(Icons.person, 'Profile', onTap: () => setState(() { _closeAllModals(); showProfile = true; })),
+                        const SizedBox(width: 4),
+                        _toolbarBtn(Icons.print, 'Printer', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
+                      ],
+                      // Held carts indicator
+                      if (heldCarts.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        _toolbarBtn(Icons.access_time, 'Ditahan', color: cs.secondaryContainer, textColor: cs.onSecondaryContainer,
+                          badge: heldCarts.length.toString(), onTap: () { setState(() { _closeAllModals(); showHeldCarts = true; }); _loadHeldCarts(); }),
+                      ],
+                      if (isMobile) ...[
+                        const SizedBox(width: 4),
+                        _toolbarBtn(Icons.delete_sweep, 'Waste', onTap: () {
+                          setState(() => _closeAllModals());
+                          WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
+                        }),
+                        const SizedBox(width: 4),
+                        _toolbarBtn(Icons.print, 'Printer', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
+                      ],
+                      if (!isMobile) ...[
+                        if (auth.isAdmin) ...[const SizedBox(width: 4), _toolbarBtn(Icons.settings, 'Admin', color: cs.tertiaryContainer, textColor: cs.onTertiaryContainer, onTap: () => context.go('/admin'))],
+                        const SizedBox(width: 4),
+                        _toolbarBtn(Icons.logout, 'Keluar', color: cs.errorContainer.withValues(alpha: 0.5), textColor: cs.error, onTap: _handleLogout),
+                      ],
                       const SizedBox(width: 4),
-                      _toolbarBtn(Icons.history, 'Riwayat', onTap: () { setState(() { _closeAllModals(); showHistory = true; }); _loadHistory(); }),
+                      // Lock button
+                      _toolbarBtn(Icons.lock, 'Kunci', color: cs.errorContainer.withValues(alpha: 0.5), textColor: cs.error, onTap: () { context.read<AuthProvider>().lock(); }),
                       const SizedBox(width: 4),
-                      _toolbarBtn(Icons.notifications, 'Stok', onTap: _showStockAlert,
-                        badge: (_stockHabisCount + _stockRendahCount) > 0 ? '${_stockHabisCount + _stockRendahCount}' : null),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.delete_sweep, 'Waste', onTap: () {
-                        setState(() => _closeAllModals());
-                        WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
-                      }),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.person, auth.userName, onTap: () => setState(() { _closeAllModals(); showProfile = true; })),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.print, 'Printer', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
+                      const ThemeToggleButton(),
                     ],
-                    // Held carts indicator
-                    if (heldCarts.isNotEmpty) ...[
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.access_time, isMobile ? '' : 'Ditahan', color: cs.secondaryContainer, textColor: cs.onSecondaryContainer,
-                        badge: heldCarts.length.toString(), onTap: () { setState(() { _closeAllModals(); showHeldCarts = true; }); _loadHeldCarts(); }),
-                    ],
-                    if (isMobile) ...[
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.delete_sweep, '', onTap: () {
-                        setState(() => _closeAllModals());
-                        WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
-                      }),
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.print, '', onTap: () { setState(() => _closeAllModals()); showDialog(context: context, builder: (_) => const PrinterSettingsDialog()); }),
-                    ],
-                    if (!isMobile) ...[
-                      if (auth.isAdmin) ...[const SizedBox(width: 4), _toolbarBtn(Icons.settings, 'Admin', color: cs.tertiaryContainer, textColor: cs.onTertiaryContainer, onTap: () => context.go('/admin'))],
-                      const SizedBox(width: 4),
-                      _toolbarBtn(Icons.logout, 'Keluar', color: cs.errorContainer.withValues(alpha: 0.5), textColor: cs.error, onTap: _handleLogout),
-                    ],
-                    const SizedBox(width: 4),
-                    // Lock button
-                    InkWell(onTap: () { context.read<AuthProvider>().lock(); },
-                      child: Container(width: 36, height: 36, decoration: BoxDecoration(color: cs.errorContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(12)),
-                        child: Icon(Icons.lock, size: 18, color: cs.error))),
-                    const SizedBox(width: 4),
-                    const ThemeToggleButton(),
-                  ],
+                  ),
                 ),
               ),
             ),
