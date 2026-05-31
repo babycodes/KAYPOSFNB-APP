@@ -886,6 +886,9 @@ class _KasirScreenState extends State<KasirScreen> {
                       ],
                       if (isMobile) ...[
                         const SizedBox(width: 4),
+                        _toolbarBtn(Icons.notifications, 'Stok', onTap: _showStockAlert,
+                          badge: (_stockHabisCount + _stockRendahCount) > 0 ? '${_stockHabisCount + _stockRendahCount}' : null),
+                        const SizedBox(width: 4),
                         _toolbarBtn(Icons.delete_sweep, 'Waste', onTap: () {
                           setState(() => _closeAllModals());
                           WasteReportDialog.show(context, onSaved: () { _loadData(); _loadStockAlerts(); });
