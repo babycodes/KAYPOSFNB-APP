@@ -265,11 +265,11 @@ class _KartuStokPageState extends State<KartuStokPage> {
                 Text(d['name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
                 Text('${d['kategori_name'] ?? ''} • $unit', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
               ])),
-              DataCell(Text(totalIn > 0 ? '+${_fmtNum(totalIn)}' : '-', style: TextStyle(color: totalIn > 0 ? Colors.green.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
-              DataCell(Text(totalOut > 0 ? '-${_fmtNum(totalOut)}' : '-', style: TextStyle(color: totalOut > 0 ? Colors.orange.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
-              DataCell(Text(totalWaste > 0 ? '-${_fmtNum(totalWaste)}' : '-', style: TextStyle(color: totalWaste > 0 ? Colors.red.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
-              DataCell(Text(totalAdj != 0 ? '${totalAdj > 0 ? "+" : ""}${_fmtNum(totalAdj)}' : '-', style: TextStyle(color: totalAdj > 0 ? Colors.blue : totalAdj < 0 ? Colors.red : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
-              DataCell(Text('${_fmtNum(sysStock)} $unit', style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary))),
+              DataCell(Text(totalIn > 0 ? '+${_fmtDynUnit(totalIn, unit)}' : '-', style: TextStyle(color: totalIn > 0 ? Colors.green.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
+              DataCell(Text(totalOut > 0 ? '-${_fmtDynUnit(totalOut, unit)}' : '-', style: TextStyle(color: totalOut > 0 ? Colors.orange.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
+              DataCell(Text(totalWaste > 0 ? '-${_fmtDynUnit(totalWaste, unit)}' : '-', style: TextStyle(color: totalWaste > 0 ? Colors.red.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
+              DataCell(Text(totalAdj != 0 ? '${totalAdj > 0 ? "+" : ""}${_fmtDynUnit(totalAdj, unit)}' : '-', style: TextStyle(color: totalAdj > 0 ? Colors.blue : totalAdj < 0 ? Colors.red : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
+              DataCell(Text(_fmtDynUnit(sysStock, unit), style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary))),
               DataCell(SizedBox(width: 100, child: FilledButton.tonalIcon(
                 onPressed: () => _showOpnameDialog(Map<String, dynamic>.from(d)),
                 icon: const Icon(Icons.fact_check, size: 14),
@@ -308,16 +308,16 @@ class _KartuStokPageState extends State<KartuStokPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(8)),
-                child: Text('${_fmtNum(sysStock)} $unit', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary)),
+                child: Text(_fmtDynUnit(sysStock, unit), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary)),
               ),
             ]),
             const SizedBox(height: 8),
             // Metrics row
             Wrap(spacing: 8, runSpacing: 4, children: [
-              _metricChip('Masuk', totalIn > 0 ? '+${_fmtNum(totalIn)}' : '-', Colors.green),
-              _metricChip('Terjual', totalOut > 0 ? '-${_fmtNum(totalOut)}' : '-', Colors.orange),
-              _metricChip('Terbuang', totalWaste > 0 ? '-${_fmtNum(totalWaste)}' : '-', Colors.red),
-              if (totalAdj != 0) _metricChip('Selisih', '${totalAdj > 0 ? "+" : ""}${_fmtNum(totalAdj)}', Colors.blue),
+              _metricChip('Masuk', totalIn > 0 ? '+${_fmtDynUnit(totalIn, unit)}' : '-', Colors.green),
+              _metricChip('Terjual', totalOut > 0 ? '-${_fmtDynUnit(totalOut, unit)}' : '-', Colors.orange),
+              _metricChip('Terbuang', totalWaste > 0 ? '-${_fmtDynUnit(totalWaste, unit)}' : '-', Colors.red),
+              if (totalAdj != 0) _metricChip('Selisih', '${totalAdj > 0 ? "+" : ""}${_fmtDynUnit(totalAdj, unit)}', Colors.blue),
             ]),
             const SizedBox(height: 8),
             SizedBox(width: double.infinity, height: 32, child: FilledButton.tonalIcon(
@@ -343,6 +343,20 @@ class _KartuStokPageState extends State<KartuStokPage> {
   String _fmtNum(double n) {
     if (n == n.roundToDouble()) return n.round().toString();
     return n.toStringAsFixed(2);
+  }
+
+  /// Smart unit formatter: converts sub-1 Kg to gram, sub-1 L to ml
+  String _fmtDynUnit(double qty, String masterUnit) {
+    final absQty = qty.abs();
+    final sign = qty < 0 ? '-' : '';
+    final uLower = masterUnit.toLowerCase().trim();
+    if ((uLower == 'kg') && absQty > 0 && absQty < 1) {
+      return '$sign${_fmtNum(absQty * 1000)} gram';
+    }
+    if ((uLower == 'liter' || uLower == 'l') && absQty > 0 && absQty < 1) {
+      return '$sign${_fmtNum(absQty * 1000)} ml';
+    }
+    return '$sign${_fmtNum(absQty)} $masterUnit';
   }
 }
 

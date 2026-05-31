@@ -1356,6 +1356,12 @@ class _KasirScreenState extends State<KasirScreen> {
         barrierDismissible: true,
         builder: (ctx) => StatefulBuilder(builder: (ctx, setDState) {
           final status = txData['status']?.toString() ?? 'completed';
+          // Check if there are any refundable items left
+          final hasRefundableItems = status != 'voided' && details.any((d) {
+            final q = (d['quantity'] as num?)?.toDouble() ?? 0;
+            final r = (d['refunded_qty'] as num?)?.toDouble() ?? 0;
+            return r < q;
+          });
           return Dialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             child: ConstrainedBox(
@@ -1405,13 +1411,15 @@ class _KasirScreenState extends State<KasirScreen> {
                         Text(d['product_name']?.toString() ?? '-', style: TextStyle(
                           fontWeight: FontWeight.w600, fontSize: 13,
                           decoration: isFullyRefunded ? TextDecoration.lineThrough : null,
-                          color: isFullyRefunded ? cs.onSurfaceVariant : null)),
+                          color: isFullyRefunded ? Colors.grey : null)),
                         Row(children: [
                           Text('${qty.round()} pcs × ${fmtPrice(soldPrice)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
                           if (refundedQty > 0) Text('  (refund: ${refundedQty.round()})', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade600)),
                         ]),
                       ])),
-                      Text(fmtPrice(effectiveSubtotal), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, decoration: isFullyRefunded ? TextDecoration.lineThrough : null)),
+                      Text(fmtPrice(effectiveSubtotal), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13,
+                        decoration: isFullyRefunded ? TextDecoration.lineThrough : null,
+                        color: isFullyRefunded ? Colors.grey : null)),
                       // Refund button
                       if (remainingQty > 0 && status != 'voided')
                         Padding(padding: const EdgeInsets.only(left: 8), child: SizedBox(width: 30, height: 30,
@@ -1419,14 +1427,20 @@ class _KasirScreenState extends State<KasirScreen> {
                             icon: Icon(Icons.undo, color: Colors.red.shade400),
                             tooltip: 'Refund',
                             onPressed: () async {
-                              final qtyCtrl = TextEditingController(text: remainingQty.round().toString());
+                              final maxQty = remainingQty.round();
+                              final qtyCtrl = TextEditingController(text: maxQty.toString());
                               final confirmed = await showDialog<bool>(context: ctx, builder: (dlgCtx) => AlertDialog(
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                 title: Text('Refund: ${d['product_name']}', style: const TextStyle(fontSize: 15)),
                                 content: Column(mainAxisSize: MainAxisSize.min, children: [
-                                  Text('Maks: ${remainingQty.round()} pcs', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                                  Text('Maks: $maxQty pcs', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                                   const SizedBox(height: 10),
-                                  TextField(controller: qtyCtrl, decoration: InputDecoration(
+                                  TextField(controller: qtyCtrl,
+                                    onChanged: (v) {
+                                      final n = int.tryParse(v) ?? 0;
+                                      if (n > maxQty) { qtyCtrl.text = maxQty.toString(); qtyCtrl.selection = TextSelection.fromPosition(TextPosition(offset: qtyCtrl.text.length)); }
+                                    },
+                                    decoration: InputDecoration(
                                     labelText: 'Jumlah refund', isDense: true, suffixText: 'pcs',
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                   ), keyboardType: const TextInputType.numberWithOptions(decimal: false)),
@@ -1470,7 +1484,7 @@ class _KasirScreenState extends State<KasirScreen> {
                   },
                 )),
                 const Divider(height: 1),
-                // ── Footer Totals ──
+                // ── Footer Totals + Refund Semua ──
                 Padding(padding: const EdgeInsets.all(16), child: Column(children: [
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('Total', style: TextStyle(fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
@@ -1481,6 +1495,48 @@ class _KasirScreenState extends State<KasirScreen> {
                     Text('Bayar', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                     Text(fmtPrice(txData['paid_amount'] ?? 0), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                   ]),
+                  // ── Refund Semua Button ──
+                  if (hasRefundableItems) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(width: double.infinity, height: 40, child: FilledButton.icon(
+                      style: FilledButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      icon: const Icon(Icons.delete_forever, size: 18),
+                      label: const Text('Refund Semua (Void Transaksi)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      onPressed: () async {
+                        final ok = await showDialog<bool>(context: ctx, builder: (dlgCtx) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Text('Konfirmasi Void', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          content: const Text('Refund SEMUA item dalam transaksi ini?\n\nStok bahan akan dikembalikan dan transaksi akan di-void.'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(dlgCtx, false), child: const Text('Batal')),
+                            FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                              onPressed: () => Navigator.pop(dlgCtx, true), child: const Text('Ya, Void Semua')),
+                          ],
+                        ));
+                        if (ok != true) return;
+                        try {
+                          final payload = details.where((d) {
+                            final q = (d['quantity'] as num?)?.toDouble() ?? 0;
+                            final r = (d['refunded_qty'] as num?)?.toDouble() ?? 0;
+                            return r < q;
+                          }).map((d) => {
+                            'detail_id': d['id'],
+                            'qty_to_refund': ((d['quantity'] as num?)?.toDouble() ?? 0) - ((d['refunded_qty'] as num?)?.toDouble() ?? 0),
+                          }).toList();
+                          await Api.post('/transactions/${txData['id']}/refund', body: {'items': payload});
+                          final newRes = await Api.get('/transactions/${txData['id']}');
+                          setDState(() {
+                            txData = newRes['transaction'] as Map<String, dynamic>? ?? txData;
+                            details = (newRes['details'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? details;
+                          });
+                          _loadData(); _loadHistory(); _loadDashboard(); _loadStockAlerts();
+                          if (mounted) showToast(context, '✅ Transaksi berhasil di-void');
+                        } catch (e) {
+                          if (mounted) showToast(context, '❌ ${e.toString().replaceFirst("Exception: ", "")}');
+                        }
+                      },
+                    )),
+                  ],
                 ])),
               ]),
             ),
