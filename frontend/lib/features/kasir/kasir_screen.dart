@@ -15,6 +15,7 @@ import 'dialogs/confirm_dialog.dart';
 import 'dialogs/printer_settings_dialog.dart';
 import '../auth/lock_screen.dart';
 import '../../services/printer_service.dart';
+import '../../services/receipt_generator.dart';
 import '../admin/waste_report_dialog.dart';
 
 class KasirScreen extends StatefulWidget {
@@ -1195,6 +1196,12 @@ class _KasirScreenState extends State<KasirScreen> {
                   Row(children: [
                     Expanded(child: SizedBox(height: 32, child: FilledButton(onPressed: () => _recallCart(h), style: FilledButton.styleFrom(padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), child: const Text('Panggil', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))))),
                     const SizedBox(width: 8),
+                    SizedBox(height: 32, child: IconButton(
+                      style: IconButton.styleFrom(backgroundColor: cs.secondaryContainer, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                      icon: Icon(Icons.receipt_long, size: 16, color: cs.onSecondaryContainer),
+                      onPressed: () => _showHeldCartDetail(h),
+                    )),
+                    const SizedBox(width: 8),
                     SizedBox(height: 32, child: FilledButton(onPressed: () => _deleteHeldCart(h['id'], h['label'] ?? 'antrian ini'),
                       style: FilledButton.styleFrom(backgroundColor: cs.errorContainer.withValues(alpha: 0.5), foregroundColor: cs.error, padding: const EdgeInsets.symmetric(horizontal: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                       child: const Text('Hapus', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)))),
@@ -1374,6 +1381,78 @@ class _KasirScreenState extends State<KasirScreen> {
     await _loadHeldCarts();
   }
 
+  Future<void> _showHeldCartDetail(dynamic held) async {
+    final cs = Theme.of(context).colorScheme;
+    final items = (held['cart_data'] is List) ? held['cart_data'] as List : [];
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 400, maxHeight: MediaQuery.sizeOf(context).height * 0.8),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text('Detail: ${held['label']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                InkWell(onTap: () => Navigator.pop(ctx), child: const Icon(Icons.close)),
+              ]),
+            ),
+            const Divider(height: 1),
+            Flexible(child: ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(16),
+              itemCount: items.length,
+              itemBuilder: (_, i) {
+                final item = items[i];
+                final qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+                final qtyStr = qty == qty.truncateToDouble() ? qty.truncate().toString() : qty.toStringAsFixed(2);
+                final name = item['product_name']?.toString() ?? '';
+                final addonSummary = item['addon_summary']?.toString() ?? '';
+                
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('${qtyStr}x', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      if (addonSummary.isNotEmpty && addonSummary != '[]')
+                        Text(addonSummary, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontStyle: FontStyle.italic)),
+                    ])),
+                  ]),
+                );
+              },
+            )),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(width: double.infinity, height: 44, child: FilledButton.icon(
+                icon: const Icon(Icons.print, size: 18),
+                label: const Text('Cetak Tiket Dapur', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                onPressed: () async {
+                  try {
+                    final bytes = await ReceiptGenerator.generateKitchenTicket(
+                      cartData: held,
+                      customerName: held['label']?.toString() ?? 'Pelanggan',
+                    );
+                    await PrinterService().printReceipt(bytes);
+                    if (mounted) showToast(context, '✅ Tiket Dapur Dicetak');
+                  } catch (e) {
+                    if (mounted) showToast(context, '❌ Gagal cetak: ${e.toString().replaceFirst("Exception: ", "")}');
+                  }
+                },
+              )),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Future<void> _deleteHeldCart(int id, String label) async {
     final confirmed = await showDialog<bool>(context: context, builder: (_) => KayConfirmDialog(
       title: 'Hapus Antrian', message: 'Yakin ingin menghapus antrian "$label"? Semua item akan dihapus.', confirmText: 'Ya, Hapus'));
@@ -1407,7 +1486,9 @@ class _KasirScreenState extends State<KasirScreen> {
         builder: (ctx) => StatefulBuilder(builder: (ctx, setDState) {
           final status = txData['status']?.toString() ?? 'completed';
           // Check if there are any refundable items left
-          final hasRefundableItems = status != 'voided' && details.any((d) {
+          final auth = context.read<AuthProvider>();
+          final bool canRefund = auth.isAdmin || auth.userName == (txData['cashier_name'] ?? '');
+          final hasRefundableItems = canRefund && status != 'voided' && details.any((d) {
             final q = (d['quantity'] as num?)?.toDouble() ?? 0;
             final r = (d['refunded_qty'] as num?)?.toDouble() ?? 0;
             return r < q;
@@ -1471,7 +1552,7 @@ class _KasirScreenState extends State<KasirScreen> {
                         decoration: isFullyRefunded ? TextDecoration.lineThrough : null,
                         color: isFullyRefunded ? Colors.grey : null)),
                       // Refund button
-                      if (remainingQty > 0 && status != 'voided')
+                      if (canRefund && remainingQty > 0 && status != 'voided')
                         Padding(padding: const EdgeInsets.only(left: 8), child: SizedBox(width: 30, height: 30,
                           child: IconButton(padding: EdgeInsets.zero, iconSize: 16,
                             icon: Icon(Icons.undo, color: Colors.red.shade400),
@@ -1514,6 +1595,7 @@ class _KasirScreenState extends State<KasirScreen> {
                               try {
                                 await Api.post('/transactions/${txData['id']}/refund', body: {
                                   'items': [{'detail_id': d['id'], 'qty_to_refund': rQty}],
+                                  'refunded_by': auth.userName,
                                 });
                                 // Reload dialog data
                                 final newRes = await Api.get('/transactions/${txData['id']}');
@@ -1573,7 +1655,10 @@ class _KasirScreenState extends State<KasirScreen> {
                             'detail_id': d['id'],
                             'qty_to_refund': ((d['quantity'] as num?)?.toDouble() ?? 0) - ((d['refunded_qty'] as num?)?.toDouble() ?? 0),
                           }).toList();
-                          await Api.post('/transactions/${txData['id']}/refund', body: {'items': payload});
+                          await Api.post('/transactions/${txData['id']}/refund', body: {
+                            'items': payload,
+                            'refunded_by': auth.userName,
+                          });
                           final newRes = await Api.get('/transactions/${txData['id']}');
                           setDState(() {
                             txData = newRes['transaction'] as Map<String, dynamic>? ?? txData;

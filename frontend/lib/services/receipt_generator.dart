@@ -242,6 +242,50 @@ class ReceiptGenerator {
     return bytes;
   }
 
+  static Future<List<int>> generateKitchenTicket({
+    required Map<String, dynamic> cartData,
+    required String customerName,
+    PaperSize paperSize = PaperSize.mm58,
+    CapabilityProfile? profile,
+  }) async {
+    profile ??= await CapabilityProfile.load();
+    final generator = Generator(paperSize, profile);
+    List<int> bytes = [];
+
+    bytes += generator.text('=== TIKET DAPUR ===', styles: const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text('Pelanggan: $customerName', styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.text('Waktu: ${fmtDate(DateTime.now().toIso8601String())}', styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.hr(ch: '-');
+
+    final items = cartData['items'] as List? ?? [];
+    for (var item in items) {
+      final qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+      final qtyStr = qty == qty.truncateToDouble() ? qty.truncate().toString() : qty.toStringAsFixed(2);
+      final name = item['product_name']?.toString() ?? '';
+      
+      bytes += generator.text('$qtyStr x $name', styles: const PosStyles(align: PosAlign.left, bold: true));
+      
+      final isPaket = (item['is_paket'] as num?)?.toInt() == 1;
+      if (isPaket && item['addon_summary'] != null) {
+        final addonSummary = item['addon_summary'].toString();
+        if (addonSummary.isNotEmpty && addonSummary != '[]') {
+          for (final line in addonSummary.split('\n')) {
+            final trimmed = line.trim();
+            if (trimmed.isEmpty) continue;
+            final childLine = trimmed.startsWith('-') ? '  $trimmed' : trimmed;
+            bytes += generator.text(childLine, styles: const PosStyles(align: PosAlign.left));
+          }
+        }
+      }
+    }
+
+    bytes += generator.hr(ch: '-');
+    bytes += generator.feed(2);
+    bytes += generator.cut();
+
+    return bytes;
+  }
+
   static Future<List<int>> generateTestPrint({
     required Map<String, dynamic> settings,
     PaperSize paperSize = PaperSize.mm58,

@@ -77,38 +77,73 @@ class _ReceiptModalState extends State<ReceiptModal> {
                 final formattedUnit = '$qtyStr $unitUsed';
                 final itemDiscount = (d['discount_amount'] as num?)?.toDouble() ?? 0.0;
                 
+                final refundedQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0.0;
+                final isFullyRefunded = refundedQty >= qty;
+
                 return Padding(padding: const EdgeInsets.only(bottom: 8),
                 child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(d['product_name'] ?? '', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: cs.onSurface)),
-                    Text('$formattedUnit × ${fmtPrice(d['sold_price'] ?? 0)}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                    Text(d['product_name'] ?? '', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: isFullyRefunded ? Colors.grey : cs.onSurface, decoration: isFullyRefunded ? TextDecoration.lineThrough : null)),
+                    Row(children: [
+                      Text('$formattedUnit × ${fmtPrice(d['sold_price'] ?? 0)}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                      if (refundedQty > 0) Text('  (refund: ${refundedQty.round()})', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade600)),
+                    ]),
                     if (itemDiscount > 0)
                       Text('  - Rp ${fmtPrice(itemDiscount)}', style: const TextStyle(fontSize: 12, color: Colors.red)),
                     if (d['addon_summary'] != null && d['addon_summary'].toString().isNotEmpty && d['addon_summary'].toString() != '[]')
                       Text(d['addon_summary'].toString(), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontStyle: FontStyle.italic)),
                   ])),
-                  Text(fmtPrice(d['subtotal'] ?? 0), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: cs.onSurface)),
+                  Text(fmtPrice(d['subtotal'] ?? 0), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: isFullyRefunded ? Colors.grey : cs.onSurface, decoration: isFullyRefunded ? TextDecoration.lineThrough : null)),
                 ]));
               }),
               Divider(color: cs.outlineVariant),
               Builder(builder: (context) {
+                double refundedAmount = 0.0;
+                for (var d in widget.details) {
+                  final soldPrice = (d['sold_price'] as num?)?.toDouble() ?? 0.0;
+                  final discountPct = (d['discount_percent'] as num?)?.toDouble() ?? 0.0;
+                  final effectivePrice = soldPrice * (1 - discountPct / 100);
+                  final rQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0.0;
+                  refundedAmount += effectivePrice * rQty;
+                }
+
                 final systemPromo = widget.details.fold<double>(0, (sum, item) => sum + ((item['discount_amount'] as num?)?.toDouble() ?? 0.0));
                 final totalDiscount = (widget.transaction['discount_total'] as num?)?.toDouble() ?? 0.0;
                 double cashierDiscount = totalDiscount - systemPromo;
                 if (cashierDiscount < 0) cashierDiscount = 0; // fallback just in case
                 
-                return Column(
-                  children: [
-                    _row('Harga Awal', fmtPrice(widget.transaction['total_amount'] ?? 0), cs),
-                    if (systemPromo > 0)
-                      _row('Diskon Promo', fmtPrice(systemPromo), cs),
-                    if (cashierDiscount > 0)
-                      _row('Diskon Kasir', fmtPrice(cashierDiscount), cs),
-                    Divider(color: cs.outlineVariant),
-                    _row('Harga Akhir', fmtPrice((widget.transaction['total_amount'] ?? 0) - totalDiscount), cs, bold: true, size: 18),
-                    Divider(color: cs.outlineVariant),
-                  ],
-                );
+                final finalTotal = (widget.transaction['total_amount'] as num?)?.toDouble() ?? 0.0;
+                final originalTotal = finalTotal + refundedAmount;
+                final hargaAwal = (widget.transaction['total_amount'] as num?)?.toDouble() ?? 0.0;
+
+                if (refundedAmount > 0) {
+                  return Column(
+                    children: [
+                      _row('Harga Awal', fmtPrice(originalTotal), cs),
+                      if (systemPromo > 0)
+                        _row('Diskon Promo', fmtPrice(systemPromo), cs),
+                      if (cashierDiscount > 0)
+                        _row('Diskon Kasir', fmtPrice(cashierDiscount), cs),
+                      _row('Di-refund', '- Rp ${fmtPrice(refundedAmount)}', cs, color: Colors.red),
+                      Divider(color: cs.outlineVariant),
+                      _row('Total Akhir', fmtPrice(finalTotal), cs, bold: true, size: 18),
+                      Divider(color: cs.outlineVariant),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      _row('Harga Awal', fmtPrice(hargaAwal), cs),
+                      if (systemPromo > 0)
+                        _row('Diskon Promo', fmtPrice(systemPromo), cs),
+                      if (cashierDiscount > 0)
+                        _row('Diskon Kasir', fmtPrice(cashierDiscount), cs),
+                      Divider(color: cs.outlineVariant),
+                      _row('Harga Akhir', fmtPrice(hargaAwal - totalDiscount), cs, bold: true, size: 18),
+                      Divider(color: cs.outlineVariant),
+                    ],
+                  );
+                }
               }),
               _row('Bayar', fmtPrice(widget.transaction['paid_amount'] ?? 0), cs),
               _row('Kembali', fmtPrice(widget.transaction['change_amount'] ?? 0), cs),

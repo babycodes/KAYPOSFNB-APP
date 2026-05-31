@@ -1324,6 +1324,7 @@ class Api {
       if (refundMatch != null) {
         final txId = int.parse(refundMatch.group(1)!);
         final items = (body?['items'] as List?) ?? [];
+        final refundedBy = body?['refunded_by']?.toString() ?? 'System';
         if (items.isEmpty) throw Exception('Tidak ada item untuk di-refund');
 
         double totalRefundAmount = 0;
@@ -1390,7 +1391,7 @@ class Api {
                   try { await txn.insert('inventory_ledger', {
                   'bahan_baku_id': bbId, 'transaction_type': 'REFUND',
                     'qty_change': returnQty, 'financial_value': 0,
-                    'notes': 'Refund Item: $productName (Tx #$txId)',
+                    'notes': 'Refund Item: $productName (Tx #$txId) [Di-refund oleh: $refundedBy]',
                   }); } catch (_) {}
                 }
               }
@@ -1408,7 +1409,7 @@ class Api {
                 try { await txn.insert('inventory_ledger', {
                   'bahan_baku_id': bbId, 'transaction_type': 'REFUND',
                   'qty_change': returnQty, 'financial_value': 0,
-                  'notes': 'Refund Item: $productName (Tx #$txId)',
+                  'notes': 'Refund Item: $productName (Tx #$txId) [Di-refund oleh: $refundedBy]',
                 }); } catch (_) {}
               }
             }
