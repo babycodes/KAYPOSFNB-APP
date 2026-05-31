@@ -453,9 +453,9 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     final costPrice = m != null ? (m['cost_price'] as num?)?.toDouble() ?? 0 : 0.0;
     final minAlert = m != null ? (m['min_stock_alert'] as num?)?.toDouble() ?? 0 : 0.0;
     
-    // Total Harga Beli Architecture: show total cost (stock × unit price)
+    // HPP per unit is the source of truth
     _stockCtrl = TextEditingController(text: m != null ? _fmtInit(stock) : '');
-    _costCtrl = TextEditingController(text: m != null ? _fmtInit(stock * costPrice) : '');
+    _costCtrl = TextEditingController(text: m != null ? _fmtInit(costPrice) : '');
     _minAlertCtrl = TextEditingController(text: m != null ? _fmtInit(minAlert) : '');
 
     if (m != null && _units.contains(dbUnit)) {
@@ -487,8 +487,8 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     final qtyBeli = double.tryParse(qtyBeliStr) ?? 0;
     final totalPrice = double.tryParse(totalPriceStr) ?? 0;
     
-    // Compute cost_price per unit from Total Harga Beli / Jumlah Stok
-    final double costPricePerUnit = qtyBeli > 0 ? totalPrice / qtyBeli : 0;
+    // Base cost is read directly
+    final double costPricePerUnit = totalPrice;
     final double minAlertInput = double.tryParse(_minAlertCtrl.text.replaceAll(',', '.')) ?? 0;
 
     final data = {
@@ -589,7 +589,7 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Total Harga Beli', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
+                  decoration: InputDecoration(labelText: 'Harga Modal per $_selectedUnit', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
               ]) : Row(children: [
@@ -598,10 +598,10 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                   decoration: InputDecoration(labelText: isEdit ? 'Stok Saat Ini' : 'Jumlah Beli', isDense: true, suffixText: _selectedUnit),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 Expanded(child: TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Total Harga Beli', isDense: true, prefixText: 'Rp '),
+                  decoration: InputDecoration(labelText: 'Harga Modal per $_selectedUnit', isDense: true, prefixText: 'Rp '),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
               ]),

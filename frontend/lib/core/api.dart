@@ -301,7 +301,8 @@ class Api {
         try {
           final statsRows = await db.rawQuery('''
             WITH ProductCOGS AS (
-              SELECT r.product_id, SUM(r.qty_needed * b.cost_price) as hpp_per_unit
+              SELECT r.product_id, 
+                     SUM(r.qty_needed * (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.cost_price / 1000.0 ELSE b.cost_price END)) as hpp_per_unit
               FROM resep r
               JOIN bahan_baku b ON r.bahan_baku_id = b.id
               GROUP BY r.product_id
@@ -508,7 +509,8 @@ class Api {
         try {
           final cogsRows = await db.rawQuery('''
             WITH ProductCOGS AS (
-              SELECT r.product_id, SUM(r.qty_needed * b.cost_price) as hpp_per_unit
+              SELECT r.product_id, 
+                     SUM(r.qty_needed * (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.cost_price / 1000.0 ELSE b.cost_price END)) as hpp_per_unit
               FROM resep r
               JOIN bahan_baku b ON r.bahan_baku_id = b.id
               GROUP BY r.product_id
@@ -567,7 +569,8 @@ class Api {
         // Get daily sales and COGS using CTE
         final chartRows = await db.rawQuery('''
           WITH ProductCOGS AS (
-            SELECT r.product_id, SUM(r.qty_needed * b.cost_price) as hpp_per_unit
+            SELECT r.product_id, 
+                   SUM(r.qty_needed * (CASE WHEN LOWER(b.unit) IN ('kg','liter','l') THEN b.cost_price / 1000.0 ELSE b.cost_price END)) as hpp_per_unit
             FROM resep r
             JOIN bahan_baku b ON r.bahan_baku_id = b.id
             GROUP BY r.product_id
