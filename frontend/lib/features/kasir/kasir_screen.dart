@@ -826,7 +826,7 @@ class _KasirScreenState extends State<KasirScreen> {
             Builder(builder: (ctx) {
               final dropdown = Container(height: 36, constraints: isMobile ? null : const BoxConstraints(maxWidth: 220), padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5))),
-                child: DropdownButtonHideUnderline(child: DropdownButton<int?>(
+                child: DropdownButtonHideUnderline(child: DropdownButton(
                   value: selectedCategory, isExpanded: true, isDense: true,
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface),
                   items: [
