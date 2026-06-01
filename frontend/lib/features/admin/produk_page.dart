@@ -237,7 +237,7 @@ class _ProdukPageState extends State<ProdukPage> {
                             PopupMenuButton(
                               icon: const Icon(Icons.more_vert),
                               itemBuilder: (_) => [
-                                const PopupMenuItem(value: 'recipe', child: Row(children: [Icon(Icons.receipt_long, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Atur Resep', style: TextStyle(color: Colors.blue))])),
+                                const PopupMenuItem(value: 'recipe', child: Row(children: [Icon(Icons.receipt_long, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Atur Inventory', style: TextStyle(color: Colors.blue))])),
                                 const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
                                 PopupMenuItem(value: 'toggle', child: Row(children: [Icon(isActive ? Icons.visibility_off : Icons.visibility, size: 18), const SizedBox(width: 8), Text(isActive ? 'Non-aktifkan' : 'Aktifkan')])),
                                 const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
@@ -253,7 +253,7 @@ class _ProdukPageState extends State<ProdukPage> {
                             ElevatedButton.icon(
                               onPressed: () => _openRecipe(p),
                               icon: const Icon(Icons.receipt_long, size: 16),
-                              label: const Text('Resep', style: TextStyle(fontSize: 12)),
+                              label: const Text('Inventory', style: TextStyle(fontSize: 12)),
                               style: ElevatedButton.styleFrom(visualDensity: VisualDensity.compact),
                             ),
                             PopupMenuButton(
@@ -705,7 +705,7 @@ class _RecipeModalState extends State<RecipeModal> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Atur Resep: ${widget.product['name']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('Atur Inventory: ${widget.product['name']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
             ],
           ),
