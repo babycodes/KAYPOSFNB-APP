@@ -136,26 +136,14 @@ class _KasirScreenState extends State<KasirScreen> {
     searchQuery = '';
   }
 
+  bool _isServerDisconnected = false;
+
   void _triggerBackgroundSync() {
     SyncService.syncTransactions().then((res) {
       if (res == 'SYNC_REVOKED' && mounted) {
-        showDialog(
-          context: context, 
-          barrierDismissible: false,
-          builder: (_) => AlertDialog(
-            title: const Text('Koneksi Terputus ⚠️'),
-            content: const Text('Koneksi Server terputus karena PIN dirubah/dicabut oleh Admin. Silakan login ulang dan klik logo Jaringan untuk memasukkan PIN baru.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  context.read<AuthProvider>().logout();
-                  context.go('/login');
-                }, 
-                child: const Text('Ke Layar Login')
-              )
-            ],
-          )
-        );
+        setState(() { _isServerDisconnected = true; });
+      } else if (res.contains('Sukses') && mounted) {
+        setState(() { _isServerDisconnected = false; });
       }
     }).catchError((_) {}); // Ignore timeout/network errors silently
   }
@@ -844,6 +832,19 @@ class _KasirScreenState extends State<KasirScreen> {
             Image.asset('assets/icon-512.png', width: 28, height: 28),
             const SizedBox(width: 12),
             const Text('KAYPOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18, letterSpacing: -0.5)),
+            const Spacer(),
+            if (_isServerDisconnected)
+              Tooltip(
+                message: 'Koneksi Server Terputus. Sinkronisasi terhenti.',
+                child: Row(
+                  children: [
+                    const Icon(Icons.cloud_off, color: Colors.redAccent, size: 20),
+                    const SizedBox(width: 6),
+                    const Text('OFFLINE', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 16),
+                  ],
+                ),
+              ),
           ])),
         ),
 
