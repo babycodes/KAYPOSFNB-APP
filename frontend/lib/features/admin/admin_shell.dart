@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/auth_provider.dart';
 import '../../core/api.dart';
+import '../../services/sync_service.dart';
 
 class AdminShell extends StatefulWidget {
   final Widget child;
@@ -16,6 +18,7 @@ class _AdminShellState extends State<AdminShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _bahanHabisCount = 0;
   int _bahanRendahCount = 0;
+  Timer? _syncTimer;
 
   final navItems = [
     {'href': '/admin', 'label': 'Dashboard', 'icon': Icons.dashboard},
@@ -35,6 +38,17 @@ class _AdminShellState extends State<AdminShell> {
   void initState() {
     super.initState();
     _loadBahanAlerts();
+    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      SyncService.syncTransactions().then((_) {
+        if (mounted) _loadBahanAlerts(); // update badges after sync
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadBahanAlerts() async {

@@ -66,6 +66,12 @@ class LocalDb {
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN addon_summary TEXT DEFAULT "[]"'); } catch (_) {}
         try { await db.execute('ALTER TABLE transactions ADD COLUMN is_synced INTEGER DEFAULT 0'); } catch (_) {}
         try { await db.execute('ALTER TABLE bahan_baku ADD COLUMN kategori TEXT DEFAULT "Lainnya"'); } catch (_) {}
+        
+        // Add updated_at to junction tables for sync support
+        try { await db.execute('ALTER TABLE resep ADD COLUMN updated_at TEXT DEFAULT (datetime(\'now\',\'localtime\'))'); } catch (_) {}
+        try { await db.execute('ALTER TABLE paket_items ADD COLUMN updated_at TEXT DEFAULT (datetime(\'now\',\'localtime\'))'); } catch (_) {}
+        try { await db.execute('ALTER TABLE product_addon_categories ADD COLUMN updated_at TEXT DEFAULT (datetime(\'now\',\'localtime\'))'); } catch (_) {}
+        
         // Module: kategori_bahan table
         try {
           await db.execute('''

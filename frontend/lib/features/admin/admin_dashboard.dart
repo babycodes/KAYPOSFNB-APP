@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../core/api.dart';
 import '../../core/helpers.dart';
+import '../../services/sync_service.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -21,6 +22,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void initState() {
     super.initState();
     _load();
+    SyncService.syncNotifier.addListener(_onSyncEvent);
+  }
+
+  @override
+  void dispose() {
+    SyncService.syncNotifier.removeListener(_onSyncEvent);
+    super.dispose();
+  }
+
+  void _onSyncEvent() {
+    if (mounted) _load();
   }
 
   Future<void> _load() async {

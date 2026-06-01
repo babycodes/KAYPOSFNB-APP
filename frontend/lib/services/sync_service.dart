@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -6,6 +7,7 @@ import '../core/local_db.dart';
 import 'device_info_service.dart';
 
 class SyncService {
+  static final ValueNotifier<int> syncNotifier = ValueNotifier(0);
   /// Sync transactions to server. 
   /// Returns a message string for the UI.
   static Future<String> syncTransactions() async {
@@ -34,9 +36,16 @@ class SyncService {
 
       // 1. Gather Master Data Changes
       final Map<String, List<Map<String, dynamic>>> changes = {};
-      final masterTables = ['categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts', 'products', 'bahan_baku', 'addons'];
+      final masterTables = [
+        'categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts', 
+        'products', 'bahan_baku', 'addons', 'resep', 'paket_items', 
+        'product_addon_categories', 'inventory_ledger', 'restock_history'
+      ];
       for (var table in masterTables) {
-        final dateCol = (table == 'users') ? 'created_at' : 'updated_at';
+        String dateCol = 'updated_at';
+        if (table == 'users') dateCol = 'created_at';
+        if (table == 'inventory_ledger' || table == 'restock_history') dateCol = 'timestamp';
+        
         final rows = await db.query(table, where: '$dateCol > ?', whereArgs: [lastSyncStr]);
         if (rows.isNotEmpty) changes[table] = rows;
       }
@@ -122,6 +131,7 @@ class SyncService {
         }
 
         await prefs.setString('last_sync_time', DateTime.now().toUtc().toIso8601String());
+        syncNotifier.value++;
 
         return 'Sukses! $syncedCount tx dikirim, ${pulled.length} tx ditarik. $masterSuccess pembaruan master.';
       } else if (res.statusCode == 401) {
