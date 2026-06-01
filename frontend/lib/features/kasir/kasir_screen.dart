@@ -17,6 +17,7 @@ import '../auth/lock_screen.dart';
 import '../../services/printer_service.dart';
 import '../../services/receipt_generator.dart';
 import '../admin/waste_report_dialog.dart';
+import '../../services/sync_service.dart';
 
 class KasirScreen extends StatefulWidget {
   const KasirScreen({super.key});
@@ -118,6 +119,9 @@ class _KasirScreenState extends State<KasirScreen> {
       _loadDashboard();
       _loadHeldCarts();
       _loadStockAlerts();
+
+      // Background sync check on launch
+      _triggerBackgroundSync();
     });
   }
 
@@ -130,6 +134,30 @@ class _KasirScreenState extends State<KasirScreen> {
     showDashboard = false; showHistory = false; showProfile = false;
     showHeldCarts = false; cartOpen = false; showSearch = false;
     searchQuery = '';
+  }
+
+  void _triggerBackgroundSync() {
+    SyncService.syncTransactions().then((res) {
+      if (res == 'SYNC_REVOKED' && mounted) {
+        showDialog(
+          context: context, 
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            title: const Text('Koneksi Terputus ⚠️'),
+            content: const Text('Koneksi Server terputus karena PIN dirubah/dicabut oleh Admin. Silakan login ulang dan klik logo Jaringan untuk memasukkan PIN baru.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  context.read<AuthProvider>().logout();
+                  context.go('/login');
+                }, 
+                child: const Text('Ke Layar Login')
+              )
+            ],
+          )
+        );
+      }
+    }).catchError((_) {}); // Ignore timeout/network errors silently
   }
 
   List<dynamic> activeDiscounts = [];
@@ -780,6 +808,8 @@ class _KasirScreenState extends State<KasirScreen> {
         }
         _loadDashboard(); _loadData(); _loadStockAlerts();
         
+        // Trigger sync in background after checkout
+        _triggerBackgroundSync();
         
         showDialog(context: context, builder: (_) => ReceiptModal(transaction: result['transaction'], details: List<Map<String, dynamic>>.from(result['details'])));
       }
