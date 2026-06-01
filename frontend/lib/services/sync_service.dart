@@ -74,7 +74,6 @@ class SyncService {
         // Process pulled transactions from server
         final pulled = body['pull_transactions'] as List<dynamic>? ?? [];
         if (pulled.isNotEmpty) {
-          final pullBatch = db.batch();
           for (var pt in pulled) {
             final txId = pt['id'];
             // Check if exists
@@ -83,13 +82,17 @@ class SyncService {
               final Map<String, dynamic> header = Map.from(pt);
               final items = header.remove('items') as List<dynamic>? ?? [];
               header['is_synced'] = 1; // already synced from server
-              pullBatch.insert('transactions', header);
-              for (var item in items) {
-                pullBatch.insert('transaction_details', Map<String, dynamic>.from(item));
+              
+              try {
+                await db.insert('transactions', header);
+                for (var item in items) {
+                  await db.insert('transaction_details', Map<String, dynamic>.from(item));
+                }
+              } catch (e) {
+                // Ignore malformed transactions from server
               }
             }
           }
-          await pullBatch.commit(noResult: true);
         }
 
         // Process pulled Master Data changes from server
