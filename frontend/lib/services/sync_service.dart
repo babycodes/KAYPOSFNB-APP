@@ -93,6 +93,7 @@ class SyncService {
 
         // Process pulled Master Data changes from server
         final pullChanges = body['pull_changes'] as List<dynamic>? ?? [];
+        int masterSuccess = 0;
         if (pullChanges.isNotEmpty) {
           // Sort to avoid Foreign Key constraint errors (parents first)
           pullChanges.sort((a, b) {
@@ -101,7 +102,6 @@ class SyncService {
             return idxA.compareTo(idxB);
           });
 
-          int masterSuccess = 0;
           for (var change in pullChanges) {
             final table = change['table_name'];
             final Map<String, dynamic> rowData = jsonDecode(change['payload']);
