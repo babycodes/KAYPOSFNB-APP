@@ -94,21 +94,32 @@ class SyncService {
         // Process pulled Master Data changes from server
         final pullChanges = body['pull_changes'] as List<dynamic>? ?? [];
         if (pullChanges.isNotEmpty) {
-          final masterBatch = db.batch();
+          // Sort to avoid Foreign Key constraint errors (parents first)
+          pullChanges.sort((a, b) {
+            final idxA = masterTables.indexOf(a['table_name']);
+            final idxB = masterTables.indexOf(b['table_name']);
+            return idxA.compareTo(idxB);
+          });
+
+          int masterSuccess = 0;
           for (var change in pullChanges) {
             final table = change['table_name'];
             final Map<String, dynamic> rowData = jsonDecode(change['payload']);
             if (masterTables.contains(table)) {
-               // INSERT OR REPLACE
-               masterBatch.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
+               try {
+                 await db.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
+                 masterSuccess++;
+               } catch (e) {
+                 // Ignore UNIQUE constraint violations (e.g. same category name but different UUID)
+               }
             }
           }
-          await masterBatch.commit(noResult: true);
+          // End of Master Data processing
         }
 
         await prefs.setString('last_sync_time', DateTime.now().toUtc().toIso8601String());
 
-        return 'Sukses! $syncedCount tx dikirim, ${pulled.length} tx ditarik. ${pullChanges.length} pembaruan master.';
+        return 'Sukses! $syncedCount tx dikirim, ${pulled.length} tx ditarik. $masterSuccess pembaruan master.';
       } else if (res.statusCode == 401) {
         // Device is revoked or PIN changed
         await prefs.remove('server_url');
@@ -117,8 +128,8 @@ class SyncService {
         final body = jsonDecode(res.body);
         return 'Gagal sinkronisasi: ${body['error'] ?? res.statusCode}';
       }
-    } catch (e) {
-      return 'Koneksi ke server gagal. Server mungkin mati.';
+    } catch (e, stack) {
+      return 'Koneksi gagal/Error: $e';
     }
   }
 }
