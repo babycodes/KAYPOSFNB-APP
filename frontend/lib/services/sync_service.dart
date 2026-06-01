@@ -34,6 +34,16 @@ class SyncService {
 
       final lastSyncStr = prefs.getString('last_sync_time') ?? '2000-01-01T00:00:00.000Z';
 
+      // One-time bump for junction tables that didn't have updated_at before v1.0.94
+      final hasForced = prefs.getBool('has_forced_sync_junctions') ?? false;
+      if (!hasForced) {
+        final now = DateTime.now().toUtc().toIso8601String();
+        await db.rawUpdate("UPDATE resep SET updated_at = ?", [now]);
+        await db.rawUpdate("UPDATE paket_items SET updated_at = ?", [now]);
+        await db.rawUpdate("UPDATE product_addon_categories SET updated_at = ?", [now]);
+        await prefs.setBool('has_forced_sync_junctions', true);
+      }
+
       // 1. Gather Master Data Changes
       final Map<String, List<Map<String, dynamic>>> changes = {};
       final masterTables = [

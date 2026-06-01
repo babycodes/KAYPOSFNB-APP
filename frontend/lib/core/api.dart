@@ -1277,6 +1277,7 @@ class Api {
           'product_id': body?['product_id'],
           'bahan_baku_id': body?['bahan_baku_id'],
           'qty_needed': (body?['qty_needed'] as num?)?.toDouble() ?? 0,
+          'updated_at': DateTime.now().toIso8601String(),
         });
         return {'success': true};
       }
@@ -1288,6 +1289,7 @@ class Api {
           'paket_id': body?['paket_id'],
           'product_id': body?['product_id'],
           'qty': (body?['qty'] as num?)?.toInt() ?? 1,
+          'updated_at': DateTime.now().toIso8601String(),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return {'success': true};
       }
