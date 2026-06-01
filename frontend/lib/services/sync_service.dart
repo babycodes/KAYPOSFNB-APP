@@ -56,6 +56,7 @@ class SyncService {
         return 'Sukses! $syncedCount transaksi disinkronisasi ke server.';
       } else if (res.statusCode == 401) {
         // Device is revoked or PIN changed
+        await prefs.remove('server_url');
         return 'SYNC_REVOKED';
       } else {
         final body = jsonDecode(res.body);

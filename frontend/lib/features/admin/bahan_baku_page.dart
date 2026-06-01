@@ -487,8 +487,11 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
     final qtyBeli = double.tryParse(qtyBeliStr) ?? 0;
     final totalPrice = double.tryParse(totalPriceStr) ?? 0;
     
-    // Base cost is read directly
-    final double costPricePerUnit = totalPrice;
+    // For NEW items: user enters Total Harga, we compute per-unit cost
+    // For EDIT: cost_price field is already per-unit
+    final double costPricePerUnit = (widget.item != null)
+        ? totalPrice  // Edit mode: field already holds per-unit price
+        : (qtyBeli > 0 ? totalPrice / qtyBeli : 0);  // New mode: Total Harga / Qty
     final double minAlertInput = double.tryParse(_minAlertCtrl.text.replaceAll(',', '.')) ?? 0;
 
     final data = {
@@ -589,7 +592,7 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Harga Modal per $_selectedUnit', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
+                  decoration: InputDecoration(labelText: isEdit ? 'Harga Modal per $_selectedUnit' : 'Total Harga Belanja', isDense: true, prefixText: 'Rp ', prefixIcon: const Icon(Icons.payments_outlined, size: 20)),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
               ]) : Row(children: [
@@ -601,12 +604,12 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
                 const SizedBox(width: 16),
                 Expanded(child: TextFormField(
                   controller: _costCtrl,
-                  decoration: InputDecoration(labelText: 'Harga Modal per $_selectedUnit', isDense: true, prefixText: 'Rp '),
+                  decoration: InputDecoration(labelText: isEdit ? 'Harga Modal per $_selectedUnit' : 'Total Harga Belanja', isDense: true, prefixText: 'Rp '),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
               ]),
               // Harga Modal per Satuan (read-only, computed from Total / Qty)
-              if (isEdit) Padding(
+              if (!isEdit) Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: ListenableBuilder(
                   listenable: Listenable.merge([_stockCtrl, _costCtrl]),

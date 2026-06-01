@@ -117,7 +117,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       body: jsonEncode({
                         'pin': pinCtrl.text.trim(),
                         'uuid': uuid,
-                        'device_name': 'KayPOS Client'
+                        'device_name': DeviceInfoService.getDefaultDeviceName(),
+                        'device_platform': DeviceInfoService.getDevicePlatform(),
                       }),
                     ).timeout(const Duration(seconds: 10));
 

@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 
@@ -19,5 +20,22 @@ class DeviceInfoService {
     await _storage.write(key: _uuidKey, value: newUuid);
     
     return newUuid;
+  }
+
+  /// Returns a human-readable platform name for the current device.
+  /// e.g. "Android", "Linux", "Windows", "iOS", "macOS"
+  static String getDevicePlatform() {
+    if (Platform.isAndroid) return 'Android';
+    if (Platform.isLinux) return 'Linux';
+    if (Platform.isWindows) return 'Windows';
+    if (Platform.isIOS) return 'iOS';
+    if (Platform.isMacOS) return 'macOS';
+    return 'Unknown';
+  }
+
+  /// Returns a default device name combining platform + type.
+  /// e.g. "KayPOS Android", "KayPOS Linux"
+  static String getDefaultDeviceName() {
+    return 'KayPOS ${getDevicePlatform()}';
   }
 }
