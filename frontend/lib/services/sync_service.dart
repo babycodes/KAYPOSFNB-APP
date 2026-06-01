@@ -56,7 +56,8 @@ class SyncService {
         if (table == 'users') dateCol = 'created_at';
         if (table == 'inventory_ledger' || table == 'restock_history') dateCol = 'timestamp';
         
-        final rows = await db.query(table, where: '$dateCol > ?', whereArgs: [lastSyncStr]);
+        final lastSyncLocalStr = DateTime.parse(lastSyncStr).toLocal().toIso8601String();
+        final rows = await db.query(table, where: 'datetime($dateCol) > datetime(?)', whereArgs: [lastSyncLocalStr]);
         if (rows.isNotEmpty) changes[table] = rows;
       }
 
