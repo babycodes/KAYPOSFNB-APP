@@ -37,7 +37,7 @@ class SyncService {
       // One-time bump for junction tables that didn't have updated_at before v1.0.94
       final hasForced = prefs.getBool('has_forced_sync_junctions') ?? false;
       if (!hasForced) {
-        final now = DateTime.now().toUtc().toIso8601String();
+        final now = DateTime.now().toIso8601String();
         await db.rawUpdate("UPDATE resep SET updated_at = ?", [now]);
         await db.rawUpdate("UPDATE paket_items SET updated_at = ?", [now]);
         await db.rawUpdate("UPDATE product_addon_categories SET updated_at = ?", [now]);

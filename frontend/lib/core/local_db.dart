@@ -68,9 +68,9 @@ class LocalDb {
         try { await db.execute('ALTER TABLE bahan_baku ADD COLUMN kategori TEXT DEFAULT "Lainnya"'); } catch (_) {}
         
         // Add updated_at to junction tables for sync support
-        try { await db.execute('ALTER TABLE resep ADD COLUMN updated_at TEXT DEFAULT (datetime(\'now\',\'localtime\'))'); } catch (_) {}
-        try { await db.execute('ALTER TABLE paket_items ADD COLUMN updated_at TEXT DEFAULT (datetime(\'now\',\'localtime\'))'); } catch (_) {}
-        try { await db.execute('ALTER TABLE product_addon_categories ADD COLUMN updated_at TEXT DEFAULT (datetime(\'now\',\'localtime\'))'); } catch (_) {}
+        try { await db.execute('ALTER TABLE resep ADD COLUMN updated_at TEXT'); } catch (_) {}
+        try { await db.execute('ALTER TABLE paket_items ADD COLUMN updated_at TEXT'); } catch (_) {}
+        try { await db.execute('ALTER TABLE product_addon_categories ADD COLUMN updated_at TEXT'); } catch (_) {}
         
         // Module: kategori_bahan table
         try {
@@ -596,13 +596,13 @@ class LocalDb {
 
       // --- resep ---
       await _remakeTable(db, 'resep',
-        'id TEXT PRIMARY KEY, product_id TEXT NOT NULL, bahan_baku_id TEXT NOT NULL, qty_needed REAL NOT NULL DEFAULT 0, UNIQUE(product_id, bahan_baku_id)',
-        (row) async => {'id': await mapped('resep', row['id']), 'product_id': await mapped('products', row['product_id']), 'bahan_baku_id': await mapped('bahan_baku', row['bahan_baku_id']), 'qty_needed': row['qty_needed']});
+        'id TEXT PRIMARY KEY, product_id TEXT NOT NULL, bahan_baku_id TEXT NOT NULL, qty_needed REAL NOT NULL DEFAULT 0, updated_at TEXT, UNIQUE(product_id, bahan_baku_id)',
+        (row) async => {'id': await mapped('resep', row['id']), 'product_id': await mapped('products', row['product_id']), 'bahan_baku_id': await mapped('bahan_baku', row['bahan_baku_id']), 'qty_needed': row['qty_needed'], 'updated_at': row['updated_at']});
 
       // --- paket_items ---
       await _remakeTable(db, 'paket_items',
-        'id TEXT PRIMARY KEY, paket_id TEXT NOT NULL, product_id TEXT NOT NULL, qty INTEGER NOT NULL DEFAULT 1, UNIQUE(paket_id, product_id)',
-        (row) async => {'id': await mapped('paket_items', row['id']), 'paket_id': await mapped('products', row['paket_id']), 'product_id': await mapped('products', row['product_id']), 'qty': row['qty']});
+        'id TEXT PRIMARY KEY, paket_id TEXT NOT NULL, product_id TEXT NOT NULL, qty INTEGER NOT NULL DEFAULT 1, updated_at TEXT, UNIQUE(paket_id, product_id)',
+        (row) async => {'id': await mapped('paket_items', row['id']), 'paket_id': await mapped('products', row['paket_id']), 'product_id': await mapped('products', row['product_id']), 'qty': row['qty'], 'updated_at': row['updated_at']});
 
       // --- addons ---
       await _remakeTable(db, 'addons',
@@ -611,8 +611,8 @@ class LocalDb {
 
       // --- product_addon_categories ---
       await _remakeTable(db, 'product_addon_categories',
-        'id TEXT PRIMARY KEY, product_id TEXT NOT NULL, addon_category_id TEXT NOT NULL, UNIQUE(product_id, addon_category_id)',
-        (row) async => {'id': await mapped('product_addon_categories', row['id']), 'product_id': await mapped('products', row['product_id']), 'addon_category_id': await mapped('addon_categories', row['addon_category_id'])});
+        'id TEXT PRIMARY KEY, product_id TEXT NOT NULL, addon_category_id TEXT NOT NULL, updated_at TEXT, UNIQUE(product_id, addon_category_id)',
+        (row) async => {'id': await mapped('product_addon_categories', row['id']), 'product_id': await mapped('products', row['product_id']), 'addon_category_id': await mapped('addon_categories', row['addon_category_id']), 'updated_at': row['updated_at']});
 
       // --- restock_history ---
       await _remakeTable(db, 'restock_history',
