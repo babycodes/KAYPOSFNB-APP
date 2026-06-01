@@ -1265,7 +1265,7 @@ class Api {
           'cost_price': (body?['cost_price'] as num?)?.toDouble() ?? 0,
           'min_stock_alert': (body?['min_stock_alert'] as num?)?.toDouble() ?? 0,
           'kategori': body?['kategori']?.toString() ?? 'Lainnya',
-          'kategori_bahan_id': (body?['kategori_bahan_id'] as num?)?.toInt() ?? 0,
+          'kategori_bahan_id': body?['kategori_bahan_id'] ?? '',
         });
         return {'success': true};
       }
@@ -1293,7 +1293,7 @@ class Api {
       }
       // --- INVENTORY: STOCK OPNAME / ADJUSTMENT ---
       if (path == '/inventory/opname') {
-        final bbId = (body?['bahan_baku_id'] as num?)?.toInt();
+        final bbId = body?['bahan_baku_id'];
         final actualStock = (body?['actual_physical_stock'] as num?)?.toDouble();
         final notes = body?['notes']?.toString() ?? '';
 
@@ -1642,7 +1642,7 @@ class Api {
         if (body?['cost_price'] != null) data['cost_price'] = (body!['cost_price'] as num?)?.toDouble() ?? 0;
         if (body?['min_stock_alert'] != null) data['min_stock_alert'] = (body!['min_stock_alert'] as num?)?.toDouble() ?? 0;
         if (body?['kategori'] != null) data['kategori'] = body!['kategori']?.toString() ?? 'Lainnya';
-        if (body?['kategori_bahan_id'] != null) data['kategori_bahan_id'] = (body!['kategori_bahan_id'] as num?)?.toInt() ?? 0;
+        if (body?['kategori_bahan_id'] != null) data['kategori_bahan_id'] = body!['kategori_bahan_id'] ?? '';
         
         if (data.isNotEmpty) {
           await db.update('bahan_baku', data, where: 'id = ?', whereArgs: [id]);

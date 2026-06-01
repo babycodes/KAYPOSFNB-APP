@@ -85,14 +85,14 @@ class _KasirScreenState extends State<KasirScreen> {
     return s + price * qty;
   });
 
-  List<dynamic> get comboProducts => products.where((p) => (p['is_paket'] as num?)?.toInt() == 1).toList();
+  List<dynamic> get comboProducts => products.where((p) => p['is_paket']?.toString() == '1').toList();
 
   List<dynamic> get filteredProducts => products.where((p) {
     bool matchCat = false;
     if (selectedCategory == -999) {
       try { matchCat = _getProductDiscount(p) > 0; } catch (_) { matchCat = false; }
     } else if (selectedCategory == -998) {
-      matchCat = (p['is_paket'] as num?)?.toInt() == 1;
+      matchCat = p['is_paket']?.toString() == '1';
     } else {
       matchCat = selectedCategory == null || p['category_id'] == selectedCategory;
     }
@@ -412,7 +412,7 @@ class _KasirScreenState extends State<KasirScreen> {
     }
     
     String? addonSummary;
-    if ((product['is_paket'] as num?)?.toInt() == 1) {
+    if (product['is_paket']?.toString() == '1') {
       try {
         final items = await Api.get('/paket-items/${product['id']}');
         if (items is List && items.isNotEmpty) {
@@ -435,7 +435,7 @@ class _KasirScreenState extends State<KasirScreen> {
         final p = item['product'];
         if (p['id']?.toString() == pid) {
           total += _safeNum(item['quantity']).round();
-        } else if ((p['is_paket'] as num?)?.toInt() == 1 && p['paket_items'] is List) {
+        } else if (p['is_paket']?.toString() == '1' && p['paket_items'] is List) {
           for (final pi in p['paket_items']) {
             if (pi is Map && pi['product_id']?.toString() == pid) {
               total += _safeNum(item['quantity']).round() * _safeNum(pi['qty']).round();
@@ -459,7 +459,7 @@ class _KasirScreenState extends State<KasirScreen> {
             final p = item['product'];
             if (p['id']?.toString() == pid) {
               total += _safeNum(item['quantity']).round();
-            } else if ((p['is_paket'] as num?)?.toInt() == 1 && p['paket_items'] is List) {
+            } else if (p['is_paket']?.toString() == '1' && p['paket_items'] is List) {
               for (final pi in p['paket_items']) {
                 if (pi is Map && pi['product_id']?.toString() == pid) {
                   total += _safeNum(item['quantity']).round() * _safeNum(pi['qty']).round();
@@ -497,7 +497,7 @@ class _KasirScreenState extends State<KasirScreen> {
         final double qty = _safeNum(item['quantity']);
         if (qty <= 0) continue;
 
-        if ((p['is_paket'] as num?)?.toInt() == 1 && p['paket_items'] is List) {
+        if (p['is_paket']?.toString() == '1' && p['paket_items'] is List) {
           for (final pi in p['paket_items']) {
             if (pi is! Map) continue;
             final childId = pi['product_id']?.toString() ?? '';
@@ -536,7 +536,7 @@ class _KasirScreenState extends State<KasirScreen> {
     // Instead of MIN(childEffective/childQty) — which double-counts shared
     // ingredients — we aggregate the total raw material cost of 1 whole package
     // and divide remaining global stock by that aggregate.
-    if ((product['is_paket'] as num?)?.toInt() == 1) {
+    if (product['is_paket']?.toString() == '1') {
       try {
         final paketItems = product['paket_items'];
         if (paketItems is! List || paketItems.isEmpty) return 0;
@@ -607,7 +607,7 @@ class _KasirScreenState extends State<KasirScreen> {
       final dynamic rawPortions = product['available_portions'];
       if (rawPortions == null) return -1; // No recipe = unlimited
       // Fallback: use old simple deduction
-      final int maxPortions = (rawPortions as num).toInt();
+      final int maxPortions = _safeNum(rawPortions).toInt();
       final int inCart = _getCartQtyForProduct(product['id']);
       final int inHeld = _getHeldQtyForProduct(product['id']);
       int effectiveStock = maxPortions - inCart - inHeld;
@@ -637,7 +637,7 @@ class _KasirScreenState extends State<KasirScreen> {
     if (product is! Map) return -1;
 
     // Package: compute from raw materials WITHOUT cart deductions
-    if ((product['is_paket'] as num?)?.toInt() == 1) {
+    if (product['is_paket']?.toString() == '1') {
       final paketItems = product['paket_items'];
       if (paketItems is! List || paketItems.isEmpty) return 0;
 
@@ -677,7 +677,7 @@ class _KasirScreenState extends State<KasirScreen> {
     if (recipe == null || recipe.isEmpty) {
       final rawPortions = product['available_portions'];
       if (rawPortions == null) return -1;
-      return (rawPortions as num).toInt();
+      return _safeNum(rawPortions).toInt();
     }
     int minPortions = 999999;
     for (final ing in recipe) {
@@ -976,7 +976,7 @@ class _KasirScreenState extends State<KasirScreen> {
                     );
                   }
                 ),
-                if (filteredProducts.isNotEmpty && filteredProducts.any((p) => (p['is_paket'] as num?)?.toInt() == 1)) Container(
+                if (filteredProducts.isNotEmpty && filteredProducts.any((p) => p['is_paket']?.toString() == '1')) Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
