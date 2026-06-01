@@ -36,7 +36,8 @@ class SyncService {
       final Map<String, List<Map<String, dynamic>>> changes = {};
       final masterTables = ['categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts', 'products', 'bahan_baku', 'addons'];
       for (var table in masterTables) {
-        final rows = await db.query(table, where: 'updated_at > ?', whereArgs: [lastSyncStr]);
+        final dateCol = (table == 'users') ? 'created_at' : 'updated_at';
+        final rows = await db.query(table, where: '$dateCol > ?', whereArgs: [lastSyncStr]);
         if (rows.isNotEmpty) changes[table] = rows;
       }
 
