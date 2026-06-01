@@ -112,12 +112,48 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
   }
 
   // ──────────────────────────────────────────────────
+  // CONFIRMATION DIALOG HELPER
+  // ──────────────────────────────────────────────────
+  Future<bool> _showConfirmation(String itemName) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Konfirmasi Waste'),
+        ]),
+        content: Text('Apakah Anda yakin ingin mencatat $itemName sebagai waste? Stok akan dikurangi dan aksi ini akan tercatat dalam laporan kerugian.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ya, Konfirmasi'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  // ──────────────────────────────────────────────────
   // TAB A LOGIC: Produk Jadi (Finished Product Waste)
   // ──────────────────────────────────────────────────
   Future<void> _submitProductWaste() async {
     if (_selectedProductId == null) return;
     final qty = double.tryParse(_prodQtyCtrl.text.replaceAll(',', '.')) ?? 0;
     if (qty <= 0) return;
+
+    final matchingProducts = _products.where((p) => p['id'] == _selectedProductId);
+    final productName = matchingProducts.isNotEmpty
+        ? matchingProducts.first['name']?.toString() ?? 'Unknown'
+        : 'Unknown';
+
+    final confirmed = await _showConfirmation(productName);
+    if (!confirmed) return;
 
     final reason = _resolveReason(_prodReason, _prodCustomReasonCtrl);
     final userName = _getUserName();
@@ -126,10 +162,6 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
 
     try {
       final db = await LocalDb.instance;
-      final matchingProducts = _products.where((p) => p['id'] == _selectedProductId);
-      final productName = matchingProducts.isNotEmpty
-          ? matchingProducts.first['name']?.toString() ?? 'Unknown'
-          : 'Unknown';
 
       // Query resep (BOM) for this product
       final resepRows = await db.query('resep',
@@ -202,6 +234,14 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
     final inputQty = double.tryParse(_bahanQtyCtrl.text.replaceAll(',', '.')) ?? 0;
     if (inputQty <= 0) return;
 
+    final matchingBahan = _bahanBaku.where((b) => b['id'] == _selectedBahanId);
+    if (matchingBahan.isEmpty) return;
+    final bahan = matchingBahan.first;
+    final bahanName = bahan['name']?.toString() ?? '';
+
+    final confirmed = await _showConfirmation(bahanName);
+    if (!confirmed) return;
+
     final reason = _resolveReason(_bahanReason, _bahanCustomReasonCtrl);
     final userName = _getUserName();
 
@@ -209,13 +249,9 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
 
     try {
       final db = await LocalDb.instance;
-      final matchingBahan = _bahanBaku.where((b) => b['id'] == _selectedBahanId);
-      if (matchingBahan.isEmpty) throw Exception('Bahan tidak ditemukan');
-      final bahan = matchingBahan.first;
-
+      
       final masterUnit = bahan['unit']?.toString() ?? '';
       final costPrice = (bahan['cost_price'] as num?)?.toDouble() ?? 0;
-      final bahanName = bahan['name']?.toString() ?? '';
 
       // Convert input unit → master unit
       final multiplier = _getUnitMultiplier(_selectedBahanInputUnit, masterUnit);
