@@ -98,7 +98,7 @@ jobs:
       - name: Install Linux Build Dependencies & FPM
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev ruby ruby-dev rubygems
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev ruby ruby-dev rubygems
           sudo gem install fpm
 
       - name: Install Dependencies
