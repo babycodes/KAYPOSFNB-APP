@@ -2,8 +2,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../../core/auth_provider.dart';
 import '../../core/theme_provider.dart';
+import '../../core/helpers.dart';
+import '../../services/device_info_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +22,22 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _showPassword = false;
   bool _loading = false;
   String _error = '';
+  String _serverUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadServerStatus();
+  }
+
+  Future<void> _loadServerStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _serverUrl = prefs.getString('server_url') ?? '';
+      });
+    }
+  }
 
   Future<void> _handleLogin() async {
     if (_usernameCtrl.text.trim().isEmpty || _passwordCtrl.text.isEmpty) {
@@ -33,7 +54,98 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     if (mounted) setState(() => _loading = false);
   }
+  Future<void> _showConnectServerDialog() async {
+    final urlCtrl = TextEditingController();
+    final pinCtrl = TextEditingController();
+    
+    // Auto fill if saved previously
+    final prefs = await SharedPreferences.getInstance();
+    urlCtrl.text = prefs.getString('server_url') ?? '';
 
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isConnecting = false;
+        String dialogError = '';
+        return StatefulBuilder(builder: (stCtx, setStState) {
+          return AlertDialog(
+            title: const Text('Sambungkan ke Server'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (dialogError.isNotEmpty) ...[
+                  Text(dialogError, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                  const SizedBox(height: 8),
+                ],
+                TextField(
+                  controller: urlCtrl,
+                  decoration: const InputDecoration(labelText: 'URL Server (misal: http://192.168.1.10:8080)'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: pinCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(labelText: '6-Digit PIN'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+              FilledButton(
+                onPressed: isConnecting ? null : () async {
+                  if (urlCtrl.text.isEmpty || pinCtrl.text.isEmpty) {
+                    setStState(() => dialogError = 'URL dan PIN wajib diisi');
+                    return;
+                  }
+                  
+                  setStState(() { isConnecting = true; dialogError = ''; });
+                  
+                  try {
+                    final uuid = await DeviceInfoService.getDeviceUuid();
+                    
+                    // Cleanup URL trailing slash
+                    var baseUrl = urlCtrl.text.trim();
+                    if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+                    if (!baseUrl.startsWith('http')) baseUrl = 'http://$baseUrl';
+
+                    final res = await http.post(
+                      Uri.parse('$baseUrl/api/client/pair'),
+                      headers: {'Content-Type': 'application/json'},
+                      body: jsonEncode({
+                        'pin': pinCtrl.text.trim(),
+                        'uuid': uuid,
+                        'device_name': 'KayPOS Client'
+                      }),
+                    ).timeout(const Duration(seconds: 10));
+
+                    if (res.statusCode == 200) {
+                      await prefs.setString('server_url', baseUrl);
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        setState(() => _serverUrl = baseUrl); // Update UI
+                        showToast(context, 'Berhasil tersambung ke Server!');
+                      }
+                    } else {
+                      final body = jsonDecode(res.body);
+                      setStState(() => dialogError = body['error'] ?? 'Gagal menyambung');
+                    }
+                  } catch (e) {
+                    setStState(() => dialogError = 'Koneksi gagal: Periksa URL dan jaringan');
+                  } finally {
+                    setStState(() => isConnecting = false);
+                  }
+                },
+                child: isConnecting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Sambungkan'),
+              )
+            ],
+          );
+        });
+      },
+    );
+  }
 
 
   @override
@@ -140,6 +252,40 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
+        ),
+      ),
+      Positioned(
+        top: 24,
+        left: 24,
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: _showConnectServerDialog,
+              icon: Icon(
+                Icons.dns,
+                color: _serverUrl.isNotEmpty ? Colors.green : cs.onSurfaceVariant,
+              ),
+              tooltip: 'Sambungkan ke Server',
+            ),
+            if (_serverUrl.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(left: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check_circle, size: 12, color: Colors.green),
+                    const SizedBox(width: 4),
+                    Text('Connected', style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
       Positioned(

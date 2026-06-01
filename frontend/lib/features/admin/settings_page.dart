@@ -11,6 +11,9 @@ import '../../core/local_db.dart';
 import '../../services/update_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
+import '../../services/device_info_service.dart';
+import '../../services/sync_service.dart';
 
 
 class SettingsPage extends StatefulWidget {
@@ -31,6 +34,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String _currentVersion = '';
   final UpdateService _updateService = UpdateService();
   bool _isCheckingUpdate = false;
+  String _deviceUuid = '';
 
   final _storeNameCtrl = TextEditingController();
   final _storeSubNameCtrl = TextEditingController();
@@ -48,6 +52,14 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _loadSettings();
     _loadVersion();
+    _loadDeviceUuid();
+  }
+
+  Future<void> _loadDeviceUuid() async {
+    final uuid = await DeviceInfoService.getDeviceUuid();
+    if (mounted) {
+      setState(() => _deviceUuid = uuid);
+    }
   }
 
   Future<void> _loadVersion() async {
@@ -550,6 +562,57 @@ class _SettingsPageState extends State<SettingsPage> {
                 : const Icon(Icons.cloud_download),
               label: Text(_isCheckingUpdate ? 'Mengecek...' : 'Cek Pembaruan', style: const TextStyle(fontWeight: FontWeight.bold)),
               style: FilledButton.styleFrom(backgroundColor: cs.primary, foregroundColor: cs.onPrimary, minimumSize: const Size(double.infinity, 48)),
+            ),
+          ]),
+          const SizedBox(height: 24),
+
+          // Security / Device Info
+          _SectionBox(cs, title: 'Keamanan & Perangkat', icon: Icons.security, children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Device UUID', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              subtitle: Text(_deviceUuid.isEmpty ? 'Memuat...' : _deviceUuid, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontFamily: 'monospace')),
+              trailing: IconButton(
+                icon: const Icon(Icons.copy, size: 20),
+                onPressed: () {
+                  if (_deviceUuid.isNotEmpty) {
+                    Clipboard.setData(ClipboardData(text: _deviceUuid));
+                    if (mounted) showToast(context, 'UUID disalin ke clipboard');
+                  }
+                },
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Sinkronisasi Data', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              subtitle: Text('Kirim data transaksi belum tersinkron ke server', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              trailing: FilledButton.tonalIcon(
+                onPressed: () async {
+                  setState(() => saving = true); // reuse saving state for loading UI
+                  final result = await SyncService.syncTransactions();
+                  setState(() => saving = false);
+
+                  if (result == 'SYNC_REVOKED') {
+                    if (mounted) {
+                      showDialog(
+                        context: context,
+                        builder: (c) => AlertDialog(
+                          title: const Text('Koneksi Terputus ⚠️'),
+                          content: const Text('Koneksi Server terputus (PIN telah dirubah/dicabut oleh Admin). Silakan ke Halaman Login dan klik logo Jaringan (DNS) untuk memasukkan ulang URL dan PIN baru yang valid.'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(c), child: const Text('Tutup'))
+                          ],
+                        )
+                      );
+                    }
+                  } else {
+                    if (mounted) showToast(context, result);
+                  }
+                },
+                icon: const Icon(Icons.sync, size: 18),
+                label: const Text('Sync Sekarang'),
+              ),
             ),
           ]),
           const SizedBox(height: 24),

@@ -42,13 +42,13 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
   bool _isSaving = false;
 
   // ── Tab A: Produk Jadi ──
-  int? _selectedProductId;
+  dynamic _selectedProductId;
   final _prodQtyCtrl = TextEditingController(text: '1');
   String _prodReason = 'Tumpah';
   final _prodCustomReasonCtrl = TextEditingController();
 
   // ── Tab B: Bahan Mentah ──
-  int? _selectedBahanId;
+  dynamic _selectedBahanId;
   final _bahanQtyCtrl = TextEditingController();
   String _bahanReason = 'Basi';
   String _selectedBahanInputUnit = '';
@@ -175,7 +175,7 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
 
       await db.transaction((txn) async {
         for (final r in resepRows) {
-          final bbId = (r['bahan_baku_id'] as num).toInt();
+          final bbId = r['bahan_baku_id'];
           final qtyNeeded = (r['qty_needed'] as num).toDouble();
 
           // Get bahan_baku master unit
@@ -204,6 +204,7 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
 
           // Insert WASTE ledger row
           await txn.insert('inventory_ledger', {
+            'id': LocalDb.generateId(),
             'bahan_baku_id': bbId,
             'transaction_type': 'WASTE',
             'qty_change': -deduction,
@@ -268,6 +269,7 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
 
         // Insert WASTE ledger row
         await txn.insert('inventory_ledger', {
+          'id': LocalDb.generateId(),
           'bahan_baku_id': _selectedBahanId,
           'transaction_type': 'WASTE',
           'qty_change': -deductionInMasterUnit,
@@ -441,7 +443,7 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
           const SizedBox(height: 16),
 
           // Product selector
-          DropdownButtonFormField<int>(
+          DropdownButtonFormField(
             value: _selectedProductId,
             isExpanded: true,
             decoration: InputDecoration(
@@ -451,8 +453,8 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
             items: _products.map((p) {
-              return DropdownMenuItem<int>(
-                value: (p['id'] as num).toInt(),
+              return DropdownMenuItem(
+                value: p['id'],
                 child: Text(p['name']?.toString() ?? '', overflow: TextOverflow.ellipsis),
               );
             }).toList(),
@@ -582,7 +584,7 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
           const SizedBox(height: 16),
 
           // Bahan selector
-          DropdownButtonFormField<int>(
+          DropdownButtonFormField(
             value: _selectedBahanId,
             isExpanded: true,
             decoration: InputDecoration(
@@ -594,8 +596,8 @@ class _WasteReportDialogState extends State<WasteReportDialog> {
             items: _bahanBaku.map((b) {
               final name = b['name']?.toString() ?? '';
               final unit = b['unit']?.toString() ?? '';
-              return DropdownMenuItem<int>(
-                value: (b['id'] as num).toInt(),
+              return DropdownMenuItem(
+                value: b['id'],
                 child: Text('$name ($unit)', overflow: TextOverflow.ellipsis),
               );
             }).toList(),

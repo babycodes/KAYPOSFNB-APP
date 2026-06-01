@@ -65,21 +65,23 @@ class InventoryLedgerService {
     final db = await LocalDb.instance;
 
     // Find or create a test material "Ayam"
-    int bahanBakuId;
+    dynamic bahanBakuId;
     final existing = await db.rawQuery(
       "SELECT id FROM bahan_baku WHERE name = 'Ayam' LIMIT 1",
     );
     if (existing.isNotEmpty) {
-      bahanBakuId = (existing.first['id'] as num).toInt();
+      bahanBakuId = existing.first['id'];
     } else {
-      bahanBakuId = await db.insert('bahan_baku', {
+      bahanBakuId = LocalDb.generateId();
+      await db.insert('bahan_baku', {
+        'id': bahanBakuId,
         'name': 'Ayam',
         'unit': 'Kg',
-        'stock': 7.0, // matches our expected final stock
+        'stock': 7.0,
         'cost_price': 35000,
         'min_stock_alert': 1.0,
         'kategori': 'Daging/Protein',
-        'kategori_bahan_id': 0,
+        'kategori_bahan_id': '',
       });
       debugPrint('[Seeder] Created test material "Ayam" with id=$bahanBakuId');
     }
@@ -94,6 +96,7 @@ class InventoryLedgerService {
     // Insert 5 hardcoded ledger entries using ISO8601 timestamps
     final entries = <Map<String, dynamic>>[
       {
+        'id': LocalDb.generateId(),
         'bahan_baku_id': bahanBakuId,
         'timestamp': '2026-06-01 08:00:00',
         'transaction_type': 'RESTOCK',
@@ -102,6 +105,7 @@ class InventoryLedgerService {
         'notes': 'Pembelian awal dari Supplier A',
       },
       {
+        'id': LocalDb.generateId(),
         'bahan_baku_id': bahanBakuId,
         'timestamp': '2026-06-02 12:15:00',
         'transaction_type': 'SALE',
@@ -110,6 +114,7 @@ class InventoryLedgerService {
         'notes': 'Auto-deduct by Cashier — Ayam Goreng ×2',
       },
       {
+        'id': LocalDb.generateId(),
         'bahan_baku_id': bahanBakuId,
         'timestamp': '2026-06-03 13:30:00',
         'transaction_type': 'SALE',
@@ -118,6 +123,7 @@ class InventoryLedgerService {
         'notes': 'Auto-deduct by Cashier — Nasi Ayam Special ×1',
       },
       {
+        'id': LocalDb.generateId(),
         'bahan_baku_id': bahanBakuId,
         'timestamp': '2026-06-04 09:00:00',
         'transaction_type': 'WASTE',
@@ -126,6 +132,7 @@ class InventoryLedgerService {
         'notes': 'Jatuh dari meja',
       },
       {
+        'id': LocalDb.generateId(),
         'bahan_baku_id': bahanBakuId,
         'timestamp': '2026-06-05 07:45:00',
         'transaction_type': 'RESTOCK',
@@ -160,7 +167,7 @@ class InventoryLedgerService {
   //      • Total Financial Value per type
   // ──────────────────────────────────────────────────
   static Future<void> verifyLedgerMath(
-    int bahanBakuId,
+    dynamic bahanBakuId,
     String startDate,
     String endDate,
   ) async {
@@ -342,7 +349,7 @@ class InventoryLedgerService {
       debugPrint('[Demo] ❌ Could not find "Ayam" material after seeding');
       return;
     }
-    final ayamId = (rows.first['id'] as num).toInt();
+    final ayamId = rows.first['id'];
 
     // Step 4: Run the audit
     await verifyLedgerMath(ayamId, '2026-06-01', '2026-06-05');

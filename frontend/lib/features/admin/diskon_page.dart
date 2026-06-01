@@ -444,8 +444,8 @@ class _DiskonDetailPageState extends State<DiskonDetailPage> {
   late dynamic diskon;
   List<dynamic> targetCategories = [];
   List<dynamic> targetProducts = [];
-  Map<int, String> disabledCategories = {};
-  Map<int, String> disabledProducts = {};
+  Map<dynamic, String> disabledCategories = {};
+  Map<dynamic, String> disabledProducts = {};
   
   List<dynamic> allProducts = [];
   List<dynamic> allCategories = [];
@@ -466,8 +466,8 @@ class _DiskonDetailPageState extends State<DiskonDetailPage> {
       final dRes = await Api.get('/discounts');
       
       dynamic latestDiskon = diskon;
-      Map<int, String> dCats = {};
-      Map<int, String> dProds = {};
+      Map<dynamic, String> dCats = {};
+      Map<dynamic, String> dProds = {};
       
       for (var d in (dRes as List)) {
         if (d['id'] == diskon['id']) {
@@ -478,14 +478,14 @@ class _DiskonDetailPageState extends State<DiskonDetailPage> {
           final tProds = (d['target_products'] as List?) ?? [];
           
           for (final cId in tCats) {
-            dCats[cId as int] = promoName;
+            dCats[cId] = promoName;
             final childProducts = (pRes as List).where((p) => p['category_id'] == cId).map((p) => p['id']).toList();
             for (final cpId in childProducts) {
-              dProds[cpId as int] = promoName;
+              dProds[cpId] = promoName;
             }
           }
           for (final pId in tProds) {
-            dProds[pId as int] = promoName;
+            dProds[pId] = promoName;
           }
         }
       }
@@ -734,8 +734,8 @@ class TargetSelectionModal extends StatefulWidget {
   final List<dynamic> allCategories;
   final List<dynamic> initialCategories;
   final List<dynamic> initialProducts;
-  final Map<int, String> disabledCategories;
-  final Map<int, String> disabledProducts;
+  final Map<dynamic, String> disabledCategories;
+  final Map<dynamic, String> disabledProducts;
   final Function(List<dynamic> cats, List<dynamic> prods) onSave;
 
   const TargetSelectionModal({
@@ -761,8 +761,8 @@ class _TargetSelectionModalState extends State<TargetSelectionModal> {
   @override
   void initState() {
     super.initState();
-    selectedCats = widget.initialCategories.map((e) => (e is int) ? e : int.tryParse(e.toString()) ?? 0).toList();
-    selectedProds = widget.initialProducts.map((e) => (e is int) ? e : int.tryParse(e.toString()) ?? 0).toList();
+    selectedCats = List.from(widget.initialCategories);
+    selectedProds = List.from(widget.initialProducts);
   }
 
   @override

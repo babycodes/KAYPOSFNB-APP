@@ -331,7 +331,7 @@ class PaketFormDialog extends StatefulWidget {
 class _PaketFormDialogState extends State<PaketFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl, _barcodeCtrl, _priceCtrl, _descCtrl;
-  int? _selectedCat;
+  dynamic _selectedCat;
   bool isSaving = false;
 
   @override
@@ -344,10 +344,8 @@ class _PaketFormDialogState extends State<PaketFormDialog> {
     _descCtrl = TextEditingController(text: (p?['description'] ?? '').toString());
 
     if (widget.categories.isNotEmpty) {
-      final catId = _toInt(p?['category_id']) ?? _toInt(widget.categories.first['id']);
-      if (catId != null) {
-        _selectedCat = catId;
-      }
+      final catId = p?['category_id'] ?? widget.categories.first['id'];
+      _selectedCat = catId;
     }
   }
 
@@ -357,12 +355,7 @@ class _PaketFormDialogState extends State<PaketFormDialog> {
     return double.tryParse(clean) ?? 0;
   }
 
-  static int? _toInt(dynamic v) {
-    if (v == null) return null;
-    if (v is int) return v;
-    if (v is num) return v.toInt();
-    return int.tryParse(v.toString());
-  }
+
 
   @override
   void dispose() {
@@ -429,11 +422,11 @@ class _PaketFormDialogState extends State<PaketFormDialog> {
               // Basic Info
               _field(_nameCtrl, 'Nama Paket', true, textCapitalization: TextCapitalization.words),
               const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
+              DropdownButtonFormField(
                 value: _selectedCat,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Kategori', isDense: true),
-                items: widget.categories.map((c) => DropdownMenuItem<int>(value: _toInt(c['id']) ?? 0, child: Text('${c['icon'] ?? '📦'} ${c['name'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis))).toList(),
+                items: widget.categories.map((c) => DropdownMenuItem(value: c['id'], child: Text('${c['icon'] ?? '📦'} ${c['name'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis))).toList(),
                 onChanged: (v) => setState(() => _selectedCat = v),
                 validator: (v) => v == null ? 'Wajib' : null,
               ),
@@ -483,7 +476,7 @@ class _RecipeModalState extends State<RecipeModal> {
   List<dynamic> _availableBahan = [];
   bool _isLoading = true;
   
-  int? _selectedBahanId;
+  dynamic _selectedBahanId;
   final _qtyCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
@@ -613,7 +606,7 @@ class _RecipeModalState extends State<RecipeModal> {
                             subtitle: Text('${b['unit']} • Stok: ${(b['stock'] as num?)?.toStringAsFixed(0) ?? '0'}'),
                             trailing: isSelected ? Icon(Icons.check_circle, color: Theme.of(ctx).colorScheme.primary) : null,
                             onTap: () {
-                              setState(() => _selectedBahanId = b['id'] as int);
+                              setState(() => _selectedBahanId = b['id']);
                               Navigator.pop(ctx);
                             },
                           );
@@ -627,7 +620,7 @@ class _RecipeModalState extends State<RecipeModal> {
     );
   }
 
-  void _deleteIngredient(int id) async {
+  void _deleteIngredient(dynamic id) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -862,7 +855,7 @@ class _PaketItemsModalState extends State<PaketItemsModal> {
   List<dynamic> _items = [];
   List<dynamic> _allProducts = [];
   bool _isLoading = true;
-  int? _selectedProductId;
+  dynamic _selectedProductId;
   final _qtyCtrl = TextEditingController(text: '1');
 
   @override
@@ -920,7 +913,7 @@ class _PaketItemsModalState extends State<PaketItemsModal> {
     }
   }
 
-  void _deleteItem(int id) async {
+  void _deleteItem(dynamic id) async {
     try {
       await Api.delete('/paket-items/$id');
       _loadData();
@@ -984,12 +977,12 @@ class _PaketItemsModalState extends State<PaketItemsModal> {
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Expanded(
             flex: 3,
-            child: DropdownButtonFormField<int>(
+            child: DropdownButtonFormField(
               value: _selectedProductId,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Pilih Produk', isDense: true),
-              items: _allProducts.map((p) => DropdownMenuItem<int>(
-                value: p['id'] as int,
+              items: _allProducts.map((p) => DropdownMenuItem(
+                value: p['id'],
                 child: Text('${p['name']}', maxLines: 1, overflow: TextOverflow.ellipsis),
               )).toList(),
               onChanged: (v) => setState(() => _selectedProductId = v),

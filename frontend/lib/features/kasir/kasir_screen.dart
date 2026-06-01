@@ -28,7 +28,7 @@ class _KasirScreenState extends State<KasirScreen> {
   List<dynamic> products = [];
   List<dynamic> categories = [];
   List<Map<String, dynamic>> cart = [];
-  int? selectedCategory;
+  dynamic selectedCategory;
   String searchQuery = '';
   bool showSearch = false;
   bool cartOpen = false;
@@ -834,7 +834,7 @@ class _KasirScreenState extends State<KasirScreen> {
                     const DropdownMenuItem(value: -999, child: Text('🎁 Promo', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold))),
                     const DropdownMenuItem(value: -998, child: Text('🎁 Paket Combo', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold))),
                     ...categories.map((c) {
-                      final cId = (c['id'] is int) ? c['id'] as int : int.tryParse(c['id']?.toString() ?? '') ?? 0;
+                      final cId = c['id'];
                       return DropdownMenuItem(value: cId, child: Text('${c['icon'] ?? '📦'} ${c['name'] ?? ''}'));
                     }),
                   ],

@@ -216,7 +216,7 @@ class _KartuStokPageState extends State<KartuStokPage> {
           onSelected: (_) { setState(() => _selectedKategoriId = null); _loadData(); },
         )),
         ..._kategoriBahan.map((k) {
-          final kId = (k['id'] as num).toInt();
+          final kId = k['id'];
           return Padding(padding: const EdgeInsets.only(right: 6), child: FilterChip(
             label: Text(k['name']?.toString() ?? ''), selected: _selectedKategoriId == kId,
             onSelected: (_) { setState(() => _selectedKategoriId = _selectedKategoriId == kId ? null : kId); _loadData(); },

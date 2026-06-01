@@ -16,7 +16,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
   List<dynamic> kategoriBahanList = [];
   bool isLoading = true;
   String searchQuery = '';
-  int? _selectedKategoriId;
+  dynamic _selectedKategoriId;
 
   @override
   void initState() {
@@ -43,7 +43,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
 
   List<dynamic> get filtered {
     return materials.where((m) {
-      if (_selectedKategoriId != null && (m['kategori_bahan_id'] as num?)?.toInt() != _selectedKategoriId) return false;
+      if (_selectedKategoriId != null && m['kategori_bahan_id'] != _selectedKategoriId) return false;
       if (searchQuery.isEmpty) return true;
       final q = searchQuery.toLowerCase();
       return (m['name'] ?? '').toString().toLowerCase().contains(q) ||
@@ -234,7 +234,7 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                 ),
               ),
               ...kategoriBahanList.map((k) {
-                final kId = (k['id'] as num).toInt();
+                final kId = k['id'];
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: FilterChip(
@@ -437,7 +437,7 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl, _stockCtrl, _costCtrl, _minAlertCtrl;
   String _selectedUnit = 'gram';
-  int? _selectedKategoriId;
+  dynamic _selectedKategoriId;
   bool _isSaving = false;
 
   static const _units = ['Kg', 'gram', 'Liter', 'ml', 'pcs'];
@@ -466,8 +466,8 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
 
     // Kategori
     if (m != null) {
-      _selectedKategoriId = (m['kategori_bahan_id'] as num?)?.toInt();
-      if (_selectedKategoriId == 0) _selectedKategoriId = null;
+      _selectedKategoriId = m['kategori_bahan_id'];
+      if (_selectedKategoriId == 0 || _selectedKategoriId == '' || _selectedKategoriId == null) _selectedKategoriId = null;
     }
   }
 
@@ -570,11 +570,11 @@ class _BahanBakuFormDialogState extends State<BahanBakuFormDialog> {
               const SizedBox(height: 16),
 
               // Kategori
-              DropdownButtonFormField<int>(
+              DropdownButtonFormField(
                 value: _selectedKategoriId,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Kategori Bahan', isDense: true, prefixIcon: Icon(Icons.category_outlined, size: 20)),
-                items: widget.kategoriBahanList.map((k) => DropdownMenuItem<int>(value: (k['id'] as num).toInt(), child: Text(k['name']?.toString() ?? ''))).toList(),
+                items: widget.kategoriBahanList.map((k) => DropdownMenuItem(value: k['id'], child: Text(k['name']?.toString() ?? ''))).toList(),
                 onChanged: (v) => setState(() => _selectedKategoriId = v),
               ),
               const SizedBox(height: 16),
