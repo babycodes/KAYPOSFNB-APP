@@ -136,13 +136,11 @@ class SyncService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final lastPull = prefs.getString('last_report_pull') ?? '1970-01-01T00:00:00.000Z';
+      final uuid = await _getUuid();
 
       final res = await http.get(
-        Uri.parse('$baseUrl/api/admin/reports/check?since=$lastPull'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${Api.getToken()}',
-        },
+        Uri.parse('$baseUrl/api/admin/reports/check?since=$lastPull&uuid=$uuid'),
+        headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
@@ -160,13 +158,10 @@ class SyncService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final lastPull = prefs.getString('last_report_pull') ?? '1970-01-01T00:00:00.000Z';
+      final uuid = await _getUuid();
 
       final res = await http.get(
-        Uri.parse('$baseUrl/api/admin/reports/pull?since=$lastPull'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${Api.getToken()}',
-        },
+        Uri.parse('$baseUrl/api/admin/reports/pull?since=$lastPull&uuid=$uuid'),
       ).timeout(const Duration(seconds: 30));
 
       if (res.statusCode == 200) {
