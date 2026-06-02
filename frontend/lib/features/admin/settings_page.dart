@@ -590,7 +590,7 @@ class _SettingsPageState extends State<SettingsPage> {
               trailing: FilledButton.tonalIcon(
                 onPressed: () async {
                   setState(() => saving = true); // reuse saving state for loading UI
-                  final result = await SyncService.syncTransactions();
+                  final result = await SyncService.pushTransactions();
                   setState(() => saving = false);
 
                   if (result == 'SYNC_REVOKED') {
