@@ -253,7 +253,7 @@ class SyncService {
   static const List<String> _masterTables = [
     'categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts',
     'products', 'bahan_baku', 'addons', 'resep', 'paket_items',
-    'product_addon_categories',
+    'product_addon_categories', 'inventory_ledger'
   ];
 
   /// ADMIN manually pushes all master data to the server for Kasir to pick up.
@@ -270,8 +270,13 @@ class SyncService {
 
       final Map<String, List<Map<String, dynamic>>> changes = {};
       for (final table in _masterTables) {
-        String dateCol = table == 'users' ? 'created_at' : 'updated_at';
-        final rows = await db.query(table, where: 'datetime($dateCol) > datetime(?)', whereArgs: [lastPushLocal]);
+        String dateCol = table == 'users' ? 'created_at' : (table == 'inventory_ledger' ? 'timestamp' : 'updated_at');
+        List<Map<String, Object?>> rows;
+        if (table == 'inventory_ledger') {
+          rows = await db.query(table, where: 'datetime($dateCol) > datetime(?) AND transaction_type IN ("RESTOCK", "ADJUSTMENT")', whereArgs: [lastPushLocal]);
+        } else {
+          rows = await db.query(table, where: 'datetime($dateCol) > datetime(?)', whereArgs: [lastPushLocal]);
+        }
         if (rows.isNotEmpty) changes[table] = rows;
       }
 
@@ -367,7 +372,7 @@ class SyncService {
           'kategori_bahan', 'categories', 'users', 'addon_categories', 'discounts',
           'bahan_baku', 'products',
           'addons',
-          'resep', 'paket_items', 'product_addon_categories',
+          'resep', 'paket_items', 'product_addon_categories', 'inventory_ledger'
         ];
 
         int saved = 0;
