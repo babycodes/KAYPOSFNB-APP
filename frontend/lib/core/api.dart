@@ -924,6 +924,7 @@ class Api {
               'name': name,
               'icon': icon,
               'sort_order': sortOrder,
+              'updated_at': DateTime.now().toIso8601String(),
             });
           });
           return {'success': true};
@@ -939,7 +940,7 @@ class Api {
       if (path == '/kategori-bahan') {
         final name = body?['name']?.toString().trim() ?? '';
         if (name.isEmpty) throw Exception('Nama kategori wajib diisi');
-        await db.insert('kategori_bahan', {'id': LocalDb.generateId(), 'name': name});
+        await db.insert('kategori_bahan', {'id': LocalDb.generateId(), 'name': name, 'updated_at': DateTime.now().toIso8601String()});
         return {'success': true};
       }
 
@@ -971,6 +972,7 @@ class Api {
           'schedule_type': body?['schedule_type']?.toString() ?? 'all_day',
           'schedule_value': body?['schedule_value']?.toString() ?? '',
           'is_active': (body?['is_active'] == true || body?['is_active'] == 1) ? 1 : 0,
+          'updated_at': DateTime.now().toIso8601String(),
         });
         return {'success': true};
       }
@@ -1250,6 +1252,7 @@ class Api {
           'description': description,
           'is_active': 1,
           'is_paket': isPaket,
+          'updated_at': DateTime.now().toIso8601String(),
         });
         
         return {'success': true, 'id': id};
@@ -1266,6 +1269,7 @@ class Api {
           'min_stock_alert': (body?['min_stock_alert'] as num?)?.toDouble() ?? 0,
           'kategori': body?['kategori']?.toString() ?? 'Lainnya',
           'kategori_bahan_id': body?['kategori_bahan_id'] ?? '',
+          'updated_at': DateTime.now().toIso8601String(),
         });
         return {'success': true};
       }
@@ -1557,6 +1561,7 @@ class Api {
             if (body?['sort_order'] != null) data['sort_order'] = (body!['sort_order'] as num?)?.toInt() ?? 0;
             
             if (data.isNotEmpty) {
+              data['updated_at'] = DateTime.now().toIso8601String();
               await txn.update('categories', data, where: 'id = ?', whereArgs: [id]);
             }
           });
@@ -1577,7 +1582,7 @@ class Api {
         final isActive = body?['is_active'] as int?;
         if (isActive != null) {
           // Quick toggle
-          await db.update('products', {'is_active': isActive}, where: 'id = ?', whereArgs: [id]);
+          await db.update('products', {'is_active': isActive, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
           return {'success': true};
         }
 
@@ -1596,6 +1601,7 @@ class Api {
         if (body?['is_paket'] != null) pData['is_paket'] = (body!['is_paket'] as num?)?.toInt() ?? 0;
         
         if (pData.isNotEmpty) {
+          pData['updated_at'] = DateTime.now().toIso8601String();
           await db.update('products', pData, where: 'id = ?', whereArgs: [id]);
         }
         
@@ -1617,6 +1623,7 @@ class Api {
         if (map['is_active'] != null) data['is_active'] = (map['is_active'] == true || map['is_active'] == 1) ? 1 : 0;
         
         if (data.isNotEmpty) {
+          data['updated_at'] = DateTime.now().toIso8601String();
           await db.update('discounts', data, where: 'id = ?', whereArgs: [id]);
         }
         return {'success': true};
@@ -1628,7 +1635,7 @@ class Api {
         if (id.isEmpty) throw Exception('ID Kategori Bahan tidak valid');
         final name = body?['name']?.toString().trim() ?? '';
         if (name.isEmpty) throw Exception('Nama kategori wajib diisi');
-        await db.update('kategori_bahan', {'name': name}, where: 'id = ?', whereArgs: [id]);
+        await db.update('kategori_bahan', {'name': name, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
         return {'success': true};
       }
 
@@ -1647,6 +1654,7 @@ class Api {
         if (body?['kategori_bahan_id'] != null) data['kategori_bahan_id'] = body!['kategori_bahan_id'] ?? '';
         
         if (data.isNotEmpty) {
+          data['updated_at'] = DateTime.now().toIso8601String();
           await db.update('bahan_baku', data, where: 'id = ?', whereArgs: [id]);
         }
         return {'success': true};
@@ -1658,7 +1666,7 @@ class Api {
         if (id.isEmpty) throw Exception('ID Resep tidak valid');
         final qtyNeeded = (body?['qty_needed'] as num?)?.toDouble();
         if (qtyNeeded != null && qtyNeeded > 0) {
-          await db.update('resep', {'qty_needed': qtyNeeded}, where: 'id = ?', whereArgs: [id]);
+          await db.update('resep', {'qty_needed': qtyNeeded, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
         }
         return {'success': true};
       }
@@ -1669,7 +1677,7 @@ class Api {
         if (id.isEmpty) throw Exception('ID Paket Item tidak valid');
         final qty = (body?['qty'] as num?)?.toInt();
         if (qty != null && qty > 0) {
-          await db.update('paket_items', {'qty': qty}, where: 'id = ?', whereArgs: [id]);
+          await db.update('paket_items', {'qty': qty, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
         }
         return {'success': true};
       }

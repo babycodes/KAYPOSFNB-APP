@@ -32,7 +32,16 @@ class SyncService {
         unsynced.add(tx);
       }
 
-      final lastSyncStr = prefs.getString('last_sync_time') ?? '2000-01-01T00:00:00.000Z';
+      // SMART SELF-HEALING: Detect if local DB was wiped but SharedPreferences wasn't
+      String lastSyncStr = prefs.getString('last_sync_time') ?? '2000-01-01T00:00:00.000Z';
+      final productCountRes = await db.rawQuery('SELECT COUNT(*) as c FROM products');
+      final productCount = (productCountRes.first['c'] as num?)?.toInt() ?? 0;
+      if (productCount == 0) {
+        // Local DB is empty! Force a FULL SYNC from the server.
+        lastSyncStr = '1970-01-01T00:00:00.000Z';
+        // Also reset the one-time junction bump flag so it re-runs after recovery
+        await prefs.setBool('has_forced_sync_junctions', false);
+      }
 
       // One-time bump for junction tables that didn't have updated_at before v1.0.94
       final hasForced = prefs.getBool('has_forced_sync_junctions') ?? false;
@@ -51,12 +60,12 @@ class SyncService {
         'products', 'bahan_baku', 'addons', 'resep', 'paket_items', 
         'product_addon_categories', 'inventory_ledger', 'restock_history'
       ];
+      final lastSyncLocalStr = DateTime.parse(lastSyncStr).toLocal().toIso8601String();
       for (var table in masterTables) {
         String dateCol = 'updated_at';
         if (table == 'users') dateCol = 'created_at';
         if (table == 'inventory_ledger' || table == 'restock_history') dateCol = 'timestamp';
         
-        final lastSyncLocalStr = DateTime.parse(lastSyncStr).toLocal().toIso8601String();
         final rows = await db.query(table, where: 'datetime($dateCol) > datetime(?)', whereArgs: [lastSyncLocalStr]);
         if (rows.isNotEmpty) changes[table] = rows;
       }
