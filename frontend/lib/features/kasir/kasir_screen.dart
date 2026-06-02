@@ -856,11 +856,10 @@ class _KasirScreenState extends State<KasirScreen> {
             ValueListenableBuilder<int>(
               valueListenable: SyncService.pendingReportNotifier,
               builder: (context, pendingCount, _) {
-                if (pendingCount == 0) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(right: 16),
                   child: FilledButton.icon(
-                    onPressed: () async {
+                    onPressed: pendingCount == 0 ? null : () async {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
@@ -879,13 +878,13 @@ class _KasirScreenState extends State<KasirScreen> {
                       }
                     },
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white24,
-                      foregroundColor: Colors.white,
+                      backgroundColor: pendingCount == 0 ? Colors.white10 : Colors.white24,
+                      foregroundColor: pendingCount == 0 ? Colors.white54 : Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                       minimumSize: const Size(0, 32),
                     ),
-                    icon: const Icon(Icons.cloud_upload, size: 16),
-                    label: Text('Kirim Laporan ($pendingCount)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    icon: Icon(pendingCount == 0 ? Icons.cloud_done : Icons.cloud_upload, size: 16),
+                    label: Text(pendingCount == 0 ? 'Semua Terkirim' : 'Kirim Laporan ($pendingCount)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
                 );
               },
