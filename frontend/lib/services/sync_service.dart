@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import '../core/local_db.dart';
+import '../core/api.dart';
 import 'device_info_service.dart';
 
 /// Manual Batch Sync Service — No background timers, no auto-sync.
@@ -22,8 +24,26 @@ class SyncService {
   static final ValueNotifier<bool> masterUpdateAvailableNotifier = ValueNotifier(false);
 
   // ═══════════════════════════════════════════════════════════
-  // SHARED UTILITIES
+  // SHARED UTILITIES & POLLING
   // ═══════════════════════════════════════════════════════════
+
+  static Timer? _pollingTimer;
+
+  /// Starts a lightweight background timer to check for new reports/updates.
+  /// This prevents the need to logout/login to see badges.
+  static void startPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      checkNewReports();
+      checkMasterDataUpdate();
+      getPendingReportCount();
+    });
+  }
+
+  static void stopPolling() {
+    _pollingTimer?.cancel();
+  }
+
 
   static Future<String?> _getBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
@@ -119,7 +139,10 @@ class SyncService {
 
       final res = await http.get(
         Uri.parse('$baseUrl/api/admin/reports/check?since=$lastPull'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${Api.getToken()}',
+        },
       ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
@@ -140,6 +163,10 @@ class SyncService {
 
       final res = await http.get(
         Uri.parse('$baseUrl/api/admin/reports/pull?since=$lastPull'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${Api.getToken()}',
+        },
       ).timeout(const Duration(seconds: 30));
 
       if (res.statusCode == 200) {

@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/sync_service.dart';
 import 'api.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -26,6 +27,7 @@ class AuthProvider extends ChangeNotifier {
     _user = res['user'];
     _locked = false;
     Api.setToken(res['token']);
+    SyncService.startPolling();
     await persist();
     notifyListeners();
     return res['user'];
@@ -54,6 +56,7 @@ class AuthProvider extends ChangeNotifier {
     _user = null;
     _locked = false;
     Api.setToken('');
+    SyncService.stopPolling();
     SharedPreferences.getInstance().then((prefs) {
       prefs.remove('kaypos_auth');
       prefs.remove('kaypos_locked');
@@ -80,6 +83,7 @@ class AuthProvider extends ChangeNotifier {
       Api.setToken(data['token']);
       final wasLocked = prefs.getString('kaypos_locked');
       _locked = wasLocked == '1';
+      SyncService.startPolling();
       notifyListeners();
       return true;
     } catch (_) {
