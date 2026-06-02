@@ -140,13 +140,14 @@ class LocalDb {
               await db.execute('ALTER TABLE inventory_ledger RENAME TO _old_inventory_ledger');
               await db.execute('''
                 CREATE TABLE inventory_ledger (
-                  id                INTEGER PRIMARY KEY AUTOINCREMENT,
-                  bahan_baku_id     INTEGER NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
+                  id                TEXT PRIMARY KEY,
+                  bahan_baku_id     TEXT NOT NULL REFERENCES bahan_baku(id) ON DELETE CASCADE,
                   timestamp         TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
                   transaction_type  TEXT    NOT NULL CHECK(transaction_type IN ('RESTOCK','SALE','WASTE','ADJUSTMENT','REFUND')),
                   qty_change        REAL    NOT NULL,
                   financial_value   REAL    NOT NULL DEFAULT 0,
-                  notes             TEXT    DEFAULT ''
+                  notes             TEXT    DEFAULT '',
+                  is_synced         INTEGER DEFAULT 0
                 )
               ''');
               await db.execute('''
@@ -159,6 +160,11 @@ class LocalDb {
                 CREATE INDEX IF NOT EXISTS idx_ledger_bahan_ts
                 ON inventory_ledger (bahan_baku_id, timestamp)
               ''');
+            }
+            
+            // Add is_synced if missing
+            if (!sql.contains("is_synced")) {
+              try { await db.execute('ALTER TABLE inventory_ledger ADD COLUMN is_synced INTEGER DEFAULT 0'); } catch (_) {}
             }
           }
         } catch (e) {
@@ -438,7 +444,8 @@ class LocalDb {
             transaction_type  TEXT    NOT NULL CHECK(transaction_type IN ('RESTOCK','SALE','WASTE','ADJUSTMENT','REFUND')),
             qty_change        REAL    NOT NULL,
             financial_value   REAL    NOT NULL DEFAULT 0,
-            notes             TEXT    DEFAULT ''
+            notes             TEXT    DEFAULT '',
+            is_synced         INTEGER DEFAULT 0
           )
         ''');
         await db.execute('''

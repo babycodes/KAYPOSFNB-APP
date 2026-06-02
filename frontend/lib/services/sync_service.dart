@@ -62,7 +62,8 @@ class SyncService {
   static Future<int> getPendingReportCount() async {
     final db = await LocalDb.instance;
     final res = await db.rawQuery('SELECT COUNT(*) as c FROM transactions WHERE is_synced = 0');
-    final count = (res.first['c'] as num?)?.toInt() ?? 0;
+    final resL = await db.rawQuery('SELECT COUNT(*) as c FROM inventory_ledger WHERE is_synced = 0');
+    final count = ((res.first['c'] as num?)?.toInt() ?? 0) + ((resL.first['c'] as num?)?.toInt() ?? 0);
     pendingReportNotifier.value = count;
     return count;
   }
@@ -89,14 +90,29 @@ class SyncService {
 
     try {
       final uuid = await _getUuid();
-      final unsynced = await getPendingTransactions();
+      final unsyncedTxs = await getPendingTransactions();
 
-      if (unsynced.isEmpty) return 'Tidak ada transaksi baru untuk dilaporkan.';
+      final db = await LocalDb.instance;
+      final ledgers = await db.query('inventory_ledger', where: 'is_synced = 0');
+      final fakeLedgerTxs = ledgers.map((l) => {
+        'id': 'ledger_${l['id']}',
+        'is_ledger': true,
+        'receipt_number': 'INV_${l['transaction_type']}',
+        'total_amount': l['financial_value'],
+        'payment_method': 'none',
+        'status': 'completed',
+        'cashier_name': 'System',
+        'ledger_data': l,
+      }).toList();
+
+      final payloadTxs = [...unsyncedTxs, ...fakeLedgerTxs];
+
+      if (payloadTxs.isEmpty) return 'Tidak ada transaksi atau pembaruan stok baru untuk dilaporkan.';
 
       final res = await http.post(
         Uri.parse('$baseUrl/api/client/push-transactions'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'uuid': uuid, 'transactions': unsynced}),
+        body: jsonEncode({'uuid': uuid, 'transactions': payloadTxs}),
       ).timeout(const Duration(seconds: 30));
 
       if (res.statusCode == 200) {
@@ -104,15 +120,17 @@ class SyncService {
         final synced = body['synced_count'] ?? 0;
 
         // Mark all as synced locally — they can NEVER be re-reported
-        final db = await LocalDb.instance;
         await db.transaction((txn) async {
-          for (final t in unsynced) {
+          for (final t in unsyncedTxs) {
             await txn.update('transactions', {'is_synced': 1}, where: 'id = ?', whereArgs: [t['id']]);
+          }
+          for (final l in ledgers) {
+            await txn.update('inventory_ledger', {'is_synced': 1}, where: 'id = ?', whereArgs: [l['id']]);
           }
         });
 
         await getPendingReportCount(); // Refresh badge
-        return 'Berhasil! $synced transaksi berhasil dilaporkan ke server.';
+        return 'Berhasil! $synced pembaruan berhasil dilaporkan ke server.';
       } else if (res.statusCode == 401) {
         return 'SYNC_REVOKED';
       } else {
@@ -179,18 +197,39 @@ class SyncService {
           for (final pt in reports) {
             final txId = pt['id']?.toString();
             if (txId == null) continue;
-            final exists = await txn.query('transactions', where: 'id = ?', whereArgs: [txId]);
-            if (exists.isEmpty) {
-              final header = Map<String, dynamic>.from(pt);
-              final items = header.remove('items') as List<dynamic>? ?? [];
-              header['is_synced'] = 1;
-              try {
-                await txn.insert('transactions', header);
-                for (final item in items) {
-                  await txn.insert('transaction_details', Map<String, dynamic>.from(item));
+            
+            if (pt['is_ledger'] == true) {
+              final ledger = pt['ledger_data'];
+              if (ledger == null) continue;
+              final lId = ledger['id']?.toString();
+              if (lId == null) continue;
+              
+              final exists = await txn.query('inventory_ledger', where: 'id = ?', whereArgs: [lId]);
+              if (exists.isEmpty) {
+                ledger['is_synced'] = 1;
+                await txn.insert('inventory_ledger', Map<String, dynamic>.from(ledger));
+                
+                final qtyChange = (ledger['qty_change'] as num?)?.toDouble() ?? 0.0;
+                final bbId = ledger['bahan_baku_id'];
+                if (bbId != null && qtyChange != 0) {
+                  await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [qtyChange, bbId]);
                 }
                 saved++;
-              } catch (_) {}
+              }
+            } else {
+              final exists = await txn.query('transactions', where: 'id = ?', whereArgs: [txId]);
+              if (exists.isEmpty) {
+                final header = Map<String, dynamic>.from(pt);
+                final items = header.remove('items') as List<dynamic>? ?? [];
+                header['is_synced'] = 1;
+                try {
+                  await txn.insert('transactions', header);
+                  for (final item in items) {
+                    await txn.insert('transaction_details', Map<String, dynamic>.from(item));
+                  }
+                  saved++;
+                } catch (_) {}
+              }
             }
           }
         });
