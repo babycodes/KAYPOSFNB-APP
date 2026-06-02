@@ -1,4 +1,4 @@
-import 'dart:async';
+// ignore: unused_import
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -18,7 +18,6 @@ class _AdminShellState extends State<AdminShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _bahanHabisCount = 0;
   int _bahanRendahCount = 0;
-  Timer? _syncTimer;
 
   final navItems = [
     {'href': '/admin', 'label': 'Dashboard', 'icon': Icons.dashboard},
@@ -38,16 +37,12 @@ class _AdminShellState extends State<AdminShell> {
   void initState() {
     super.initState();
     _loadBahanAlerts();
-    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      SyncService.syncTransactions().then((_) {
-        if (mounted) _loadBahanAlerts(); // update badges after sync
-      });
-    });
+    // Check for new reports once on launch (non-blocking, granular update via ValueNotifier)
+    SyncService.checkNewReports();
   }
 
   @override
   void dispose() {
-    _syncTimer?.cancel();
     super.dispose();
   }
 
@@ -180,6 +175,81 @@ class _AdminShellState extends State<AdminShell> {
         const Divider(height: 1),
         // Bottom actions
         Padding(padding: const EdgeInsets.all(8), child: Column(children: [
+          // Pull Reports Button with badge
+          ValueListenableBuilder<int>(
+            valueListenable: SyncService.newReportNotifier,
+            builder: (context, newCount, _) {
+              return Tooltip(
+                message: showLabels ? '' : 'Terima Laporan',
+                child: InkWell(
+                  onTap: () async {
+                    final msg = await SyncService.pullReports();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+                    );
+                    _loadBahanAlerts();
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(children: [
+                      Stack(children: [
+                        Icon(Icons.download_rounded, size: 20, color: newCount > 0 ? cs.primary : cs.onSurfaceVariant),
+                        if (newCount > 0) Positioned(right: 0, top: 0,
+                          child: Container(
+                            width: 8, height: 8,
+                            decoration: BoxDecoration(color: cs.error, shape: BoxShape.circle),
+                          ),
+                        ),
+                      ]),
+                      if (showLabels) ...[const SizedBox(width: 12),
+                        Expanded(child: Text('Terima Laporan', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: newCount > 0 ? cs.primary : cs.onSurfaceVariant))),
+                        if (newCount > 0) Container(
+                          constraints: const BoxConstraints(minWidth: 20), height: 20,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(10)),
+                          child: Center(child: Text('$newCount', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white))),
+                        ),
+                      ],
+                    ]),
+                  ),
+                ),
+              );
+            },
+          ),
+          // Push Master Data Button
+          Tooltip(
+            message: showLabels ? '' : 'Kirim Update Master',
+            child: InkWell(
+              onTap: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Kirim Update Master?'),
+                    content: const Text('Kirim perubahan data master (Produk, Kategori, Diskon, dll) terbaru ke server agar Kasir dapat mengunduhnya?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                      FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kirim')),
+                    ],
+                  ),
+                );
+                if (confirm == true && context.mounted) {
+                  final msg = await SyncService.pushMasterData();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+                  );
+                }
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(children: [
+                  Icon(Icons.cloud_upload_rounded, size: 20, color: cs.secondary),
+                  if (showLabels) ...[const SizedBox(width: 12), Text('Kirim Update', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: cs.secondary))],
+                ]),
+              ),
+            ),
+          ),
           Tooltip(
             message: showLabels ? '' : 'Ke Kasir',
             child: InkWell(onTap: () {

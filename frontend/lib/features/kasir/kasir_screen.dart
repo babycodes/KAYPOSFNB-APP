@@ -120,8 +120,10 @@ class _KasirScreenState extends State<KasirScreen> {
       _loadHeldCarts();
       _loadStockAlerts();
 
-      // Background sync check on launch
-      _triggerBackgroundSync();
+      // Check if new master data is available from server (non-blocking)
+      SyncService.checkMasterDataUpdate();
+      // Refresh pending report badge
+      SyncService.getPendingReportCount();
     });
   }
 
@@ -137,16 +139,6 @@ class _KasirScreenState extends State<KasirScreen> {
   }
 
   bool _isServerDisconnected = false;
-
-  void _triggerBackgroundSync() {
-    SyncService.syncTransactions().then((res) {
-      if (res == 'SYNC_REVOKED' && mounted) {
-        setState(() { _isServerDisconnected = true; });
-      } else if (res.contains('Sukses') && mounted) {
-        setState(() { _isServerDisconnected = false; });
-      }
-    }).catchError((_) {}); // Ignore timeout/network errors silently
-  }
 
   List<dynamic> activeDiscounts = [];
 
@@ -796,8 +788,8 @@ class _KasirScreenState extends State<KasirScreen> {
         }
         _loadDashboard(); _loadData(); _loadStockAlerts();
         
-        // Trigger sync in background after checkout
-        _triggerBackgroundSync();
+        // Update pending report badge after checkout
+        SyncService.getPendingReportCount();
         
         showDialog(context: context, builder: (_) => ReceiptModal(transaction: result['transaction'], details: List<Map<String, dynamic>>.from(result['details'])));
       }
@@ -833,18 +825,71 @@ class _KasirScreenState extends State<KasirScreen> {
             const SizedBox(width: 12),
             const Text('KAYPOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18, letterSpacing: -0.5)),
             const Spacer(),
-            if (_isServerDisconnected)
-              Tooltip(
-                message: 'Koneksi Server Terputus. Sinkronisasi terhenti.',
-                child: Row(
-                  children: [
-                    const Icon(Icons.cloud_off, color: Colors.redAccent, size: 20),
-                    const SizedBox(width: 6),
-                    const Text('OFFLINE', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 16),
-                  ],
-                ),
-              ),
+            // 1. UPDATE MASTER DATA BUTTON
+            ValueListenableBuilder<bool>(
+              valueListenable: SyncService.masterUpdateAvailableNotifier,
+              builder: (context, hasUpdate, _) {
+                if (!hasUpdate) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final msg = await SyncService.pullMasterData();
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+                      _loadData(); // reload products/categories
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.amber.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    icon: const Icon(Icons.system_update_alt, size: 16),
+                    label: const Text('Update Tersedia', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                );
+              },
+            ),
+            
+            // 2. LAPORAN TRANSAKSI BUTTON
+            ValueListenableBuilder<int>(
+              valueListenable: SyncService.pendingReportNotifier,
+              builder: (context, pendingCount, _) {
+                if (pendingCount == 0) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Kirim Laporan?'),
+                          content: Text('Ada $pendingCount transaksi yang belum dilaporkan ke server. Kirim sekarang?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kirim')),
+                          ],
+                        ),
+                      );
+                      if (confirm == true && context.mounted) {
+                        final msg = await SyncService.pushTransactions();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+                      }
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white24,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    icon: const Icon(Icons.cloud_upload, size: 16),
+                    label: Text('Kirim Laporan ($pendingCount)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                );
+              },
+            ),
           ])),
         ),
 

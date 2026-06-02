@@ -6,181 +6,334 @@ import 'package:sqflite/sqflite.dart';
 import '../core/local_db.dart';
 import 'device_info_service.dart';
 
+/// Manual Batch Sync Service — No background timers, no auto-sync.
+/// All sync actions are triggered explicitly by the user.
 class SyncService {
+  /// Notifier for UI to react to sync state changes without full rebuilds.
   static final ValueNotifier<int> syncNotifier = ValueNotifier(0);
-  /// Sync transactions to server. 
-  /// Returns a message string for the UI.
-  static Future<String> syncTransactions() async {
+
+  /// Notifier specifically for pending report count (Kasir side badge).
+  static final ValueNotifier<int> pendingReportNotifier = ValueNotifier(0);
+
+  /// Notifier for unread incoming reports from cashiers (Admin side badge).
+  static final ValueNotifier<int> newReportNotifier = ValueNotifier(0);
+
+  /// Notifier for pending master data updates available to pull (Kasir side).
+  static final ValueNotifier<bool> masterUpdateAvailableNotifier = ValueNotifier(false);
+
+  // ═══════════════════════════════════════════════════════════
+  // SHARED UTILITIES
+  // ═══════════════════════════════════════════════════════════
+
+  static Future<String?> _getBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final url = prefs.getString('server_url');
+    if (url == null || url.isEmpty) return null;
+    return url;
+  }
+
+  static Future<String> _getUuid() => DeviceInfoService.getDeviceUuid();
+
+  // ═══════════════════════════════════════════════════════════
+  // REQ 1: KASIR → SERVER (Push Transactions / Laporan)
+  // ═══════════════════════════════════════════════════════════
+
+  /// Returns the count of transactions that have NOT been reported yet.
+  static Future<int> getPendingReportCount() async {
+    final db = await LocalDb.instance;
+    final res = await db.rawQuery('SELECT COUNT(*) as c FROM transactions WHERE is_synced = 0');
+    final count = (res.first['c'] as num?)?.toInt() ?? 0;
+    pendingReportNotifier.value = count;
+    return count;
+  }
+
+  /// Returns all un-reported transactions (with their details) for preview.
+  static Future<List<Map<String, dynamic>>> getPendingTransactions() async {
+    final db = await LocalDb.instance;
+    final rows = await db.query('transactions', where: 'is_synced = 0', orderBy: 'created_at DESC');
+    final List<Map<String, dynamic>> result = [];
+    for (final row in rows) {
+      final tx = Map<String, dynamic>.from(row);
+      final details = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [tx['id']]);
+      tx['items'] = details;
+      result.add(tx);
+    }
+    return result;
+  }
+
+  /// KASIR manually pushes un-synced transactions to the server.
+  /// Returns a result message for the UI.
+  static Future<String> pushTransactions() async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) return 'Server belum tersambung. Sambungkan terlebih dahulu.';
+
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final baseUrl = prefs.getString('server_url');
-      if (baseUrl == null || baseUrl.isEmpty) {
-        return 'Server URL tidak ditemukan. Silakan sambungkan perangkat terlebih dahulu.';
-      }
+      final uuid = await _getUuid();
+      final unsynced = await getPendingTransactions();
 
-      final uuid = await DeviceInfoService.getDeviceUuid();
+      if (unsynced.isEmpty) return 'Tidak ada transaksi baru untuk dilaporkan.';
 
-      final db = await LocalDb.instance;
-      
-      final unsyncedRows = await db.query('transactions', where: 'is_synced = 0');
-      
-      List<Map<String, dynamic>> unsynced = [];
-      for (var row in unsyncedRows) {
-        final Map<String, dynamic> tx = Map.from(row);
-        final details = await db.query('transaction_details', where: 'transaction_id = ?', whereArgs: [tx['id']]);
-        tx['items'] = details;
-        unsynced.add(tx);
-      }
-
-      // SMART SELF-HEALING: Detect if local DB was wiped but SharedPreferences wasn't
-      String lastSyncStr = prefs.getString('last_sync_time') ?? '2000-01-01T00:00:00.000Z';
-      final productCountRes = await db.rawQuery('SELECT COUNT(*) as c FROM products');
-      final productCount = (productCountRes.first['c'] as num?)?.toInt() ?? 0;
-      if (productCount == 0) {
-        // Local DB is empty! Force a FULL SYNC from the server.
-        lastSyncStr = '1970-01-01T00:00:00.000Z';
-        // Also reset the one-time junction bump flag so it re-runs after recovery
-        await prefs.setBool('has_forced_sync_junctions', false);
-      }
-
-      // One-time bump for junction tables that didn't have updated_at before v1.0.94
-      final hasForced = prefs.getBool('has_forced_sync_junctions') ?? false;
-      if (!hasForced) {
-        final now = DateTime.now().toIso8601String();
-        await db.rawUpdate("UPDATE resep SET updated_at = ?", [now]);
-        await db.rawUpdate("UPDATE paket_items SET updated_at = ?", [now]);
-        await db.rawUpdate("UPDATE product_addon_categories SET updated_at = ?", [now]);
-        await prefs.setBool('has_forced_sync_junctions', true);
-      }
-
-      // 1. Gather Master Data Changes
-      final Map<String, List<Map<String, dynamic>>> changes = {};
-      final masterTables = [
-        'categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts', 
-        'products', 'bahan_baku', 'addons', 'resep', 'paket_items', 
-        'product_addon_categories', 'inventory_ledger', 'restock_history'
-      ];
-      final lastSyncLocalStr = DateTime.parse(lastSyncStr).toLocal().toIso8601String();
-      for (var table in masterTables) {
-        String dateCol = 'updated_at';
-        if (table == 'users') dateCol = 'created_at';
-        if (table == 'inventory_ledger' || table == 'restock_history') dateCol = 'timestamp';
-        
-        final rows = await db.query(table, where: 'datetime($dateCol) > datetime(?)', whereArgs: [lastSyncLocalStr]);
-        if (rows.isNotEmpty) changes[table] = rows;
-      }
-
-      final payload = {
-        'uuid': uuid,
-        'last_sync_time': lastSyncStr,
-        'transactions': unsynced,
-        'changes': changes,
-      };
-
-      final url = '$baseUrl/api/client/sync';
       final res = await http.post(
-        Uri.parse(url),
+        Uri.parse('$baseUrl/api/client/push-transactions'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(payload),
-      ).timeout(const Duration(seconds: 15));
+        body: jsonEncode({'uuid': uuid, 'transactions': unsynced}),
+      ).timeout(const Duration(seconds: 30));
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
-        final syncedCount = body['synced_count'] ?? 0;
+        final synced = body['synced_count'] ?? 0;
 
-        // PULL PROCESSING
-        int masterSuccess = 0;
-        final pulled = body['pull_transactions'] as List<dynamic>? ?? [];
-        final pullChanges = body['pull_changes'] as List<dynamic>? ?? [];
-
+        // Mark all as synced locally — they can NEVER be re-reported
+        final db = await LocalDb.instance;
         await db.transaction((txn) async {
-          // 1. Mark as synced locally
           for (final t in unsynced) {
-            await txn.update(
-              'transactions', 
-              {'is_synced': 1}, 
-              where: 'id = ?', 
-              whereArgs: [t['id']]
-            );
+            await txn.update('transactions', {'is_synced': 1}, where: 'id = ?', whereArgs: [t['id']]);
           }
+        });
 
-          // 2. Process Master Data changes strictly in hierarchical order
-          if (pullChanges.isNotEmpty) {
-            // Group by table
-            final Map<String, List<Map<String, dynamic>>> groupedChanges = {};
-            for (var change in pullChanges) {
-              final table = change['table_name'] as String;
-              if (masterTables.contains(table)) {
-                groupedChanges.putIfAbsent(table, () => []);
-                groupedChanges[table]!.add(jsonDecode(change['payload']));
-              }
-            }
+        await getPendingReportCount(); // Refresh badge
+        return 'Berhasil! $synced transaksi berhasil dilaporkan ke server.';
+      } else if (res.statusCode == 401) {
+        return 'SYNC_REVOKED';
+      } else {
+        final body = jsonDecode(res.body);
+        return 'Gagal: ${body['error'] ?? res.statusCode}';
+      }
+    } catch (e) {
+      return 'Koneksi gagal: $e';
+    }
+  }
 
-            // Define strict hierarchical order to satisfy Foreign Key constraints
-            final strictOrder = [
-              // Level 1
-              'kategori_bahan', 'categories', 'users', 'addon_categories', 'discounts',
-              // Level 2
-              'bahan_baku', 'products',
-              // Level 3
-              'addons',
-              // Level 4
-              'resep', 'paket_items', 'product_addon_categories',
-              // Level 5
-              'inventory_ledger', 'restock_history'
-            ];
+  // ═══════════════════════════════════════════════════════════
+  // REQ 2: ADMIN ← SERVER (Pull Transaction Reports)
+  // ═══════════════════════════════════════════════════════════
 
-            for (final table in strictOrder) {
-              if (groupedChanges.containsKey(table)) {
-                for (final rowData in groupedChanges[table]!) {
-                  try {
-                    await txn.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
-                    masterSuccess++;
-                  } catch (e) {
-                    // Ignore UNIQUE constraint violations (e.g. same category name)
-                  }
+  /// Checks server for new transaction reports. Updates [newReportNotifier].
+  static Future<void> checkNewReports() async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastPull = prefs.getString('last_report_pull') ?? '1970-01-01T00:00:00.000Z';
+
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/admin/reports/check?since=$lastPull'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        newReportNotifier.value = (body['new_count'] as num?)?.toInt() ?? 0;
+      }
+    } catch (_) {}
+  }
+
+  /// ADMIN manually pulls new transaction reports from the server.
+  static Future<String> pullReports() async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) return 'Server belum tersambung.';
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastPull = prefs.getString('last_report_pull') ?? '1970-01-01T00:00:00.000Z';
+
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/admin/reports/pull?since=$lastPull'),
+      ).timeout(const Duration(seconds: 30));
+
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final reports = body['transactions'] as List<dynamic>? ?? [];
+
+        if (reports.isEmpty) {
+          return 'Tidak ada laporan baru dari kasir.';
+        }
+
+        // Save pulled transactions to local DB
+        final db = await LocalDb.instance;
+        int saved = 0;
+        await db.transaction((txn) async {
+          for (final pt in reports) {
+            final txId = pt['id']?.toString();
+            if (txId == null) continue;
+            final exists = await txn.query('transactions', where: 'id = ?', whereArgs: [txId]);
+            if (exists.isEmpty) {
+              final header = Map<String, dynamic>.from(pt);
+              final items = header.remove('items') as List<dynamic>? ?? [];
+              header['is_synced'] = 1;
+              try {
+                await txn.insert('transactions', header);
+                for (final item in items) {
+                  await txn.insert('transaction_details', Map<String, dynamic>.from(item));
                 }
-              }
+                saved++;
+              } catch (_) {}
             }
           }
+        });
 
-          // 3. Process pulled transactions from server (Level 6 & 7)
-          if (pulled.isNotEmpty) {
-            for (var pt in pulled) {
-              final txId = pt['id'];
-              final exists = await txn.query('transactions', where: 'id = ?', whereArgs: [txId]);
-              if (exists.isEmpty) {
-                final Map<String, dynamic> header = Map.from(pt);
-                final items = header.remove('items') as List<dynamic>? ?? [];
-                header['is_synced'] = 1; // already synced from server
-                
+        await prefs.setString('last_report_pull', DateTime.now().toUtc().toIso8601String());
+        newReportNotifier.value = 0;
+        syncNotifier.value++;
+        return 'Berhasil menerima $saved laporan transaksi baru.';
+      } else {
+        return 'Gagal menarik laporan: ${res.statusCode}';
+      }
+    } catch (e) {
+      return 'Koneksi gagal: $e';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // REQ 3: ADMIN → SERVER (Push Master Data Updates)
+  // ═══════════════════════════════════════════════════════════
+
+  static const List<String> _masterTables = [
+    'categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts',
+    'products', 'bahan_baku', 'addons', 'resep', 'paket_items',
+    'product_addon_categories',
+  ];
+
+  /// ADMIN manually pushes all master data to the server for Kasir to pick up.
+  static Future<String> pushMasterData() async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) return 'Server belum tersambung.';
+
+    try {
+      final uuid = await _getUuid();
+      final db = await LocalDb.instance;
+      final prefs = await SharedPreferences.getInstance();
+      final lastPush = prefs.getString('last_master_push') ?? '1970-01-01T00:00:00.000Z';
+      final lastPushLocal = DateTime.parse(lastPush).toLocal().toIso8601String();
+
+      final Map<String, List<Map<String, dynamic>>> changes = {};
+      for (final table in _masterTables) {
+        String dateCol = table == 'users' ? 'created_at' : 'updated_at';
+        final rows = await db.query(table, where: 'datetime($dateCol) > datetime(?)', whereArgs: [lastPushLocal]);
+        if (rows.isNotEmpty) changes[table] = rows;
+      }
+
+      if (changes.isEmpty) return 'Tidak ada perubahan master data untuk dikirim.';
+
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/client/push-master'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'uuid': uuid, 'changes': changes}),
+      ).timeout(const Duration(seconds: 30));
+
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final count = body['saved_count'] ?? 0;
+        await prefs.setString('last_master_push', DateTime.now().toUtc().toIso8601String());
+        return 'Berhasil mengirim $count perubahan data master ke server.';
+      } else if (res.statusCode == 401) {
+        return 'SYNC_REVOKED';
+      } else {
+        final body = jsonDecode(res.body);
+        return 'Gagal: ${body['error'] ?? res.statusCode}';
+      }
+    } catch (e) {
+      return 'Koneksi gagal: $e';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // REQ 3b: KASIR ← SERVER (Pull Master Data Updates)
+  // ═══════════════════════════════════════════════════════════
+
+  /// Check if new master data is available from server. Updates [masterUpdateAvailableNotifier].
+  static Future<void> checkMasterDataUpdate() async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastPull = prefs.getString('last_master_pull') ?? '1970-01-01T00:00:00.000Z';
+
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/client/master/check?since=$lastPull'),
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        masterUpdateAvailableNotifier.value = (body['has_update'] as bool?) ?? false;
+      }
+    } catch (_) {}
+  }
+
+  /// KASIR manually pulls the latest master data from the server.
+  /// Inserts in strict hierarchical order to prevent FK violations.
+  static Future<String> pullMasterData() async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) return 'Server belum tersambung.';
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastPull = prefs.getString('last_master_pull') ?? '1970-01-01T00:00:00.000Z';
+      final db = await LocalDb.instance;
+
+      // Self-healing: if products table is empty, force full sync
+      final productCountRes = await db.rawQuery('SELECT COUNT(*) as c FROM products');
+      final productCount = (productCountRes.first['c'] as num?)?.toInt() ?? 0;
+      final since = productCount == 0 ? '1970-01-01T00:00:00.000Z' : lastPull;
+
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/client/master/pull?since=$since'),
+      ).timeout(const Duration(seconds: 30));
+
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final pullChanges = body['changes'] as List<dynamic>? ?? [];
+
+        if (pullChanges.isEmpty) {
+          masterUpdateAvailableNotifier.value = false;
+          return 'Data master sudah terbaru.';
+        }
+
+        // Group by table name
+        final Map<String, List<Map<String, dynamic>>> grouped = {};
+        for (final change in pullChanges) {
+          final table = change['table_name'] as String;
+          if (_masterTables.contains(table)) {
+            grouped.putIfAbsent(table, () => []);
+            grouped[table]!.add(jsonDecode(change['payload']));
+          }
+        }
+
+        // Strict hierarchical insert order to satisfy FK constraints
+        const strictOrder = [
+          'kategori_bahan', 'categories', 'users', 'addon_categories', 'discounts',
+          'bahan_baku', 'products',
+          'addons',
+          'resep', 'paket_items', 'product_addon_categories',
+        ];
+
+        int saved = 0;
+        await db.transaction((txn) async {
+          for (final table in strictOrder) {
+            if (grouped.containsKey(table)) {
+              for (final rowData in grouped[table]!) {
                 try {
-                  await txn.insert('transactions', header);
-                  for (var item in items) {
-                    await txn.insert('transaction_details', Map<String, dynamic>.from(item));
-                  }
-                } catch (e) {
-                  // Ignore malformed transactions from server
-                }
+                  await txn.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
+                  saved++;
+                } catch (_) {}
               }
             }
           }
         });
 
-        await prefs.setString('last_sync_time', DateTime.now().toUtc().toIso8601String());
+        await prefs.setString('last_master_pull', DateTime.now().toUtc().toIso8601String());
+        masterUpdateAvailableNotifier.value = false;
         syncNotifier.value++;
-
-        return 'Sukses! $syncedCount tx dikirim, ${pulled.length} tx ditarik. $masterSuccess pembaruan master.';
+        return 'Berhasil memperbarui $saved item data master.';
       } else if (res.statusCode == 401) {
-        // Device is revoked or PIN changed
-        await prefs.remove('server_url');
         return 'SYNC_REVOKED';
       } else {
-        final body = jsonDecode(res.body);
-        return 'Gagal sinkronisasi: ${body['error'] ?? res.statusCode}';
+        return 'Gagal: ${res.statusCode}';
       }
-    } catch (e, stack) {
-      return 'Koneksi gagal/Error: $e';
+    } catch (e) {
+      return 'Koneksi gagal: $e';
     }
   }
 }
