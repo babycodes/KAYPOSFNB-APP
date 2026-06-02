@@ -79,67 +79,84 @@ class SyncService {
         final body = jsonDecode(res.body);
         final syncedCount = body['synced_count'] ?? 0;
 
-        // Mark as synced locally
-        final batch = db.batch();
-        for (final t in unsynced) {
-          batch.update(
-            'transactions', 
-            {'is_synced': 1}, 
-            where: 'id = ?', 
-            whereArgs: [t['id']]
-          );
-        }
-        await batch.commit(noResult: true);
-
-        // Process pulled transactions from server
+        // PULL PROCESSING
+        int masterSuccess = 0;
         final pulled = body['pull_transactions'] as List<dynamic>? ?? [];
-        if (pulled.isNotEmpty) {
-          for (var pt in pulled) {
-            final txId = pt['id'];
-            // Check if exists
-            final exists = await db.query('transactions', where: 'id = ?', whereArgs: [txId]);
-            if (exists.isEmpty) {
-              final Map<String, dynamic> header = Map.from(pt);
-              final items = header.remove('items') as List<dynamic>? ?? [];
-              header['is_synced'] = 1; // already synced from server
-              
-              try {
-                await db.insert('transactions', header);
-                for (var item in items) {
-                  await db.insert('transaction_details', Map<String, dynamic>.from(item));
+        final pullChanges = body['pull_changes'] as List<dynamic>? ?? [];
+
+        await db.transaction((txn) async {
+          // 1. Mark as synced locally
+          for (final t in unsynced) {
+            await txn.update(
+              'transactions', 
+              {'is_synced': 1}, 
+              where: 'id = ?', 
+              whereArgs: [t['id']]
+            );
+          }
+
+          // 2. Process Master Data changes strictly in hierarchical order
+          if (pullChanges.isNotEmpty) {
+            // Group by table
+            final Map<String, List<Map<String, dynamic>>> groupedChanges = {};
+            for (var change in pullChanges) {
+              final table = change['table_name'] as String;
+              if (masterTables.contains(table)) {
+                groupedChanges.putIfAbsent(table, () => []);
+                groupedChanges[table]!.add(jsonDecode(change['payload']));
+              }
+            }
+
+            // Define strict hierarchical order to satisfy Foreign Key constraints
+            final strictOrder = [
+              // Level 1
+              'kategori_bahan', 'categories', 'users', 'addon_categories', 'discounts',
+              // Level 2
+              'bahan_baku', 'products',
+              // Level 3
+              'addons',
+              // Level 4
+              'resep', 'paket_items', 'product_addon_categories',
+              // Level 5
+              'inventory_ledger', 'restock_history'
+            ];
+
+            for (final table in strictOrder) {
+              if (groupedChanges.containsKey(table)) {
+                for (final rowData in groupedChanges[table]!) {
+                  try {
+                    await txn.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
+                    masterSuccess++;
+                  } catch (e) {
+                    // Ignore UNIQUE constraint violations (e.g. same category name)
+                  }
                 }
-              } catch (e) {
-                // Ignore malformed transactions from server
               }
             }
           }
-        }
 
-        // Process pulled Master Data changes from server
-        final pullChanges = body['pull_changes'] as List<dynamic>? ?? [];
-        int masterSuccess = 0;
-        if (pullChanges.isNotEmpty) {
-          // Sort to avoid Foreign Key constraint errors (parents first)
-          pullChanges.sort((a, b) {
-            final idxA = masterTables.indexOf(a['table_name']);
-            final idxB = masterTables.indexOf(b['table_name']);
-            return idxA.compareTo(idxB);
-          });
-
-          for (var change in pullChanges) {
-            final table = change['table_name'];
-            final Map<String, dynamic> rowData = jsonDecode(change['payload']);
-            if (masterTables.contains(table)) {
-               try {
-                 await db.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
-                 masterSuccess++;
-               } catch (e) {
-                 // Ignore UNIQUE constraint violations (e.g. same category name but different UUID)
-               }
+          // 3. Process pulled transactions from server (Level 6 & 7)
+          if (pulled.isNotEmpty) {
+            for (var pt in pulled) {
+              final txId = pt['id'];
+              final exists = await txn.query('transactions', where: 'id = ?', whereArgs: [txId]);
+              if (exists.isEmpty) {
+                final Map<String, dynamic> header = Map.from(pt);
+                final items = header.remove('items') as List<dynamic>? ?? [];
+                header['is_synced'] = 1; // already synced from server
+                
+                try {
+                  await txn.insert('transactions', header);
+                  for (var item in items) {
+                    await txn.insert('transaction_details', Map<String, dynamic>.from(item));
+                  }
+                } catch (e) {
+                  // Ignore malformed transactions from server
+                }
+              }
             }
           }
-          // End of Master Data processing
-        }
+        });
 
         await prefs.setString('last_sync_time', DateTime.now().toUtc().toIso8601String());
         syncNotifier.value++;
