@@ -383,9 +383,22 @@ class SyncService {
             if (grouped.containsKey(table)) {
               for (final rowData in grouped[table]!) {
                 try {
-                  await txn.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
-                  saved++;
-                } catch (_) {}
+                  final id = rowData['id'];
+                  if (id != null) {
+                    final exists = await txn.query(table, where: 'id = ?', whereArgs: [id]);
+                    if (exists.isEmpty) {
+                      await txn.insert(table, rowData);
+                    } else {
+                      await txn.update(table, rowData, where: 'id = ?', whereArgs: [id]);
+                    }
+                    saved++;
+                  } else {
+                    await txn.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
+                    saved++;
+                  }
+                } catch (e) {
+                  debugPrint('Sync Upsert Error on \$table: \$e');
+                }
               }
             }
           }
