@@ -30,12 +30,32 @@ class _LoginScreenState extends State<LoginScreen> {
     _loadServerStatus();
   }
 
+  bool _isServerOnline = false;
+
   Future<void> _loadServerStatus() async {
     final prefs = await SharedPreferences.getInstance();
+    final url = prefs.getString('server_url') ?? '';
     if (mounted) {
       setState(() {
-        _serverUrl = prefs.getString('server_url') ?? '';
+        _serverUrl = url;
       });
+    }
+
+    if (url.isNotEmpty) {
+      try {
+        final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 3));
+        if (mounted) {
+          setState(() {
+            _isServerOnline = true;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isServerOnline = false;
+          });
+        }
+      }
     }
   }
 
@@ -273,16 +293,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 margin: const EdgeInsets.only(left: 4),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
+                  color: _isServerOnline ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                  border: Border.all(color: _isServerOnline ? Colors.green.withValues(alpha: 0.3) : Colors.red.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.check_circle, size: 12, color: Colors.green),
+                    Icon(_isServerOnline ? Icons.check_circle : Icons.error, size: 12, color: _isServerOnline ? Colors.green : Colors.red),
                     const SizedBox(width: 4),
-                    Text('Connected', style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.bold)),
+                    Text(_isServerOnline ? 'Connected' : 'Disconnected', style: TextStyle(fontSize: 10, color: _isServerOnline ? Colors.green.shade700 : Colors.red.shade700, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
