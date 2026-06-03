@@ -1454,7 +1454,12 @@ class Api {
             return r >= q;
           });
           final newStatus = allFullyRefunded ? 'voided' : 'partial_refund';
-          await txn.update('transactions', {'status': newStatus}, where: 'id = ?', whereArgs: [txId]);
+          final now = DateTime.now().toIso8601String();
+          await txn.update('transactions', {
+            'status': newStatus,
+            'is_synced': 0,
+            'updated_at': now,
+          }, where: 'id = ?', whereArgs: [txId]);
         });
 
         return {'success': true, 'refund_amount': totalRefundAmount};

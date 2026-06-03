@@ -232,17 +232,18 @@ class SyncService {
               }
             } else {
               final exists = await txn.query('transactions', where: 'id = ?', whereArgs: [txId]);
-              if (exists.isEmpty) {
-                final raw = Map<String, dynamic>.from(pt);
-                final items = raw.remove('items') as List<dynamic>? ?? [];
-                // Allowlist: only keep columns that exist in transactions table
-                const txCols = {'id','cashier_id','cashier_name','total_amount','discount_total','discount_type','discount_by','paid_amount','change_amount','payment_method','note','status','is_synced','is_deleted','updated_at','created_at'};
-                final header = <String, dynamic>{};
-                for (final col in txCols) {
-                  if (raw.containsKey(col)) header[col] = raw[col];
-                }
-                header['is_synced'] = 1;
-                try {
+              final raw = Map<String, dynamic>.from(pt);
+              final items = raw.remove('items') as List<dynamic>? ?? [];
+              // Allowlist: only keep columns that exist in transactions table
+              const txCols = {'id','cashier_id','cashier_name','total_amount','discount_total','discount_type','discount_by','paid_amount','change_amount','payment_method','note','status','is_synced','is_deleted','updated_at','created_at'};
+              final header = <String, dynamic>{};
+              for (final col in txCols) {
+                if (raw.containsKey(col)) header[col] = raw[col];
+              }
+              header['is_synced'] = 1;
+              try {
+                if (exists.isEmpty) {
+                  // New transaction: INSERT
                   await txn.insert('transactions', header);
                   const detailCols = {'id','transaction_id','product_id','product_name','sold_price','quantity','subtotal','addon_summary','discount_percent','discount_amount','refunded_qty'};
                   for (final item in items) {
@@ -253,12 +254,35 @@ class SyncService {
                     }
                     await txn.insert('transaction_details', itemData);
                   }
-                  saved++;
-                } catch (e) {
-                  debugPrint('pullReports TX insert error: $e');
-                  lastError = e.toString();
-                  txFailed++;
+                } else {
+                  // Existing transaction: UPDATE (refund changes status/total/refunded_qty)
+                  header.remove('id'); // Don't update PK
+                  await txn.update('transactions', header, where: 'id = ?', whereArgs: [txId]);
+                  // Update each detail's refunded_qty
+                  const detailCols = {'id','transaction_id','product_id','product_name','sold_price','quantity','subtotal','addon_summary','discount_percent','discount_amount','refunded_qty'};
+                  for (final item in items) {
+                    final itemRaw = Map<String, dynamic>.from(item);
+                    final detailId = itemRaw['id']?.toString();
+                    if (detailId == null) continue;
+                    final itemData = <String, dynamic>{};
+                    for (final col in detailCols) {
+                      if (col == 'id') continue; // Don't update PK
+                      if (itemRaw.containsKey(col)) itemData[col] = itemRaw[col];
+                    }
+                    final dExists = await txn.query('transaction_details', where: 'id = ?', whereArgs: [detailId]);
+                    if (dExists.isEmpty) {
+                      itemData['id'] = detailId;
+                      await txn.insert('transaction_details', itemData);
+                    } else {
+                      await txn.update('transaction_details', itemData, where: 'id = ?', whereArgs: [detailId]);
+                    }
+                  }
                 }
+                saved++;
+              } catch (e) {
+                debugPrint('pullReports TX insert/update error: $e');
+                lastError = e.toString();
+                txFailed++;
               }
             }
           }
