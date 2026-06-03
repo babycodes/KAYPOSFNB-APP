@@ -39,6 +39,7 @@ class _AdminShellState extends State<AdminShell> {
     _loadBahanAlerts();
     // Check for new reports once on launch (non-blocking, granular update via ValueNotifier)
     SyncService.checkNewReports();
+    SyncService.getPendingPushCount();
   }
 
   @override
@@ -217,38 +218,62 @@ class _AdminShellState extends State<AdminShell> {
               );
             },
           ),
-          // Push Master Data Button
-          Tooltip(
-            message: showLabels ? '' : 'Kirim Update Master',
-            child: InkWell(
-              onTap: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Kirim Update Master?'),
-                    content: const Text('Kirim perubahan data master (Produk, Kategori, Diskon, dll) terbaru ke server agar Kasir dapat mengunduhnya?'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-                      FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kirim')),
-                    ],
+          // Push Master Data Button with badge
+          ValueListenableBuilder<int>(
+            valueListenable: SyncService.pendingPushCountNotifier,
+            builder: (context, pushCount, _) {
+              return Tooltip(
+                message: showLabels ? '' : 'Kirim Update Master',
+                child: InkWell(
+                  onTap: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Kirim Update Master?'),
+                        content: Text(pushCount > 0
+                          ? 'Ada $pushCount perubahan data master yang belum dikirim. Kirim sekarang agar Kasir dapat mengunduhnya?'
+                          : 'Kirim perubahan data master (Produk, Kategori, Diskon, dll) terbaru ke server agar Kasir dapat mengunduhnya?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kirim')),
+                        ],
+                      ),
+                    );
+                    if (confirm == true && context.mounted) {
+                      final msg = await SyncService.pushMasterData();
+                      if (!context.mounted) return;
+                      SyncService.getPendingPushCount();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+                      );
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(children: [
+                      Stack(children: [
+                        Icon(Icons.cloud_upload_rounded, size: 20, color: pushCount > 0 ? Colors.green : cs.onSurfaceVariant),
+                        if (pushCount > 0) Positioned(right: 0, top: 0,
+                          child: Container(
+                            width: 8, height: 8,
+                            decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                          ),
+                        ),
+                      ]),
+                      if (showLabels) ...[const SizedBox(width: 12),
+                        Expanded(child: Text('Kirim Update', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: pushCount > 0 ? Colors.green : cs.onSurfaceVariant))),
+                        if (pushCount > 0) Container(
+                          constraints: const BoxConstraints(minWidth: 20), height: 20,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(10)),
+                          child: Center(child: Text('$pushCount', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white))),
+                        ),
+                      ],
+                    ]),
                   ),
-                );
-                if (confirm == true && context.mounted) {
-                  final msg = await SyncService.pushMasterData();
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
-                  );
-                }
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(children: [
-                  Icon(Icons.cloud_upload_rounded, size: 20, color: cs.secondary),
-                  if (showLabels) ...[const SizedBox(width: 12), Text('Kirim Update', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: cs.secondary))],
-                ]),
-              ),
-            ),
+                ),
+              );
+            },
           ),
           Tooltip(
             message: showLabels ? '' : 'Ke Kasir',

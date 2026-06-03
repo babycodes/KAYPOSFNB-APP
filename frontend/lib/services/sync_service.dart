@@ -23,6 +23,9 @@ class SyncService {
   /// Notifier for pending master data updates available to pull (Kasir side).
   static final ValueNotifier<bool> masterUpdateAvailableNotifier = ValueNotifier(false);
 
+  /// Notifier for pending master data push count (Admin side badge on "Kirim Update").
+  static final ValueNotifier<int> pendingPushCountNotifier = ValueNotifier(0);
+
   // ═══════════════════════════════════════════════════════════
   // SHARED UTILITIES & POLLING
   // ═══════════════════════════════════════════════════════════
@@ -37,6 +40,7 @@ class SyncService {
       checkNewReports();
       checkMasterDataUpdate();
       getPendingReportCount();
+      getPendingPushCount();
     });
   }
 
@@ -222,13 +226,22 @@ class SyncService {
                 final header = Map<String, dynamic>.from(pt);
                 final items = header.remove('items') as List<dynamic>? ?? [];
                 header['is_synced'] = 1;
+                // Remove fields that don't exist in local transactions table
+                header.remove('is_ledger');
+                header.remove('ledger_data');
+                header.remove('receipt_number');
                 try {
                   await txn.insert('transactions', header);
                   for (final item in items) {
-                    await txn.insert('transaction_details', Map<String, dynamic>.from(item));
+                    final itemData = Map<String, dynamic>.from(item);
+                    // Remove extra fields not in transaction_details schema
+                    itemData.remove('product_image');
+                    await txn.insert('transaction_details', itemData);
                   }
                   saved++;
-                } catch (_) {}
+                } catch (e) {
+                  debugPrint('pullReports TX insert error: $e');
+                }
               }
             }
           }
@@ -249,6 +262,34 @@ class SyncService {
   // ═══════════════════════════════════════════════════════════
   // REQ 3: ADMIN → SERVER (Push Master Data Updates)
   // ═══════════════════════════════════════════════════════════
+
+  /// Returns the count of local master data changes not yet pushed.
+  static Future<int> getPendingPushCount() async {
+    try {
+      final db = await LocalDb.instance;
+      final prefs = await SharedPreferences.getInstance();
+      final lastPush = prefs.getString('last_master_push') ?? '1970-01-01T00:00:00.000Z';
+      final lastPushLocal = DateTime.parse(lastPush).toLocal().toIso8601String();
+
+      int total = 0;
+      for (final table in _masterTables) {
+        String dateCol = table == 'users' ? 'created_at' : (table == 'inventory_ledger' ? 'timestamp' : 'updated_at');
+        List<Map<String, Object?>> rows;
+        if (table == 'inventory_ledger') {
+          rows = await db.rawQuery("SELECT COUNT(*) as c FROM $table WHERE datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT')", [lastPushLocal]);
+        } else if (table == 'resep' || table == 'paket_items' || table == 'product_addon_categories') {
+          rows = await db.rawQuery("SELECT COUNT(*) as c FROM $table WHERE $dateCol IS NULL OR datetime($dateCol) > datetime(?)", [lastPushLocal]);
+        } else {
+          rows = await db.rawQuery("SELECT COUNT(*) as c FROM $table WHERE datetime($dateCol) > datetime(?)", [lastPushLocal]);
+        }
+        total += (rows.first['c'] as num?)?.toInt() ?? 0;
+      }
+      pendingPushCountNotifier.value = total;
+      return total;
+    } catch (_) {
+      return 0;
+    }
+  }
 
   static const List<String> _masterTables = [
     'categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts',
@@ -295,6 +336,7 @@ class SyncService {
         final body = jsonDecode(res.body);
         final count = body['saved_count'] ?? 0;
         await prefs.setString('last_master_push', DateTime.now().toUtc().toIso8601String());
+        pendingPushCountNotifier.value = 0;
         return 'Berhasil mengirim $count perubahan data master ke server.';
       } else if (res.statusCode == 401) {
         return 'SYNC_REVOKED';
@@ -381,6 +423,7 @@ class SyncService {
         ];
 
         int saved = 0;
+        final Set<String> newlyInsertedBahanBaku = {};
         await db.transaction((txn) async {
           for (final table in strictOrder) {
             if (grouped.containsKey(table)) {
@@ -395,9 +438,15 @@ class SyncService {
 
                   final exists = await txn.query(table, where: 'id = ?', whereArgs: [id]);
 
-                  if (table == 'bahan_baku' && exists.isNotEmpty) {
-                    // Preserve Kasir's local stock (reflects sales/waste deductions).
-                    // Only update metadata: name, cost_price, unit, kategori, etc.
+                  if (table == 'bahan_baku') {
+                    if (exists.isEmpty) {
+                      // New bahan_baku: insert with full stock from Admin
+                      await txn.insert(table, rowData);
+                      newlyInsertedBahanBaku.add(id.toString());
+                      saved++;
+                      continue;
+                    }
+                    // Existing: preserve Kasir's local stock, only update metadata
                     final updateData = Map<String, dynamic>.from(rowData);
                     updateData.remove('stock');
                     await txn.update(table, updateData, where: 'id = ?', whereArgs: [id]);
@@ -407,8 +456,10 @@ class SyncService {
                     if (exists.isEmpty) {
                       await txn.insert(table, Map<String, dynamic>.from(rowData));
                       final qtyChange = (rowData['qty_change'] as num?)?.toDouble() ?? 0.0;
-                      final bbId = rowData['bahan_baku_id'];
-                      if (bbId != null && qtyChange != 0) {
+                      final bbId = rowData['bahan_baku_id']?.toString();
+                      // Only apply delta if bahan_baku was NOT freshly inserted in this batch
+                      // (freshly inserted rows already have the correct stock from Admin)
+                      if (bbId != null && qtyChange != 0 && !newlyInsertedBahanBaku.contains(bbId)) {
                         await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [qtyChange, bbId]);
                       }
                       saved++;
