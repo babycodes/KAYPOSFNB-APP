@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
@@ -89,6 +90,16 @@ class LocalDb {
           await db.rawUpdate(
             "UPDATE inventory_ledger SET id = (lower(hex(randomblob(16)))) WHERE id IS NULL",
           );
+        } catch (_) {}
+        // v1.1.16: one-time reset of last_report_pull to re-pull missed transactions
+        // Previous versions had bugs that caused TX inserts to fail but still advanced the cursor
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final migrationKey = 'migration_report_pull_reset_v116';
+          if (!prefs.containsKey(migrationKey)) {
+            await prefs.remove('last_report_pull');
+            await prefs.setBool(migrationKey, true);
+          }
         } catch (_) {}
         
         // Module: kategori_bahan table

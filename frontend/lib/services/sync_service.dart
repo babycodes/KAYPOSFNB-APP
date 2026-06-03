@@ -197,6 +197,7 @@ class SyncService {
         // Save pulled transactions to local DB
         final db = await LocalDb.instance;
         int saved = 0;
+        int txFailed = 0;
         await db.transaction((txn) async {
           for (final pt in reports) {
             final txId = pt['id']?.toString();
@@ -246,16 +247,22 @@ class SyncService {
                   saved++;
                 } catch (e) {
                   debugPrint('pullReports TX insert error: $e');
+                  txFailed++;
                 }
               }
             }
           }
         });
 
-        await prefs.setString('last_report_pull', DateTime.now().toUtc().toIso8601String());
+        // Only advance cursor if no transaction inserts failed
+        if (txFailed == 0) {
+          await prefs.setString('last_report_pull', DateTime.now().toUtc().toIso8601String());
+        } else {
+          debugPrint('pullReports: $txFailed TX inserts failed, NOT advancing cursor so they can be re-pulled');
+        }
         newReportNotifier.value = 0;
         syncNotifier.value++;
-        return 'Berhasil menerima $saved laporan transaksi baru.';
+        return 'Berhasil menerima $saved laporan${txFailed > 0 ? ' ($txFailed gagal)' : ''}.';
       } else {
         return 'Gagal menarik laporan: ${res.statusCode}';
       }

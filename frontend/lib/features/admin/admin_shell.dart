@@ -40,10 +40,18 @@ class _AdminShellState extends State<AdminShell> {
     // Check for new reports once on launch (non-blocking, granular update via ValueNotifier)
     SyncService.checkNewReports();
     SyncService.getPendingPushCount();
+    // Refresh push count immediately when any sync action modifies data
+    SyncService.syncNotifier.addListener(_onSyncChanged);
+  }
+
+  void _onSyncChanged() {
+    SyncService.getPendingPushCount();
+    _loadBahanAlerts();
   }
 
   @override
   void dispose() {
+    SyncService.syncNotifier.removeListener(_onSyncChanged);
     super.dispose();
   }
 
