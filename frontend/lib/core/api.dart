@@ -1475,10 +1475,11 @@ class Api {
       if (path == '/settings') {
         final map = body as Map<String, dynamic>? ?? {};
         final batch = db.batch();
+        final now = DateTime.now().toIso8601String();
         for (final entry in map.entries) {
           batch.execute(
-            'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-            [entry.key, entry.value?.toString() ?? '']
+            'INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)',
+            [entry.key, entry.value?.toString() ?? '', now]
           );
         }
         await batch.commit();

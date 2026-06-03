@@ -199,6 +199,9 @@ class SyncService {
         int saved = 0;
         int txFailed = 0;
         String? lastError;
+        // Disable FK checks: transactions reference users(id) which may not exist on Admin device
+        await db.execute('PRAGMA foreign_keys = OFF');
+        try {
         await db.transaction((txn) async {
           for (final pt in reports) {
             final txId = pt['id']?.toString();
@@ -260,6 +263,9 @@ class SyncService {
             }
           }
         });
+        } finally {
+          await db.execute('PRAGMA foreign_keys = ON');
+        }
 
         // Only advance cursor if no transaction inserts failed
         if (txFailed == 0) {
@@ -299,6 +305,8 @@ class SyncService {
         List<Map<String, Object?>> rows;
         if (table == 'inventory_ledger') {
           rows = await db.rawQuery("SELECT COUNT(*) as c FROM $table WHERE datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT')", [lastPushLocal]);
+        } else if (table == 'settings') {
+          rows = await db.rawQuery("SELECT COUNT(*) as c FROM $table WHERE updated_at IS NOT NULL AND datetime(updated_at) > datetime(?)", [lastPushLocal]);
         } else if (table == 'resep' || table == 'paket_items' || table == 'product_addon_categories') {
           rows = await db.rawQuery("SELECT COUNT(*) as c FROM $table WHERE $dateCol IS NULL OR datetime($dateCol) > datetime(?)", [lastPushLocal]);
         } else {
@@ -316,7 +324,7 @@ class SyncService {
   static const List<String> _masterTables = [
     'categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts',
     'products', 'bahan_baku', 'addons', 'resep', 'paket_items',
-    'product_addon_categories', 'inventory_ledger'
+    'product_addon_categories', 'inventory_ledger', 'settings'
   ];
 
   /// ADMIN manually pushes all master data to the server for Kasir to pick up.
@@ -337,6 +345,8 @@ class SyncService {
         List<Map<String, Object?>> rows;
         if (table == 'inventory_ledger') {
           rows = await db.query(table, where: "datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT')", whereArgs: [lastPushLocal]);
+        } else if (table == 'settings') {
+          rows = await db.query(table, where: 'updated_at IS NOT NULL AND datetime(updated_at) > datetime(?)', whereArgs: [lastPushLocal]);
         } else if (table == 'resep' || table == 'paket_items' || table == 'product_addon_categories') {
           // Junction tables may have NULL updated_at from before migration backfill
           rows = await db.query(table, where: '$dateCol IS NULL OR datetime($dateCol) > datetime(?)', whereArgs: [lastPushLocal]);
@@ -441,7 +451,7 @@ class SyncService {
           'kategori_bahan', 'categories', 'users', 'addon_categories', 'discounts',
           'bahan_baku', 'products',
           'addons',
-          'resep', 'paket_items', 'product_addon_categories', 'inventory_ledger'
+          'resep', 'paket_items', 'product_addon_categories', 'inventory_ledger', 'settings'
         ];
 
         int saved = 0;
@@ -486,6 +496,17 @@ class SyncService {
                       }
                       saved++;
                     }
+                  } else if (table == 'settings') {
+                    // Settings uses 'key' as PK, not 'id'
+                    final key = rowData['key'];
+                    if (key == null) continue;
+                    final exists = await txn.query(table, where: '"key" = ?', whereArgs: [key]);
+                    if (exists.isEmpty) {
+                      await txn.insert(table, rowData);
+                    } else {
+                      await txn.update(table, rowData, where: '"key" = ?', whereArgs: [key]);
+                    }
+                    saved++;
                   } else {
                     if (exists.isEmpty) {
                       await txn.insert(table, rowData);

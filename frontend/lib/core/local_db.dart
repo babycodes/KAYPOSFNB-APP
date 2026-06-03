@@ -91,6 +91,8 @@ class LocalDb {
             "UPDATE inventory_ledger SET id = (lower(hex(randomblob(16)))) WHERE id IS NULL",
           );
         } catch (_) {}
+        // Add updated_at to settings for sync support
+        try { await db.execute('ALTER TABLE settings ADD COLUMN updated_at TEXT'); } catch (_) {}
         // v1.1.16: one-time reset of last_report_pull to re-pull missed transactions
         // Previous versions had bugs that caused TX inserts to fail but still advanced the cursor
         try {
