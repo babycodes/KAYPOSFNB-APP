@@ -316,9 +316,10 @@ class SyncService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final lastPull = prefs.getString('last_master_pull') ?? '1970-01-01T00:00:00.000Z';
+      final uuid = await _getUuid();
 
       final res = await http.get(
-        Uri.parse('$baseUrl/api/client/master/check?since=$lastPull'),
+        Uri.parse('$baseUrl/api/client/master/check?since=$lastPull&uuid=$uuid'),
       ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
@@ -343,9 +344,10 @@ class SyncService {
       final productCountRes = await db.rawQuery('SELECT COUNT(*) as c FROM products');
       final productCount = (productCountRes.first['c'] as num?)?.toInt() ?? 0;
       final since = productCount == 0 ? '1970-01-01T00:00:00.000Z' : lastPull;
+      final uuid = await _getUuid();
 
       final res = await http.get(
-        Uri.parse('$baseUrl/api/client/master/pull?since=$since'),
+        Uri.parse('$baseUrl/api/client/master/pull?since=$since&uuid=$uuid'),
       ).timeout(const Duration(seconds: 30));
 
       if (res.statusCode == 200) {
