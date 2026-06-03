@@ -223,19 +223,24 @@ class SyncService {
             } else {
               final exists = await txn.query('transactions', where: 'id = ?', whereArgs: [txId]);
               if (exists.isEmpty) {
-                final header = Map<String, dynamic>.from(pt);
-                final items = header.remove('items') as List<dynamic>? ?? [];
+                final raw = Map<String, dynamic>.from(pt);
+                final items = raw.remove('items') as List<dynamic>? ?? [];
+                // Allowlist: only keep columns that exist in transactions table
+                const txCols = {'id','cashier_id','cashier_name','total_amount','discount_total','discount_type','discount_by','paid_amount','change_amount','payment_method','note','status','is_synced','is_deleted','updated_at','created_at'};
+                final header = <String, dynamic>{};
+                for (final col in txCols) {
+                  if (raw.containsKey(col)) header[col] = raw[col];
+                }
                 header['is_synced'] = 1;
-                // Remove fields that don't exist in local transactions table
-                header.remove('is_ledger');
-                header.remove('ledger_data');
-                header.remove('receipt_number');
                 try {
                   await txn.insert('transactions', header);
+                  const detailCols = {'id','transaction_id','product_id','product_name','sold_price','quantity','subtotal','addon_summary','discount_percent','discount_amount','refunded_qty'};
                   for (final item in items) {
-                    final itemData = Map<String, dynamic>.from(item);
-                    // Remove extra fields not in transaction_details schema
-                    itemData.remove('product_image');
+                    final itemRaw = Map<String, dynamic>.from(item);
+                    final itemData = <String, dynamic>{};
+                    for (final col in detailCols) {
+                      if (itemRaw.containsKey(col)) itemData[col] = itemRaw[col];
+                    }
                     await txn.insert('transaction_details', itemData);
                   }
                   saved++;
@@ -481,7 +486,10 @@ class SyncService {
         });
 
         await prefs.setString('last_master_pull', DateTime.now().toUtc().toIso8601String());
+        // Also advance push timestamp so pulled data doesn't trigger "Kirim Update" badge
+        await prefs.setString('last_master_push', DateTime.now().toUtc().toIso8601String());
         masterUpdateAvailableNotifier.value = false;
+        pendingPushCountNotifier.value = 0;
         syncNotifier.value++;
         return 'Berhasil memperbarui $saved item data master.';
       } else if (res.statusCode == 401) {
