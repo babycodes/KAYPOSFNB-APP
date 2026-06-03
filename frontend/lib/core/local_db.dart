@@ -75,6 +75,21 @@ class LocalDb {
         try { await db.execute("UPDATE resep SET updated_at = datetime('now','localtime') WHERE updated_at IS NULL"); } catch (_) {}
         try { await db.execute("UPDATE paket_items SET updated_at = datetime('now','localtime') WHERE updated_at IS NULL"); } catch (_) {}
         try { await db.execute("UPDATE product_addon_categories SET updated_at = datetime('now','localtime') WHERE updated_at IS NULL"); } catch (_) {}
+        // Backfill NULL id in inventory_ledger (bug: RESTOCK inserts were missing id)
+        try {
+          final nullIdRows = await db.query('inventory_ledger', where: 'id IS NULL');
+          for (final row in nullIdRows) {
+            final rowid = row['rowid'] ?? row['id'];
+            await db.rawUpdate(
+              'UPDATE inventory_ledger SET id = ? WHERE rowid = ?',
+              [generateId(), rowid],
+            );
+          }
+          // If any still have NULL after rowid attempt, use timestamp as unique key
+          await db.rawUpdate(
+            "UPDATE inventory_ledger SET id = (lower(hex(randomblob(16)))) WHERE id IS NULL",
+          );
+        } catch (_) {}
         
         // Module: kategori_bahan table
         try {

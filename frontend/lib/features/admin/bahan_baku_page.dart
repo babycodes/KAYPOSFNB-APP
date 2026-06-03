@@ -138,9 +138,10 @@ class _BahanBakuPageState extends State<BahanBakuPage> {
                 try {
                   final db = await LocalDb.instance;
                   await db.insert('inventory_ledger', {
+                    'id': LocalDb.generateId(),
                     'bahan_baku_id': item['id'],
                     'transaction_type': 'RESTOCK',
-                    'qty_change': addQty, // Already in master unit
+                    'qty_change': addQty,
                     'financial_value': addCost,
                     'notes': 'Admin Restock',
                   });
