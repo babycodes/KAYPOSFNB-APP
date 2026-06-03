@@ -198,6 +198,7 @@ class SyncService {
         final db = await LocalDb.instance;
         int saved = 0;
         int txFailed = 0;
+        String? lastError;
         await db.transaction((txn) async {
           for (final pt in reports) {
             final txId = pt['id']?.toString();
@@ -212,7 +213,12 @@ class SyncService {
               final exists = await txn.query('inventory_ledger', where: 'id = ?', whereArgs: [lId]);
               if (exists.isEmpty) {
                 ledger['is_synced'] = 1;
-                await txn.insert('inventory_ledger', Map<String, dynamic>.from(ledger));
+                try {
+                  await txn.insert('inventory_ledger', Map<String, dynamic>.from(ledger));
+                } catch (e) {
+                  debugPrint('pullReports ledger insert error: $e');
+                  continue;
+                }
                 
                 final qtyChange = (ledger['qty_change'] as num?)?.toDouble() ?? 0.0;
                 final bbId = ledger['bahan_baku_id'];
@@ -247,6 +253,7 @@ class SyncService {
                   saved++;
                 } catch (e) {
                   debugPrint('pullReports TX insert error: $e');
+                  lastError = e.toString();
                   txFailed++;
                 }
               }
@@ -262,7 +269,10 @@ class SyncService {
         }
         newReportNotifier.value = 0;
         syncNotifier.value++;
-        return 'Berhasil menerima $saved laporan${txFailed > 0 ? ' ($txFailed gagal)' : ''}.';
+        if (txFailed > 0) {
+          return 'Diterima $saved, gagal $txFailed. Error: $lastError';
+        }
+        return 'Berhasil menerima $saved laporan.';
       } else {
         return 'Gagal menarik laporan: ${res.statusCode}';
       }
