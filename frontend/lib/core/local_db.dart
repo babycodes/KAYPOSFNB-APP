@@ -71,6 +71,10 @@ class LocalDb {
         try { await db.execute('ALTER TABLE resep ADD COLUMN updated_at TEXT'); } catch (_) {}
         try { await db.execute('ALTER TABLE paket_items ADD COLUMN updated_at TEXT'); } catch (_) {}
         try { await db.execute('ALTER TABLE product_addon_categories ADD COLUMN updated_at TEXT'); } catch (_) {}
+        // Backfill NULL updated_at so pushMasterData() can find these rows
+        try { await db.execute("UPDATE resep SET updated_at = datetime('now','localtime') WHERE updated_at IS NULL"); } catch (_) {}
+        try { await db.execute("UPDATE paket_items SET updated_at = datetime('now','localtime') WHERE updated_at IS NULL"); } catch (_) {}
+        try { await db.execute("UPDATE product_addon_categories SET updated_at = datetime('now','localtime') WHERE updated_at IS NULL"); } catch (_) {}
         
         // Module: kategori_bahan table
         try {

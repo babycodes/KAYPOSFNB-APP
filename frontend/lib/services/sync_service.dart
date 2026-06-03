@@ -274,6 +274,9 @@ class SyncService {
         List<Map<String, Object?>> rows;
         if (table == 'inventory_ledger') {
           rows = await db.query(table, where: "datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT')", whereArgs: [lastPushLocal]);
+        } else if (table == 'resep' || table == 'paket_items' || table == 'product_addon_categories') {
+          // Junction tables may have NULL updated_at from before migration backfill
+          rows = await db.query(table, where: '$dateCol IS NULL OR datetime($dateCol) > datetime(?)', whereArgs: [lastPushLocal]);
         } else {
           rows = await db.query(table, where: 'datetime($dateCol) > datetime(?)', whereArgs: [lastPushLocal]);
         }
@@ -384,20 +387,42 @@ class SyncService {
               for (final rowData in grouped[table]!) {
                 try {
                   final id = rowData['id'];
-                  if (id != null) {
-                    final exists = await txn.query(table, where: 'id = ?', whereArgs: [id]);
+                  if (id == null) {
+                    await txn.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
+                    saved++;
+                    continue;
+                  }
+
+                  final exists = await txn.query(table, where: 'id = ?', whereArgs: [id]);
+
+                  if (table == 'bahan_baku' && exists.isNotEmpty) {
+                    // Preserve Kasir's local stock (reflects sales/waste deductions).
+                    // Only update metadata: name, cost_price, unit, kategori, etc.
+                    final updateData = Map<String, dynamic>.from(rowData);
+                    updateData.remove('stock');
+                    await txn.update(table, updateData, where: 'id = ?', whereArgs: [id]);
+                    saved++;
+                  } else if (table == 'inventory_ledger') {
+                    // Only insert new ledger records, and apply qty_change to stock
+                    if (exists.isEmpty) {
+                      await txn.insert(table, Map<String, dynamic>.from(rowData));
+                      final qtyChange = (rowData['qty_change'] as num?)?.toDouble() ?? 0.0;
+                      final bbId = rowData['bahan_baku_id'];
+                      if (bbId != null && qtyChange != 0) {
+                        await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [qtyChange, bbId]);
+                      }
+                      saved++;
+                    }
+                  } else {
                     if (exists.isEmpty) {
                       await txn.insert(table, rowData);
                     } else {
                       await txn.update(table, rowData, where: 'id = ?', whereArgs: [id]);
                     }
                     saved++;
-                  } else {
-                    await txn.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
-                    saved++;
                   }
                 } catch (e) {
-                  debugPrint('Sync Upsert Error on \$table: \$e');
+                  debugPrint('Sync Upsert Error on $table: $e');
                 }
               }
             }
