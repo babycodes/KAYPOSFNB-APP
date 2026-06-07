@@ -919,15 +919,19 @@ class Api {
         
         try {
           await db.transaction((txn) async {
-            // Auto-assign sort_order if 0 or not provided: use max + 1
-            if (sortOrder <= 0) {
-              final maxRow = await txn.rawQuery('SELECT COALESCE(MAX(sort_order), 0) as m FROM categories WHERE is_deleted = 0');
-              sortOrder = ((maxRow.first['m'] as num?)?.toInt() ?? 0) + 1;
+            final countRow = await txn.rawQuery('SELECT COUNT(*) as c FROM categories WHERE is_deleted = 0');
+            final currentCount = ((countRow.first['c'] as num?)?.toInt() ?? 0);
+            final nextOrder = currentCount + 1;
+            
+            // Auto-assign if not provided or invalid
+            if (sortOrder <= 0 || sortOrder > nextOrder) {
+              sortOrder = nextOrder;
             } else {
-              // If sort_order is taken, shift existing items at that position and above
+              // SWAP: find the category currently at this position and give it the next position
+              final now = DateTime.now().toIso8601String();
               await txn.rawUpdate(
-                'UPDATE categories SET sort_order = sort_order + 1, updated_at = ? WHERE sort_order >= ? AND is_deleted = 0',
-                [DateTime.now().toIso8601String(), sortOrder],
+                'UPDATE categories SET sort_order = ?, updated_at = ? WHERE sort_order = ? AND is_deleted = 0',
+                [nextOrder, now, sortOrder],
               );
             }
             await txn.insert('categories', {
@@ -1577,17 +1581,26 @@ class Api {
             if (body?['icon'] != null) data['icon'] = body!['icon'].toString();
             if (body?['sort_order'] != null) {
               final newOrder = (body!['sort_order'] as num?)?.toInt() ?? 0;
-              // Get old sort_order
+              // Get current category's sort_order
               final oldRow = await txn.query('categories', columns: ['sort_order'], where: 'id = ?', whereArgs: [id]);
               final oldOrder = oldRow.isNotEmpty ? ((oldRow.first['sort_order'] as num?)?.toInt() ?? 0) : 0;
-              if (newOrder != oldOrder && newOrder > 0) {
-                // Shift existing items at the target position
+              
+              // Validate: newOrder must be between 1 and total active categories
+              final countRow = await txn.rawQuery('SELECT COUNT(*) as c FROM categories WHERE is_deleted = 0');
+              final maxOrder = (countRow.first['c'] as num?)?.toInt() ?? 1;
+              
+              if (newOrder > 0 && newOrder <= maxOrder && newOrder != oldOrder) {
+                // SWAP: find the category at the target position and give it oldOrder
+                final now = DateTime.now().toIso8601String();
                 await txn.rawUpdate(
-                  'UPDATE categories SET sort_order = sort_order + 1, updated_at = ? WHERE sort_order >= ? AND id != ? AND is_deleted = 0',
-                  [DateTime.now().toIso8601String(), newOrder, id],
+                  'UPDATE categories SET sort_order = ?, updated_at = ? WHERE sort_order = ? AND id != ? AND is_deleted = 0',
+                  [oldOrder, now, newOrder, id],
                 );
+                data['sort_order'] = newOrder;
+              } else if (newOrder > maxOrder) {
+                // Force to max (don't allow gaps)
+                data['sort_order'] = maxOrder;
               }
-              data['sort_order'] = newOrder;
             }
             
             if (data.isNotEmpty) {

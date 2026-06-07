@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/api.dart';
 import '../../core/helpers.dart';
 import '../kasir/dialogs/confirm_dialog.dart';
@@ -41,7 +42,7 @@ class _KategoriPageState extends State<KategoriPage> {
     showDialog(
       context: context,
       builder: (_) =>
-          KategoriFormDialog(category: category, onSave: () => _loadData()),
+          KategoriFormDialog(category: category, onSave: () => _loadData(), totalCategories: categories.length),
     );
   }
 
@@ -173,7 +174,8 @@ class _KategoriPageState extends State<KategoriPage> {
 class KategoriFormDialog extends StatefulWidget {
   final dynamic category;
   final VoidCallback onSave;
-  const KategoriFormDialog({super.key, this.category, required this.onSave});
+  final int totalCategories;
+  const KategoriFormDialog({super.key, this.category, required this.onSave, this.totalCategories = 0});
 
   @override
   State<KategoriFormDialog> createState() => _KategoriFormDialogState();
@@ -191,9 +193,11 @@ class _KategoriFormDialogState extends State<KategoriFormDialog> {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.category?['name'] ?? '');
     _selectedIcon = widget.category?['icon'] ?? '📦';
-    _sortCtrl = TextEditingController(
-      text: (widget.category?['sort_order'] ?? 0).toString(),
-    );
+    // For new category, default sort_order = next position
+    final defaultSort = widget.category != null
+      ? (widget.category?['sort_order'] ?? 0)
+      : (widget.totalCategories + 1);
+    _sortCtrl = TextEditingController(text: defaultSort.toString());
   }
 
   @override
@@ -358,10 +362,26 @@ class _KategoriFormDialogState extends State<KategoriFormDialog> {
 
               TextFormField(
                 controller: _sortCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Urutan (Sort Order)',
+                decoration: InputDecoration(
+                  labelText: 'Urutan',
+                  helperText: widget.category != null
+                    ? 'Angka 1-${widget.totalCategories} (tukar posisi)'
+                    : 'Angka 1-${widget.totalCategories + 1}',
                 ),
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Wajib diisi';
+                  final n = int.tryParse(v);
+                  if (n == null || n < 1) return 'Minimal 1';
+                  final max = widget.category != null
+                    ? widget.totalCategories
+                    : widget.totalCategories + 1;
+                  if (n > max) return 'Maksimal $max';
+                  return null;
+                },
               ),
               const SizedBox(height: 24),
               Row(

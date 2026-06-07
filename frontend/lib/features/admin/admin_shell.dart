@@ -234,7 +234,52 @@ class _AdminShellState extends State<AdminShell> {
                 message: showLabels ? '' : 'Kirim Update Master',
                 child: InkWell(
                   onTap: () async {
-                    final result = await showDialog<String>(
+                    // First check if server is reachable and has data
+                    final serverStatus = await SyncService.checkServerDataStatus();
+                    if (!context.mounted) return;
+                    
+                    if (serverStatus == 'NO_CONNECTION') {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Server tidak tersambung. Periksa koneksi.'), behavior: SnackBarBehavior.floating),
+                      );
+                      return;
+                    }
+                    
+                    if (serverStatus == 'DEVICE_NOT_REGISTERED') {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Perangkat belum terdaftar di server. Sambungkan ulang ke server terlebih dahulu.'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 4)),
+                      );
+                      return;
+                    }
+                    
+                    // If server is empty, auto-suggest force push
+                    if (serverStatus == 'SERVER_EMPTY') {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          icon: Icon(Icons.cloud_off, color: Colors.orange.shade700, size: 40),
+                          title: const Text('Server Data Kosong'),
+                          content: const Text('Server tidak memiliki data master. Kirim ulang semua data dari perangkat ini ke server?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kirim Ulang Semua')),
+                          ],
+                        ),
+                      );
+                      if (confirm == true && context.mounted) {
+                        await SyncService.resetPushCursor();
+                        final msg = await SyncService.pushMasterData();
+                        if (!context.mounted) return;
+                        SyncService.getPendingPushCount();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+                        );
+                      }
+                      return;
+                    }
+                    
+                    // Normal flow: push only changes
+                    final confirm = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: const Text('Kirim Update Master?'),
@@ -242,19 +287,12 @@ class _AdminShellState extends State<AdminShell> {
                           ? 'Ada $pushCount perubahan data master yang belum dikirim. Kirim sekarang agar Kasir dapat mengunduhnya?'
                           : 'Kirim perubahan data master (Produk, Kategori, Diskon, dll) terbaru ke server agar Kasir dapat mengunduhnya?'),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, 'force'),
-                            child: Text('Kirim Ulang Semua', style: TextStyle(color: Colors.orange.shade700, fontWeight: FontWeight.bold)),
-                          ),
-                          FilledButton(onPressed: () => Navigator.pop(ctx, 'normal'), child: const Text('Kirim')),
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kirim')),
                         ],
                       ),
                     );
-                    if (result != null && context.mounted) {
-                      if (result == 'force') {
-                        await SyncService.resetPushCursor();
-                      }
+                    if (confirm == true && context.mounted) {
                       final msg = await SyncService.pushMasterData();
                       if (!context.mounted) return;
                       SyncService.getPendingPushCount();

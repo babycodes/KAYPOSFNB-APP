@@ -66,7 +66,7 @@ class SyncService {
   static Future<int> getPendingReportCount() async {
     final db = await LocalDb.instance;
     final res = await db.rawQuery('SELECT COUNT(*) as c FROM transactions WHERE is_synced = 0');
-    final resL = await db.rawQuery('SELECT COUNT(*) as c FROM inventory_ledger WHERE is_synced = 0 AND transaction_type IN ("SALE", "WASTE", "REFUND")');
+    final resL = await db.rawQuery("SELECT COUNT(*) as c FROM inventory_ledger WHERE is_synced = 0 AND transaction_type IN ('SALE', 'WASTE', 'REFUND')");
     final count = ((res.first['c'] as num?)?.toInt() ?? 0) + ((resL.first['c'] as num?)?.toInt() ?? 0);
     pendingReportNotifier.value = count;
     return count;
@@ -97,7 +97,7 @@ class SyncService {
       final unsyncedTxs = await getPendingTransactions();
 
       final db = await LocalDb.instance;
-      final ledgers = await db.query('inventory_ledger', where: 'is_synced = 0 AND transaction_type IN ("SALE", "WASTE", "REFUND")');
+      final ledgers = await db.query('inventory_ledger', where: "is_synced = 0 AND transaction_type IN ('SALE', 'WASTE', 'REFUND')");
       final fakeLedgerTxs = ledgers.map((l) => {
         'id': 'ledger_${l['id']}',
         'is_ledger': true,
@@ -351,6 +351,31 @@ class SyncService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('last_master_push');
     await getPendingPushCount();
+  }
+
+  /// Check server status: connection, device registration, data presence
+  /// Returns: 'OK', 'SERVER_EMPTY', 'DEVICE_NOT_REGISTERED', 'NO_CONNECTION'
+  static Future<String> checkServerDataStatus() async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) return 'NO_CONNECTION';
+
+    try {
+      final uuid = await _getUuid();
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/admin/server-status?uuid=$uuid'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 401) return 'DEVICE_NOT_REGISTERED';
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final recordCount = (body['record_count'] as num?)?.toInt() ?? 0;
+        return recordCount == 0 ? 'SERVER_EMPTY' : 'OK';
+      }
+      return 'OK'; // fallback: proceed normally
+    } catch (_) {
+      return 'NO_CONNECTION';
+    }
   }
 
   static const List<String> _masterTables = [
