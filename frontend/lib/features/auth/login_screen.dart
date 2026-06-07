@@ -16,7 +16,7 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _showPassword = false;
@@ -24,10 +24,26 @@ class _LoginScreenState extends State<LoginScreen> {
   String _error = '';
   String _serverUrl = '';
 
+  late AnimationController _animCtrl;
+  late Animation<double> _fadeIn;
+  late Animation<Offset> _slideUp;
+
   @override
   void initState() {
     super.initState();
     _loadServerStatus();
+
+    _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _fadeIn = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+    _slideUp = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutCubic));
+    _animCtrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
   }
 
   bool _isServerOnline = false;
@@ -172,155 +188,225 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       backgroundColor: cs.surface,
       body: SafeArea(
         child: Stack(
           children: [
+            // Subtle gradient background
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? [cs.surface, cs.surfaceContainerLow]
+                        : [cs.surface, cs.surfaceContainerLow, const Color(0xFFFFF0E0)],
+                    stops: isDark ? [0.0, 1.0] : [0.0, 0.5, 1.0],
+                  ),
+                ),
+              ),
+            ),
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo image
-              Container(
-                width: 80, height: 80,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2)),
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 4)),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Image.asset('assets/icon-512.png', width: 80, height: 80, fit: BoxFit.cover),
+              child: FadeTransition(
+                opacity: _fadeIn,
+                child: SlideTransition(
+                  position: _slideUp,
+                  child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Logo with glow
+                  Container(
+                    width: 88, height: 88,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(color: cs.primary.withValues(alpha: 0.25), blurRadius: 24, offset: const Offset(0, 8)),
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 2)),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Image.asset('assets/icon-512.png', width: 88, height: 88, fit: BoxFit.cover),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text('KAYPOS', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w900, fontSize: 28, letterSpacing: 1.5)),
+                  const SizedBox(height: 4),
+                  Text('Food & Beverage POS', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13, letterSpacing: 0.5)),
+                  const SizedBox(height: 36),
+
+                  // Login card
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceBright,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: cs.outlineVariant, width: 0.5),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06), blurRadius: 20, offset: const Offset(0, 8)),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_error.isNotEmpty) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: cs.errorContainer, borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(children: [
+                              Icon(Icons.error_outline_rounded, size: 18, color: cs.error),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(_error, style: TextStyle(color: cs.onErrorContainer, fontSize: 13, fontWeight: FontWeight.w500))),
+                            ]),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+
+                        // Username
+                        Text('USERNAME', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onSurfaceVariant, letterSpacing: 1.2)),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _usernameCtrl,
+                          autofocus: true,
+                          onSubmitted: (_) => _handleLogin(),
+                          decoration: _inputDecoration(context, 'Masukkan username'),
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Password
+                        Text('PASSWORD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onSurfaceVariant, letterSpacing: 1.2)),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _passwordCtrl,
+                          obscureText: !_showPassword,
+                          onSubmitted: (_) => _handleLogin(),
+                          decoration: _inputDecoration(context, 'Masukkan password').copyWith(
+                            suffixIcon: IconButton(
+                              icon: Icon(_showPassword ? Icons.visibility_rounded : Icons.visibility_off_rounded, color: cs.onSurfaceVariant, size: 20),
+                              onPressed: () => setState(() => _showPassword = !_showPassword),
+                            ),
+                          ),
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 28),
+
+                        // Login Button
+                        SizedBox(
+                          width: double.infinity, height: 52,
+                          child: FilledButton(
+                            onPressed: _loading ? null : _handleLogin,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: cs.primary,
+                              foregroundColor: cs.onPrimary,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              elevation: 2,
+                            ),
+                            child: _loading
+                              ? SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: cs.onPrimary, strokeWidth: 2.5))
+                              : const Text('Masuk', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, letterSpacing: 0.5)),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Center(child: Text('Hubungi admin jika lupa password', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.5)))),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
                 ),
               ),
-              const SizedBox(height: 16),
-              Text('KAYPOS', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w800, fontSize: 24, letterSpacing: -0.5)),
-              const SizedBox(height: 4),
-              Text('Sistem Point of Sale', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14)),
-              const SizedBox(height: 32),
-
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 384),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_error.isNotEmpty) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: cs.errorContainer, borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(_error, style: TextStyle(color: cs.onErrorContainer, fontSize: 14, fontWeight: FontWeight.w500), textAlign: TextAlign.center),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Username
-                    Text('USERNAME', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant, letterSpacing: 1.0)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _usernameCtrl,
-                      autofocus: true,
-                      onSubmitted: (_) => _handleLogin(),
-                      decoration: _inputDecoration(context, 'Masukkan username'),
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Password
-                    Text('PASSWORD', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant, letterSpacing: 1.0)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _passwordCtrl,
-                      obscureText: !_showPassword,
-                      onSubmitted: (_) => _handleLogin(),
-                      decoration: _inputDecoration(context, 'Masukkan password').copyWith(
-                        suffixIcon: IconButton(
-                          icon: Icon(_showPassword ? Icons.visibility : Icons.visibility_off, color: cs.onSurfaceVariant),
-                          onPressed: () => setState(() => _showPassword = !_showPassword),
-                        ),
-                      ),
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Login Button
-                    SizedBox(
-                      width: double.infinity, height: 56,
-                      child: FilledButton(
-                        onPressed: _loading ? null : _handleLogin,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: cs.primary,
-                          foregroundColor: cs.onPrimary,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          elevation: 1,
-                        ),
-                        child: _loading
-                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
-                          : const Text('Masuk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Center(child: Text('Hubungi admin jika lupa password', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.5)))),
-                  ],
-                ),
-              ),
-            ],
           ),
         ),
-      ),
+      // Top-left: server status
       Positioned(
-        top: 24,
-        left: 24,
+        top: 16,
+        left: 16,
         child: Row(
           children: [
-            IconButton(
-              onPressed: _showConnectServerDialog,
-              icon: Icon(
-                Icons.dns,
-                color: _serverUrl.isNotEmpty ? Colors.green : cs.onSurfaceVariant,
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _showConnectServerDialog,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceBright.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: cs.outlineVariant),
+                  ),
+                  child: Icon(
+                    Icons.dns_rounded,
+                    size: 20,
+                    color: _serverUrl.isNotEmpty ? Colors.green : cs.onSurfaceVariant,
+                  ),
+                ),
               ),
-              tooltip: 'Sambungkan ke Server',
             ),
             if (_serverUrl.isNotEmpty)
               Container(
-                margin: const EdgeInsets.only(left: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: _isServerOnline ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _isServerOnline ? Colors.green.withValues(alpha: 0.3) : Colors.red.withValues(alpha: 0.3)),
+                  color: (_isServerOnline ? Colors.green : Colors.red).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: (_isServerOnline ? Colors.green : Colors.red).withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(_isServerOnline ? Icons.check_circle : Icons.error, size: 12, color: _isServerOnline ? Colors.green : Colors.red),
-                    const SizedBox(width: 4),
-                    Text(_isServerOnline ? 'Connected' : 'Disconnected', style: TextStyle(fontSize: 10, color: _isServerOnline ? Colors.green.shade700 : Colors.red.shade700, fontWeight: FontWeight.bold)),
+                    Container(
+                      width: 6, height: 6,
+                      decoration: BoxDecoration(
+                        color: _isServerOnline ? Colors.green : Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isServerOnline ? 'Online' : 'Offline',
+                      style: TextStyle(fontSize: 11, color: _isServerOnline ? Colors.green.shade700 : Colors.red.shade700, fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
               ),
           ],
         ),
       ),
+      // Top-right: theme toggle
       Positioned(
-            top: 24,
-            right: 24,
-            child: IconButton(
-              onPressed: () {
-                context.read<ThemeProvider>().toggle();
-              },
-              icon: Icon(
-                Theme.of(context).brightness == Brightness.light ? Icons.dark_mode : Icons.light_mode,
-                color: cs.onSurfaceVariant,
+            top: 16,
+            right: 16,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => context.read<ThemeProvider>().toggle(),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceBright.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: cs.outlineVariant),
+                  ),
+                  child: Icon(
+                    isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                    color: cs.onSurfaceVariant,
+                    size: 20,
+                  ),
+                ),
               ),
-              tooltip: 'Toggle Theme',
             ),
           ),
 

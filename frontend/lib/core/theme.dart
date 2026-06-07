@@ -9,41 +9,60 @@ class NoTransitionsBuilder extends PageTransitionsBuilder {
 }
 
 class AppTheme {
-  static const Color primary = Color(0xFF2563EB);
-  static const Color onPrimary = Color(0xFFFFFFFF);
-  static const Color primaryContainer = Color(0xFFDBEAFE);
-  static const Color onPrimaryContainer = Color(0xFF1E3A5F);
+  // ══════════════════════════════════════════
+  //  BRAND COLORS (FNB Warm Palette)
+  // ══════════════════════════════════════════
+  static const Color brandOrange = Color(0xFFE65100);
+  static const Color brandAmber = Color(0xFFFFB74D);
+  static const Color brandBrown = Color(0xFF3E2723);
+  static const Color brandCream = Color(0xFFFFF8F0);
 
-  static const Color secondary = Color(0xFF059669);
-  static const Color onSecondary = Color(0xFFFFFFFF);
-  static const Color secondaryContainer = Color(0xFFD1FAE5);
-  static const Color onSecondaryContainer = Color(0xFF064E3B);
+  // Sidebar colors (dark sidebar for premium feel)
+  static const Color sidebarDark = Color(0xFF2C1B14);
+  static const Color sidebarDarkAlt = Color(0xFF1A1210);
+  static const Color sidebarItemActive = Color(0x33FFB74D); // amber 20%
+  static const Color sidebarItemHover = Color(0x14FFB74D); // amber 8%
+  static const Color sidebarText = Color(0xFFE0D6CC);
+  static const Color sidebarTextMuted = Color(0xFF9C8A7C);
 
-  static const Color tertiary = Color(0xFF7C3AED);
-  static const Color onTertiary = Color(0xFFFFFFFF);
-  static const Color tertiaryContainer = Color(0xFFEDE9FE);
-  static const Color onTertiaryContainer = Color(0xFF3B0764);
-
-  static const Color error = Color(0xFFDC2626);
-  static const Color onError = Color(0xFFFFFFFF);
-  static const Color errorContainer = Color(0xFFFEE2E2);
-  static const Color onErrorContainer = Color(0xFF7F1D1D);
-
-  static const Color surface = Color(0xFFFCF9F2);
-  static const Color surfaceDim = Color(0xFFE6E3DC);
-  static const Color surfaceBright = Color(0xFFFFFDFC);
-  static const Color surfaceContainerLowest = Color(0xFFFFFFFF);
-  static const Color surfaceContainerLow = Color(0xFFF5F2EB);
-  static const Color surfaceContainer = Color(0xFFEFECE5);
-  static const Color surfaceContainerHigh = Color(0xFFE9E6DF);
-  static const Color surfaceContainerHighest = Color(0xFFE3E0D9);
-  
-  static const Color onSurface = Color(0xFF0F172A);
-  static const Color onSurfaceVariant = Color(0xFF475569);
-  static const Color outline = Color(0xFF94A3B8);
-  static const Color outlineVariant = Color(0xFFE2E8F0);
-
+  // ══════════════════════════════════════════
+  //  LIGHT THEME — "Warm Café"
+  // ══════════════════════════════════════════
   static ThemeData get lightTheme {
+    const primary = Color(0xFFE65100);
+    const onPrimary = Color(0xFFFFFFFF);
+    const primaryContainer = Color(0xFFFFE0B2);
+    const onPrimaryContainer = Color(0xFF4E1C00);
+
+    const secondary = Color(0xFF2E7D32);
+    const onSecondary = Color(0xFFFFFFFF);
+    const secondaryContainer = Color(0xFFC8E6C9);
+    const onSecondaryContainer = Color(0xFF1B5E20);
+
+    const tertiary = Color(0xFF6D4C41);
+    const onTertiary = Color(0xFFFFFFFF);
+    const tertiaryContainer = Color(0xFFEFEBE9);
+    const onTertiaryContainer = Color(0xFF3E2723);
+
+    const error = Color(0xFFD32F2F);
+    const onError = Color(0xFFFFFFFF);
+    const errorContainer = Color(0xFFFFCDD2);
+    const onErrorContainer = Color(0xFF7F1D1D);
+
+    const surface = Color(0xFFFFF8F0);
+    const surfaceDim = Color(0xFFE8E0D6);
+    const surfaceBright = Color(0xFFFFFFFF);
+    const surfaceContainerLowest = Color(0xFFFFFFFF);
+    const surfaceContainerLow = Color(0xFFFFF3E8);
+    const surfaceContainer = Color(0xFFF5EDE3);
+    const surfaceContainerHigh = Color(0xFFEDE5DB);
+    const surfaceContainerHighest = Color(0xFFE5DDD3);
+
+    const onSurface = Color(0xFF1A1210);
+    const onSurfaceVariant = Color(0xFF5D4E44);
+    const outline = Color(0xFF9C8A7C);
+    const outlineVariant = Color(0xFFE0D6CC);
+
     return ThemeData(
       colorScheme: const ColorScheme(
         brightness: Brightness.light,
@@ -64,8 +83,14 @@ class AppTheme {
         errorContainer: errorContainer,
         onErrorContainer: onErrorContainer,
         surface: surface,
-        onSurface: onSurface,
+        surfaceDim: surfaceDim,
+        surfaceBright: surfaceBright,
+        surfaceContainerLowest: surfaceContainerLowest,
+        surfaceContainerLow: surfaceContainerLow,
+        surfaceContainer: surfaceContainer,
+        surfaceContainerHigh: surfaceContainerHigh,
         surfaceContainerHighest: surfaceContainerHighest,
+        onSurface: onSurface,
         onSurfaceVariant: onSurfaceVariant,
         outline: outline,
         outlineVariant: outlineVariant,
@@ -83,57 +108,158 @@ class AppTheme {
         },
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.green,
+        backgroundColor: primary,
         foregroundColor: onPrimary,
         elevation: 0,
+        centerTitle: false,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Colors.green,
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.white70,
+        backgroundColor: Color(0xFF3E2723),
+        selectedItemColor: brandAmber,
+        unselectedItemColor: Color(0xFF9C8A7C),
+        type: BottomNavigationBarType.fixed,
+        elevation: 8,
       ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: surfaceBright,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: outlineVariant, width: 0.5),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 8,
+        backgroundColor: surfaceBright,
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: onPrimary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, fontFamily: 'Inter'),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primary,
+          side: const BorderSide(color: primary),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: primary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: surfaceContainer,
+        selectedColor: primaryContainer,
+        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        side: const BorderSide(color: outlineVariant),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: brandBrown,
+        contentTextStyle: const TextStyle(color: Colors.white, fontFamily: 'Inter'),
+      ),
+      dividerTheme: const DividerThemeData(color: outlineVariant, thickness: 0.5),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceContainerLow,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: outlineVariant, width: 1)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: primary, width: 2)),
-        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: error, width: 1)),
-        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: error, width: 2)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: outlineVariant, width: 1)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primary, width: 2)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: error, width: 1)),
+        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: error, width: 2)),
+        hintStyle: const TextStyle(color: outline),
+      ),
+      tabBarTheme: const TabBarThemeData(
+        labelColor: primary,
+        unselectedLabelColor: onSurfaceVariant,
+        indicatorColor: primary,
       ),
     );
   }
 
-  // Define dark theme if needed, matching the dark CSS variables
+  // ══════════════════════════════════════════
+  //  DARK THEME — "Night Kitchen"
+  // ══════════════════════════════════════════
   static ThemeData get darkTheme {
+    const primary = Color(0xFFFFB74D);
+    const onPrimary = Color(0xFF3E2723);
+    const primaryContainer = Color(0xFF4E342E);
+    const onPrimaryContainer = Color(0xFFFFE0B2);
+
+    const secondary = Color(0xFF81C784);
+    const onSecondary = Color(0xFF1B5E20);
+    const secondaryContainer = Color(0xFF2E7D32);
+    const onSecondaryContainer = Color(0xFFC8E6C9);
+
+    const tertiary = Color(0xFFBCAAA4);
+    const onTertiary = Color(0xFF3E2723);
+    const tertiaryContainer = Color(0xFF4E342E);
+    const onTertiaryContainer = Color(0xFFEFEBE9);
+
+    const error = Color(0xFFEF9A9A);
+    const onError = Color(0xFF7F1D1D);
+    const errorContainer = Color(0xFF5D1515);
+    const onErrorContainer = Color(0xFFFFCDD2);
+
+    const surface = Color(0xFF1A1210);
+    const surfaceDim = Color(0xFF120E0C);
+    const surfaceBright = Color(0xFF2C1F1A);
+    const surfaceContainerLowest = Color(0xFF120E0C);
+    const surfaceContainerLow = Color(0xFF211916);
+    const surfaceContainerHighest = Color(0xFF3D302A);
+    const surfaceContainer = Color(0xFF2C2320);
+    const surfaceContainerHigh = Color(0xFF352A24);
+
+    const onSurface = Color(0xFFEDE0D4);
+    const onSurfaceVariant = Color(0xFFA89888);
+    const outline = Color(0xFF6D5D50);
+    const outlineVariant = Color(0xFF3D302A);
+
     return ThemeData(
       colorScheme: const ColorScheme(
         brightness: Brightness.dark,
-        primary: Color(0xFF60A5FA),
-        onPrimary: Color(0xFF1E3A5F),
-        primaryContainer: Color(0xFF1E40AF),
-        onPrimaryContainer: Color(0xFFDBEAFE),
-        secondary: Color(0xFF34D399),
-        onSecondary: Color(0xFF064E3B),
-        secondaryContainer: Color(0xFF065F46),
-        onSecondaryContainer: Color(0xFFD1FAE5),
-        tertiary: Color(0xFFA78BFA),
-        onTertiary: Color(0xFF3B0764),
-        tertiaryContainer: Color(0xFF5B21B6),
-        onTertiaryContainer: Color(0xFFEDE9FE),
-        error: Color(0xFFF87171),
-        onError: Color(0xFF7F1D1D),
-        errorContainer: Color(0xFF991B1B),
-        onErrorContainer: Color(0xFFFEE2E2),
-        surface: Color(0xFF0F172A),
-        onSurface: Color(0xFFE2E8F0),
-        surfaceContainerHighest: Color(0xFF475569),
-        onSurfaceVariant: Color(0xFF94A3B8),
-        outline: Color(0xFF475569),
-        outlineVariant: Color(0xFF334155),
+        primary: primary,
+        onPrimary: onPrimary,
+        primaryContainer: primaryContainer,
+        onPrimaryContainer: onPrimaryContainer,
+        secondary: secondary,
+        onSecondary: onSecondary,
+        secondaryContainer: secondaryContainer,
+        onSecondaryContainer: onSecondaryContainer,
+        tertiary: tertiary,
+        onTertiary: onTertiary,
+        tertiaryContainer: tertiaryContainer,
+        onTertiaryContainer: onTertiaryContainer,
+        error: error,
+        onError: onError,
+        errorContainer: errorContainer,
+        onErrorContainer: onErrorContainer,
+        surface: surface,
+        surfaceDim: surfaceDim,
+        surfaceBright: surfaceBright,
+        surfaceContainerLowest: surfaceContainerLowest,
+        surfaceContainerLow: surfaceContainerLow,
+        surfaceContainer: surfaceContainer,
+        surfaceContainerHigh: surfaceContainerHigh,
+        surfaceContainerHighest: surfaceContainerHighest,
+        onSurface: onSurface,
+        onSurfaceVariant: onSurfaceVariant,
+        outline: outline,
+        outlineVariant: outlineVariant,
       ),
-      scaffoldBackgroundColor: const Color(0xFF0F172A),
+      scaffoldBackgroundColor: surface,
       useMaterial3: true,
       fontFamily: 'Inter',
       pageTransitionsTheme: const PageTransitionsTheme(
@@ -146,24 +272,83 @@ class AppTheme {
         },
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.green,
-        foregroundColor: Color(0xFFE2E8F0),
+        backgroundColor: surfaceBright,
+        foregroundColor: onSurface,
         elevation: 0,
+        centerTitle: false,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Colors.green,
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.white70,
+        backgroundColor: surfaceBright,
+        selectedItemColor: primary,
+        unselectedItemColor: onSurfaceVariant,
+        type: BottomNavigationBarType.fixed,
+        elevation: 8,
       ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: surfaceBright,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: outlineVariant, width: 0.5),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 8,
+        backgroundColor: surfaceContainerHigh,
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: onPrimary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, fontFamily: 'Inter'),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primary,
+          side: const BorderSide(color: primary),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: primary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: surfaceContainer,
+        selectedColor: primaryContainer,
+        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        side: const BorderSide(color: outlineVariant),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: surfaceContainerHigh,
+        contentTextStyle: const TextStyle(color: onSurface, fontFamily: 'Inter'),
+      ),
+      dividerTheme: const DividerThemeData(color: outlineVariant, thickness: 0.5),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF1E293B),
+        fillColor: surfaceContainerLow,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF334155), width: 1)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF60A5FA), width: 2)),
-        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFF87171), width: 1)),
-        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFF87171), width: 2)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: outlineVariant, width: 1)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primary, width: 2)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: error, width: 1)),
+        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: error, width: 2)),
+        hintStyle: const TextStyle(color: outline),
+      ),
+      tabBarTheme: const TabBarThemeData(
+        labelColor: primary,
+        unselectedLabelColor: onSurfaceVariant,
+        indicatorColor: primary,
       ),
     );
   }
