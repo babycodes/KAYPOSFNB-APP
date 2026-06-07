@@ -535,72 +535,80 @@ class SyncService {
 
         int saved = 0;
         final Set<String> newlyInsertedBahanBaku = {};
-        await db.transaction((txn) async {
-          for (final table in strictOrder) {
-            if (grouped.containsKey(table)) {
-              for (final rowData in grouped[table]!) {
-                try {
-                  final id = rowData['id'];
-                  if (id == null) {
-                    await txn.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
-                    saved++;
-                    continue;
-                  }
-
-                  final exists = await txn.query(table, where: 'id = ?', whereArgs: [id]);
-
-                  if (table == 'bahan_baku') {
-                    if (exists.isEmpty) {
-                      // New bahan_baku: insert with full stock from Admin
-                      await txn.insert(table, rowData);
-                      newlyInsertedBahanBaku.add(id.toString());
+        // Disable FK checks during bulk pull to prevent orphaned references
+        // (e.g., transactions.cashier_id referencing old user IDs from restored backups)
+        await db.execute('PRAGMA foreign_keys = OFF');
+        try {
+          await db.transaction((txn) async {
+            for (final table in strictOrder) {
+              if (grouped.containsKey(table)) {
+                for (final rowData in grouped[table]!) {
+                  try {
+                    final id = rowData['id'];
+                    if (id == null) {
+                      await txn.insert(table, rowData, conflictAlgorithm: ConflictAlgorithm.replace);
                       saved++;
                       continue;
                     }
-                    // Existing: preserve Kasir's local stock, only update metadata
-                    final updateData = Map<String, dynamic>.from(rowData);
-                    updateData.remove('stock');
-                    await txn.update(table, updateData, where: 'id = ?', whereArgs: [id]);
-                    saved++;
-                  } else if (table == 'inventory_ledger') {
-                    // Only insert new ledger records, and apply qty_change to stock
-                    if (exists.isEmpty) {
-                      await txn.insert(table, Map<String, dynamic>.from(rowData));
-                      final qtyChange = (rowData['qty_change'] as num?)?.toDouble() ?? 0.0;
-                      final bbId = rowData['bahan_baku_id']?.toString();
-                      // Only apply delta if bahan_baku was NOT freshly inserted in this batch
-                      // (freshly inserted rows already have the correct stock from Admin)
-                      if (bbId != null && qtyChange != 0 && !newlyInsertedBahanBaku.contains(bbId)) {
-                        await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [qtyChange, bbId]);
+
+                    final exists = await txn.query(table, where: 'id = ?', whereArgs: [id]);
+
+                    if (table == 'bahan_baku') {
+                      if (exists.isEmpty) {
+                        // New bahan_baku: insert with full stock from Admin
+                        await txn.insert(table, rowData);
+                        newlyInsertedBahanBaku.add(id.toString());
+                        saved++;
+                        continue;
+                      }
+                      // Existing: preserve Kasir's local stock, only update metadata
+                      final updateData = Map<String, dynamic>.from(rowData);
+                      updateData.remove('stock');
+                      await txn.update(table, updateData, where: 'id = ?', whereArgs: [id]);
+                      saved++;
+                    } else if (table == 'inventory_ledger') {
+                      // Only insert new ledger records, and apply qty_change to stock
+                      if (exists.isEmpty) {
+                        await txn.insert(table, Map<String, dynamic>.from(rowData));
+                        final qtyChange = (rowData['qty_change'] as num?)?.toDouble() ?? 0.0;
+                        final bbId = rowData['bahan_baku_id']?.toString();
+                        // Only apply delta if bahan_baku was NOT freshly inserted in this batch
+                        // (freshly inserted rows already have the correct stock from Admin)
+                        if (bbId != null && qtyChange != 0 && !newlyInsertedBahanBaku.contains(bbId)) {
+                          await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [qtyChange, bbId]);
+                        }
+                        saved++;
+                      }
+                    } else if (table == 'settings') {
+                      // Settings uses 'key' as PK, not 'id'
+                      final key = rowData['key'];
+                      if (key == null) continue;
+                      final exists = await txn.query(table, where: '"key" = ?', whereArgs: [key]);
+                      if (exists.isEmpty) {
+                        await txn.insert(table, rowData);
+                      } else {
+                        await txn.update(table, rowData, where: '"key" = ?', whereArgs: [key]);
+                      }
+                      saved++;
+                    } else {
+                      if (exists.isEmpty) {
+                        await txn.insert(table, rowData);
+                      } else {
+                        await txn.update(table, rowData, where: 'id = ?', whereArgs: [id]);
                       }
                       saved++;
                     }
-                  } else if (table == 'settings') {
-                    // Settings uses 'key' as PK, not 'id'
-                    final key = rowData['key'];
-                    if (key == null) continue;
-                    final exists = await txn.query(table, where: '"key" = ?', whereArgs: [key]);
-                    if (exists.isEmpty) {
-                      await txn.insert(table, rowData);
-                    } else {
-                      await txn.update(table, rowData, where: '"key" = ?', whereArgs: [key]);
-                    }
-                    saved++;
-                  } else {
-                    if (exists.isEmpty) {
-                      await txn.insert(table, rowData);
-                    } else {
-                      await txn.update(table, rowData, where: 'id = ?', whereArgs: [id]);
-                    }
-                    saved++;
+                  } catch (e) {
+                    debugPrint('Sync Upsert Error on $table: $e');
                   }
-                } catch (e) {
-                  debugPrint('Sync Upsert Error on $table: $e');
                 }
               }
             }
-          }
-        });
+          });
+        } finally {
+          // Always re-enable FK checks
+          await db.execute('PRAGMA foreign_keys = ON');
+        }
 
         await prefs.setString('last_master_pull', DateTime.now().toUtc().toIso8601String());
         // Also advance push timestamp so pulled data doesn't trigger "Kirim Update" badge

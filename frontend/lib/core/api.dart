@@ -595,7 +595,8 @@ class Api {
           SELECT il.*, b.name as bahan_name, b.unit as bahan_unit
           FROM inventory_ledger il
           LEFT JOIN bahan_baku b ON b.id = il.bahan_baku_id
-          WHERE il.transaction_type = 'WASTE'
+          WHERE (il.transaction_type = 'WASTE'
+                 OR (il.transaction_type = 'ADJUSTMENT' AND il.qty_change < 0))
             AND DATE(il.timestamp) BETWEEN ? AND ?
           ORDER BY il.timestamp DESC
         ''', [dateStart, dateEnd]);

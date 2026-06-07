@@ -432,22 +432,27 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
           'loss': _safeNum(w['financial_value']).abs(),
         });
       } else {
-        // Raw material — individual entry
+        // Determine entry type
+        final txType = w['transaction_type']?.toString() ?? '';
+        final isRawWaste = notes.startsWith('Bahan Rusak:');
+        final isOpnameAdj = txType == 'ADJUSTMENT';
+
         String reason = '';
-        final isRaw = notes.startsWith('Bahan Rusak:');
-        if (isRaw) {
+        if (isRawWaste) {
           final content = notes.replaceFirst('Bahan Rusak: ', '');
           final parts = content.split(' - ');
           if (parts.length > 1) {
             reason = parts.sublist(1).join(' - ').replaceAll(RegExp(r'\[.*?\]'), '').trim();
           }
+        } else if (isOpnameAdj) {
+          reason = notes.replaceFirst('Stock Opname: ', '').trim();
         }
         String reporter = '-';
         final byMatch = RegExp(r'\[(?:Oleh|Di-refund oleh|Dilaporkan oleh)[:\s]*([^\]]+)\]', caseSensitive: false).firstMatch(notes);
         if (byMatch != null) reporter = byMatch.group(1)!.trim();
 
         groupedItems.add({
-          'type': 'raw',
+          'type': isOpnameAdj ? 'opname' : 'raw',
           'bahan_name': w['bahan_name']?.toString() ?? '-',
           'qty': _safeNum(w['qty_change']).abs(),
           'unit': w['bahan_unit']?.toString() ?? '',
@@ -555,29 +560,38 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
               ),
             );
           } else {
-            // Raw material waste card
+            // Raw material waste OR opname shrinkage card
+            final isOpname = item['type'] == 'opname';
             final qtyVal = item['qty'] as double;
             final qtyStr = qtyVal == qtyVal.roundToDouble() ? qtyVal.round().toString() : qtyVal.toStringAsFixed(2);
+            final borderColor = isOpname ? Colors.purple.shade200 : Colors.red.shade200;
+            final bgColor = isOpname ? Colors.purple.shade50 : Colors.red.shade50;
+            final iconColor = isOpname ? Colors.purple.shade700 : Colors.red.shade700;
+            final badgeColor = isOpname ? Colors.purple.shade100 : Colors.red.shade100;
+            final badgeTextColor = isOpname ? Colors.purple.shade800 : Colors.red.shade800;
+            final badgeLabel = isOpname ? 'Selisih Opname' : 'Bahan Mentah';
+            final icon = isOpname ? Icons.fact_check : Icons.science_outlined;
+            final actionLabel = isOpname ? 'susut (selisih opname)' : 'terbuang';
 
             return Card(
               elevation: 0, margin: const EdgeInsets.only(bottom: 8),
               color: cs.surfaceBright,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.red.shade200)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: borderColor)),
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
                     Container(
                       width: 40, height: 40,
-                      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(10)),
-                      child: Icon(Icons.science_outlined, size: 20, color: Colors.red.shade700),
+                      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(10)),
+                      child: Icon(icon, size: 20, color: iconColor),
                     ),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(4)),
-                        child: Text('Bahan Mentah', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade800)),
+                        decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(4)),
+                        child: Text(badgeLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: badgeTextColor)),
                       ),
                       const SizedBox(height: 4),
                       Text(item['bahan_name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
@@ -588,9 +602,9 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
                   Padding(
                     padding: const EdgeInsets.only(left: 52),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('$qtyStr ${item['unit']} terbuang', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                      Text('$qtyStr ${item['unit']} $actionLabel', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                       if (reason.isNotEmpty)
-                        Padding(padding: const EdgeInsets.only(top: 2), child: Text('Alasan: $reason', style: TextStyle(fontSize: 12, color: Colors.red.shade600))),
+                        Padding(padding: const EdgeInsets.only(top: 2), child: Text(isOpname ? 'Catatan: $reason' : 'Alasan: $reason', style: TextStyle(fontSize: 12, color: iconColor))),
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
