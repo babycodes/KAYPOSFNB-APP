@@ -529,15 +529,13 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
                           Text('📦 Bahan terpakai:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
                           const SizedBox(height: 4),
                           ...ingredients.map((ing) {
-                            final qtyStr = ing['qty'] == (ing['qty'] as double).roundToDouble()
-                                ? (ing['qty'] as double).round().toString()
-                                : (ing['qty'] as double).toStringAsFixed(2);
+                            final ingDisplay = _fmtDynUnit((ing['qty'] as double), ing['unit']?.toString() ?? '');
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 2),
                               child: Row(children: [
                                 Text('• ${ing['name']}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                                 const Spacer(),
-                                Text('$qtyStr ${ing['unit']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+                                Text(ingDisplay, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
                                 const SizedBox(width: 8),
                                 Text('-${fmtPrice(ing['loss'] as double)}', style: TextStyle(fontSize: 11, color: Colors.red.shade600)),
                               ]),
@@ -563,7 +561,7 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
             // Raw material waste OR opname shrinkage card
             final isOpname = item['type'] == 'opname';
             final qtyVal = item['qty'] as double;
-            final qtyStr = qtyVal == qtyVal.roundToDouble() ? qtyVal.round().toString() : qtyVal.toStringAsFixed(2);
+            final qtyDisplay = _fmtDynUnit(qtyVal, item['unit']?.toString() ?? '');
             final borderColor = isOpname ? Colors.purple.shade200 : Colors.red.shade200;
             final bgColor = isOpname ? Colors.purple.shade50 : Colors.red.shade50;
             final iconColor = isOpname ? Colors.purple.shade700 : Colors.red.shade700;
@@ -602,7 +600,7 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
                   Padding(
                     padding: const EdgeInsets.only(left: 52),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('$qtyStr ${item['unit']} $actionLabel', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                      Text('$qtyDisplay $actionLabel', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                       if (reason.isNotEmpty)
                         Padding(padding: const EdgeInsets.only(top: 2), child: Text(isOpname ? 'Catatan: $reason' : 'Alasan: $reason', style: TextStyle(fontSize: 12, color: iconColor))),
                       Padding(
@@ -621,6 +619,30 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
         },
       )),
     ]);
+  }
+
+  /// Smart unit: sub-1 Kg → gram, sub-1 L → ml
+  String _fmtDynUnit(double qty, String unit) {
+    final absQty = qty.abs();
+    final u = unit.toLowerCase().trim();
+    String displayQty;
+    String displayUnit;
+    if (u == 'kg' && absQty > 0 && absQty < 1) {
+      displayQty = _fmtNum(absQty * 1000);
+      displayUnit = 'gram';
+    } else if ((u == 'liter' || u == 'l') && absQty > 0 && absQty < 1) {
+      displayQty = _fmtNum(absQty * 1000);
+      displayUnit = 'ml';
+    } else {
+      displayQty = _fmtNum(absQty);
+      displayUnit = unit;
+    }
+    return '$displayQty $displayUnit';
+  }
+
+  String _fmtNum(double n) {
+    if (n == n.roundToDouble()) return n.round().toString();
+    return n.toStringAsFixed(2);
   }
 
   Widget _emptyState(String msg, IconData icon) => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
