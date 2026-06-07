@@ -1685,6 +1685,7 @@ class _KasirScreenState extends State<KasirScreen> {
                                 });
                                 // Refresh parent data
                                 _loadData(); _loadHistory(); _loadDashboard(); _loadStockAlerts();
+                                SyncService.getPendingReportCount(); // Update badge immediately
                                 if (mounted) showToast(context, '✅ Refund berhasil');
                               } catch (e) {
                                 if (mounted) showToast(context, '❌ ${e.toString().replaceFirst("Exception: ", "")}');
@@ -1745,6 +1746,7 @@ class _KasirScreenState extends State<KasirScreen> {
                             details = (newRes['details'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? details;
                           });
                           _loadData(); _loadHistory(); _loadDashboard(); _loadStockAlerts();
+                          SyncService.getPendingReportCount(); // Update badge immediately
                           if (mounted) showToast(context, '✅ Transaksi berhasil di-void');
                         } catch (e) {
                           if (mounted) showToast(context, '❌ ${e.toString().replaceFirst("Exception: ", "")}');
