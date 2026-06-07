@@ -381,7 +381,8 @@ class SyncService {
   static const List<String> _masterTables = [
     'categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts',
     'products', 'bahan_baku', 'addons', 'resep', 'paket_items',
-    'product_addon_categories', 'inventory_ledger', 'settings'
+    'product_addon_categories', 'inventory_ledger', 'settings',
+    'transactions', 'transaction_details'
   ];
 
   /// ADMIN manually pushes all master data to the server for Kasir to pick up.
@@ -402,6 +403,19 @@ class SyncService {
         List<Map<String, Object?>> rows;
         if (table == 'inventory_ledger') {
           rows = await db.query(table, where: "datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT')", whereArgs: [lastPushLocal]);
+        } else if (table == 'transaction_details') {
+          // transaction_details has no updated_at; pull all details for changed transactions
+          if (changes.containsKey('transactions')) {
+            final txIds = changes['transactions']!.map((t) => t['id']).toList();
+            if (txIds.isNotEmpty) {
+              final placeholders = List.filled(txIds.length, '?').join(',');
+              rows = await db.query(table, where: 'transaction_id IN ($placeholders)', whereArgs: txIds);
+            } else {
+              rows = [];
+            }
+          } else {
+            rows = [];
+          }
         } else if (table == 'settings') {
           rows = await db.query(table, where: 'updated_at IS NOT NULL AND datetime(updated_at) > datetime(?)', whereArgs: [lastPushLocal]);
         } else if (table == 'resep' || table == 'paket_items' || table == 'product_addon_categories') {
@@ -508,7 +522,8 @@ class SyncService {
           'kategori_bahan', 'categories', 'users', 'addon_categories', 'discounts',
           'bahan_baku', 'products',
           'addons',
-          'resep', 'paket_items', 'product_addon_categories', 'inventory_ledger', 'settings'
+          'resep', 'paket_items', 'product_addon_categories', 'inventory_ledger', 'settings',
+          'transactions', 'transaction_details'
         ];
 
         int saved = 0;
