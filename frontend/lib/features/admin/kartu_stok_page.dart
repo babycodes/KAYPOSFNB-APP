@@ -290,11 +290,11 @@ class _KartuStokPageState extends State<KartuStokPage> {
               DataCell(Text(totalWaste > 0 ? '-${_fmtDynUnit(totalWaste, unit)}' : '-', style: TextStyle(color: totalWaste > 0 ? Colors.red.shade700 : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
               DataCell(Text(totalAdj != 0 ? '${totalAdj > 0 ? "+" : ""}${_fmtDynUnit(totalAdj, unit)}' : '-', style: TextStyle(color: totalAdj > 0 ? Colors.blue : totalAdj < 0 ? Colors.red : cs.onSurfaceVariant, fontWeight: FontWeight.w600))),
               DataCell(Text(_fmtDynUnit(sysStock, unit), style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary))),
-              DataCell(SizedBox(width: 100, child: FilledButton.tonalIcon(
+              DataCell(SizedBox(width: 130, child: FilledButton.icon(
                 onPressed: () => _showOpnameDialog(Map<String, dynamic>.from(d)),
-                icon: const Icon(Icons.fact_check, size: 14),
-                label: const Text('Opname', style: TextStyle(fontSize: 11)),
-                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                icon: const Icon(Icons.fact_check_rounded, size: 16),
+                label: const Text('Opname', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), minimumSize: const Size(0, 36)),
               ))),
             ]);
           }).toList(),
@@ -341,12 +341,11 @@ class _KartuStokPageState extends State<KartuStokPage> {
               _metricChip('Terbuang', totalWaste > 0 ? '-${_fmtDynUnit(totalWaste, unit)}' : '-', Colors.red),
               if (totalAdj != 0) _metricChip('Selisih Opname', '${totalAdj > 0 ? "+" : ""}${_fmtDynUnit(totalAdj, unit)}', Colors.purple),
             ]),
-            const SizedBox(height: 8),
-            SizedBox(width: double.infinity, height: 32, child: FilledButton.tonalIcon(
+            const SizedBox(height: 10),
+            SizedBox(width: double.infinity, height: 40, child: FilledButton.icon(
               onPressed: () => _showOpnameDialog(Map<String, dynamic>.from(d)),
-              icon: const Icon(Icons.fact_check, size: 14),
-              label: const Text('Opname (Sesuaikan Fisik)', style: TextStyle(fontSize: 11)),
-              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+              icon: const Icon(Icons.fact_check_rounded, size: 18),
+              label: const Text('Stock Opname (Sesuaikan Fisik)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             )),
           ]),
         );

@@ -150,7 +150,7 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
 
   Widget _statusBadge(String status) {
     if (status == 'voided') return _badge('VOID', Colors.red);
-    if (status == 'partial_refund') return _badge('REFUND', Colors.orange);
+    if (status == 'partial_refund') return _badge('PARTIAL REFUND', Colors.orange);
     return const SizedBox.shrink();
   }
 
@@ -334,6 +334,15 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
           final updatedAt = first['updated_at']?.toString() ?? '';
           final time = updatedAt.length > 10 ? updatedAt.substring(11, 16) : updatedAt;
 
+          // Calculate per-TX refund totals
+          final int totalPcs = items.fold<int>(0, (s, item) => s + _safeNum(item['refunded_qty']).round());
+          final double txRefundAmount = items.fold<double>(0.0, (s, item) {
+            final price = _safeNum(item['sold_price']);
+            final disc = _safeNum(item['discount_percent']);
+            final rQty = _safeNum(item['refunded_qty']);
+            return s + (price * (1 - disc / 100) * rQty);
+          });
+
           return Card(
             elevation: 0, margin: const EdgeInsets.only(bottom: 8),
             color: cs.surfaceBright,
@@ -350,19 +359,35 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
                 Expanded(child: Text('TX #$txId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                 _statusBadge(status),
               ]),
-              subtitle: Text('Kasir: $kasir · $time', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-              children: items.map((item) {
-                final price = _safeNum(item['sold_price']);
-                final disc = _safeNum(item['discount_percent']);
-                final rQty = _safeNum(item['refunded_qty']);
-                final refundVal = price * (1 - disc / 100) * rQty;
-                return ListTile(
-                  dense: true,
-                  title: Text(item['product_name']?.toString() ?? '-', style: const TextStyle(fontSize: 13)),
-                  subtitle: Text('Qty refund: ${rQty.round()} × ${fmtPrice(price)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-                  trailing: Text('-${fmtPrice(refundVal)}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700, fontSize: 13)),
-                );
-              }).toList(),
+              subtitle: Text('Kasir: $kasir · $time — Refund: $totalPcs pcs · -${fmtPrice(txRefundAmount)}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              children: [
+                ...items.map((item) {
+                  final price = _safeNum(item['sold_price']);
+                  final disc = _safeNum(item['discount_percent']);
+                  final rQty = _safeNum(item['refunded_qty']);
+                  final refundVal = price * (1 - disc / 100) * rQty;
+                  return ListTile(
+                    dense: true,
+                    title: Text(item['product_name']?.toString() ?? '-', style: const TextStyle(fontSize: 13)),
+                    subtitle: Text('Refund: ${rQty.round()} pcs × ${fmtPrice(price)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                    trailing: Text('-${fmtPrice(refundVal)}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700, fontSize: 13)),
+                  );
+                }),
+                // Total refund footer
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('Total Dikembalikan ($totalPcs pcs)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.orange.shade800)),
+                    Text('-${fmtPrice(txRefundAmount)}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                  ]),
+                ),
+              ],
             ),
           );
         },

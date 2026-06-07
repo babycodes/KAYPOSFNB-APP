@@ -1233,7 +1233,7 @@ class _KasirScreenState extends State<KasirScreen> {
                         Row(children: [
                           Text('#${tx['id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           if (isVoided) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text('VOID', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)))]
-                          else if (isPartial) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)), child: const Text('REFUND', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)))],
+                          else if (isPartial) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)), child: const Text('PARTIAL REFUND', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)))],
                           const Spacer(),
                           Text('${tx['created_at'] ?? ''}'.split(' ').last.length >= 5 ? '${tx['created_at']}'.split(' ').last.substring(0, 5) : '', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
                         ]),
@@ -1591,7 +1591,7 @@ class _KasirScreenState extends State<KasirScreen> {
                       Row(children: [
                         Text('Transaksi #${txData['id']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         if (status == 'voided') ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)), child: const Text('VOID', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)))]
-                        else if (status == 'partial_refund') ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(6)), child: const Text('REFUND', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)))],
+                        else if (status == 'partial_refund') ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(6)), child: const Text('PARTIAL REFUND', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)))],
                       ]),
                       const SizedBox(height: 4),
                       Text('${txData['created_at'] ?? ''} • ${txData['cashier_name'] ?? ''}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
@@ -1697,7 +1697,7 @@ class _KasirScreenState extends State<KasirScreen> {
                   },
                 )),
                 const Divider(height: 1),
-                // ── Footer Totals + Refund Semua ──
+                // ── Footer Totals + Refund Info + Refund Semua ──
                 Padding(padding: const EdgeInsets.all(16), child: Column(children: [
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('Total', style: TextStyle(fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
@@ -1708,6 +1708,32 @@ class _KasirScreenState extends State<KasirScreen> {
                     Text('Bayar', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                     Text(fmtPrice(txData['paid_amount'] ?? 0), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                   ]),
+                  // Show refund summary if any refunds exist
+                  if (details.any((d) => (d['refunded_qty'] as num?)?.toDouble() != null && (d['refunded_qty'] as num).toDouble() > 0)) ...[
+                    const SizedBox(height: 8),
+                    Builder(builder: (_) {
+                      final refundedPcs = details.fold<int>(0, (s, d) => s + ((d['refunded_qty'] as num?)?.toDouble() ?? 0).round());
+                      final refundedAmount = details.fold<double>(0.0, (s, d) {
+                        final rQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0;
+                        if (rQty <= 0) return s;
+                        final price = (d['sold_price'] as num?)?.toDouble() ?? 0;
+                        final disc = (d['discount_percent'] as num?)?.toDouble() ?? 0;
+                        return s + (price * (1 - disc / 100) * rQty);
+                      });
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                          Text('Refund ($refundedPcs pcs)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.orange.shade800)),
+                          Text('-${fmtPrice(refundedAmount)}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                        ]),
+                      );
+                    }),
+                  ],
                   // ── Refund Semua Button ──
                   if (hasRefundableItems) ...[
                     const SizedBox(height: 12),
