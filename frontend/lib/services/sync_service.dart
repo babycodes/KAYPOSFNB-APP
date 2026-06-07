@@ -401,7 +401,7 @@ class SyncService {
         String dateCol = table == 'users' ? 'created_at' : (table == 'inventory_ledger' ? 'timestamp' : 'updated_at');
         List<Map<String, Object?>> rows;
         if (table == 'inventory_ledger') {
-          rows = await db.query(table, where: "datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT')", whereArgs: [lastPushLocal]);
+          rows = await db.query(table, where: "datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT', 'STOCK_OPNAME', 'WASTE')", whereArgs: [lastPushLocal]);
         } else if (table == 'settings') {
           rows = await db.query(table, where: 'updated_at IS NOT NULL AND datetime(updated_at) > datetime(?)', whereArgs: [lastPushLocal]);
         } else if (table == 'resep' || table == 'paket_items' || table == 'product_addon_categories') {
