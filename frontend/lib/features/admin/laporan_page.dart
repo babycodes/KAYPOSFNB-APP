@@ -382,6 +382,88 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
 
     final totalLoss = wasteItems.fold<double>(0.0, (sum, w) => sum + _safeNum(w['financial_value']).abs());
 
+    // Group product waste by product name + timestamp (same batch)
+    // Raw material waste stays individual
+    final List<Map<String, dynamic>> groupedItems = [];
+    final Map<String, Map<String, dynamic>> productGroups = {};
+
+    for (final w in wasteItems) {
+      final notes = w['notes']?.toString() ?? '';
+      final isProductWaste = notes.startsWith('Produk Gagal:');
+
+      if (isProductWaste) {
+        // Parse product name from notes
+        final content = notes.replaceFirst('Produk Gagal: ', '');
+        final parts = content.split(' - ');
+        final productName = parts.isNotEmpty ? parts[0].trim() : 'Unknown';
+        final timestamp = w['timestamp']?.toString() ?? '';
+        // Group key: productName + timestamp (minute precision)
+        final tsKey = timestamp.length > 16 ? timestamp.substring(0, 16) : timestamp;
+        final groupKey = '$productName|$tsKey';
+
+        if (!productGroups.containsKey(groupKey)) {
+          // Parse reason
+          String reason = '';
+          if (parts.length > 1) {
+            reason = parts.sublist(1).join(' - ').replaceAll(RegExp(r'\[.*?\]'), '').trim();
+          }
+          // Parse reporter
+          String reporter = '-';
+          final byMatch = RegExp(r'\[(?:Oleh|Di-refund oleh|Dilaporkan oleh)[:\s]*([^\]]+)\]', caseSensitive: false).firstMatch(notes);
+          if (byMatch != null) reporter = byMatch.group(1)!.trim();
+
+          productGroups[groupKey] = {
+            'type': 'product',
+            'product_name': productName,
+            'reason': reason,
+            'reporter': reporter,
+            'timestamp': timestamp,
+            'total_loss': 0.0,
+            'ingredients': <Map<String, dynamic>>[],
+          };
+        }
+
+        productGroups[groupKey]!['total_loss'] =
+            (productGroups[groupKey]!['total_loss'] as double) + _safeNum(w['financial_value']).abs();
+        (productGroups[groupKey]!['ingredients'] as List).add({
+          'name': w['bahan_name']?.toString() ?? '-',
+          'qty': _safeNum(w['qty_change']).abs(),
+          'unit': w['bahan_unit']?.toString() ?? '',
+          'loss': _safeNum(w['financial_value']).abs(),
+        });
+      } else {
+        // Raw material — individual entry
+        String reason = '';
+        final isRaw = notes.startsWith('Bahan Rusak:');
+        if (isRaw) {
+          final content = notes.replaceFirst('Bahan Rusak: ', '');
+          final parts = content.split(' - ');
+          if (parts.length > 1) {
+            reason = parts.sublist(1).join(' - ').replaceAll(RegExp(r'\[.*?\]'), '').trim();
+          }
+        }
+        String reporter = '-';
+        final byMatch = RegExp(r'\[(?:Oleh|Di-refund oleh|Dilaporkan oleh)[:\s]*([^\]]+)\]', caseSensitive: false).firstMatch(notes);
+        if (byMatch != null) reporter = byMatch.group(1)!.trim();
+
+        groupedItems.add({
+          'type': 'raw',
+          'bahan_name': w['bahan_name']?.toString() ?? '-',
+          'qty': _safeNum(w['qty_change']).abs(),
+          'unit': w['bahan_unit']?.toString() ?? '',
+          'loss': _safeNum(w['financial_value']).abs(),
+          'reason': reason,
+          'reporter': reporter,
+          'timestamp': w['timestamp']?.toString() ?? '',
+        });
+      }
+    }
+
+    // Add grouped product items
+    final sortedProductGroups = productGroups.values.toList()
+      ..sort((a, b) => (b['timestamp'] as String).compareTo(a['timestamp'] as String));
+    groupedItems.insertAll(0, sortedProductGroups);
+
     return Column(children: [
       Row(children: [
         _summaryChip('${wasteItems.length} entri waste', Colors.red.shade100, Colors.red.shade800),
@@ -390,137 +472,138 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
       ]),
       const SizedBox(height: 12),
       Expanded(child: ListView.builder(
-        itemCount: wasteItems.length,
+        itemCount: groupedItems.length,
         itemBuilder: (_, i) {
-          final w = wasteItems[i];
-          final bahanName = w['bahan_name']?.toString() ?? w['bahan_baku_id']?.toString() ?? '-';
-          final unit = w['bahan_unit']?.toString() ?? '';
-          final qty = _safeNum(w['qty_change']).abs();
-          final loss = _safeNum(w['financial_value']).abs();
-          final notes = w['notes']?.toString() ?? '';
-          final timestamp = w['timestamp']?.toString() ?? '';
+          final item = groupedItems[i];
+          final isProduct = item['type'] == 'product';
+          final timestamp = item['timestamp']?.toString() ?? '';
           final time = timestamp.length > 10 ? timestamp.substring(11, 16) : '';
           final date = timestamp.length >= 10 ? timestamp.substring(0, 10) : '';
+          final reason = item['reason']?.toString() ?? '';
+          final reporter = item['reporter']?.toString() ?? '-';
 
-          // Parse waste type from notes
-          final isProductWaste = notes.startsWith('Produk Gagal:');
-          final isRawWaste = notes.startsWith('Bahan Rusak:');
+          if (isProduct) {
+            // Grouped product waste card
+            final ingredients = item['ingredients'] as List<Map<String, dynamic>>;
+            final totalLoss = item['total_loss'] as double;
 
-          // Parse product/item name and reason from notes
-          String displayTitle = bahanName;
-          String reason = '';
-          String reporter = '-';
-
-          if (isProductWaste) {
-            // Format: "Produk Gagal: ProductName - Reason [Oleh: Name]"
-            final content = notes.replaceFirst('Produk Gagal: ', '');
-            final parts = content.split(' - ');
-            if (parts.isNotEmpty) displayTitle = parts[0].trim();
-            if (parts.length > 1) {
-              reason = parts.sublist(1).join(' - ').replaceAll(RegExp(r'\[.*?\]'), '').trim();
-            }
-          } else if (isRawWaste) {
-            // Format: "Bahan Rusak: BahanName - Reason [Oleh: Name]"
-            final content = notes.replaceFirst('Bahan Rusak: ', '');
-            final parts = content.split(' - ');
-            if (parts.length > 1) {
-              reason = parts.sublist(1).join(' - ').replaceAll(RegExp(r'\[.*?\]'), '').trim();
-            }
-          }
-
-          // Parse reporter
-          final byMatch = RegExp(r'\[(?:Oleh|Di-refund oleh|Dilaporkan oleh)[:\s]*([^\]]+)\]', caseSensitive: false).firstMatch(notes);
-          if (byMatch != null) reporter = byMatch.group(1)!.trim();
-
-          final qtyStr = qty == qty.roundToDouble() ? qty.round().toString() : qty.toStringAsFixed(2);
-
-          return Card(
-            elevation: 0, margin: const EdgeInsets.only(bottom: 8),
-            color: cs.surfaceBright,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.red.shade200)),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                // Header row: icon + title + loss
-                Row(children: [
-                  Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      color: isProductWaste ? Colors.orange.shade50 : Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      isProductWaste ? Icons.restaurant : Icons.science_outlined,
-                      size: 20,
-                      color: isProductWaste ? Colors.orange.shade700 : Colors.red.shade700,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    // Type badge
+            return Card(
+              elevation: 0, margin: const EdgeInsets.only(bottom: 8),
+              color: cs.surfaceBright,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.orange.shade200)),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isProductWaste ? Colors.orange.shade100 : Colors.red.shade100,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        isProductWaste ? 'Produk Jadi' : 'Bahan Mentah',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold,
-                          color: isProductWaste ? Colors.orange.shade800 : Colors.red.shade800),
-                      ),
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(10)),
+                      child: Icon(Icons.restaurant, size: 20, color: Colors.orange.shade700),
                     ),
-                    const SizedBox(height: 4),
-                    // Title
-                    Text(
-                      isProductWaste ? displayTitle : bahanName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  ])),
-                  Text('-${fmtPrice(loss)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red.shade700)),
-                ]),
-
-                const SizedBox(height: 8),
-                // Detail row
-                Padding(
-                  padding: const EdgeInsets.only(left: 52),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    // For product waste: show ingredient detail
-                    if (isProductWaste)
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        margin: const EdgeInsets.only(bottom: 4),
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '📦 Bahan: $bahanName · $qtyStr $unit terpakai',
-                          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(4)),
+                        child: Text('Produk Jadi', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
                       ),
-                    // For raw waste: show qty directly
-                    if (!isProductWaste)
-                      Text('$qtyStr $unit terbuang', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                    // Reason
-                    if (reason.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text('Alasan: $reason', style: TextStyle(fontSize: 12, color: Colors.red.shade600)),
-                      ),
-                    // Footer: reporter + time
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '${reporter != '-' ? 'Oleh: $reporter' : ''}${reporter != '-' && time.isNotEmpty ? ' · ' : ''}$date $time',
-                        style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
-                      ),
-                    ),
+                      const SizedBox(height: 4),
+                      Text(item['product_name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ])),
+                    Text('-${fmtPrice(totalLoss)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red.shade700)),
                   ]),
-                ),
-              ]),
-            ),
-          );
+                  const SizedBox(height: 8),
+                  // Ingredient list
+                  Padding(
+                    padding: const EdgeInsets.only(left: 52),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('📦 Bahan terpakai:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
+                          const SizedBox(height: 4),
+                          ...ingredients.map((ing) {
+                            final qtyStr = ing['qty'] == (ing['qty'] as double).roundToDouble()
+                                ? (ing['qty'] as double).round().toString()
+                                : (ing['qty'] as double).toStringAsFixed(2);
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 2),
+                              child: Row(children: [
+                                Text('• ${ing['name']}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                                const Spacer(),
+                                Text('$qtyStr ${ing['unit']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+                                const SizedBox(width: 8),
+                                Text('-${fmtPrice(ing['loss'] as double)}', style: TextStyle(fontSize: 11, color: Colors.red.shade600)),
+                              ]),
+                            );
+                          }),
+                        ]),
+                      ),
+                      if (reason.isNotEmpty)
+                        Padding(padding: const EdgeInsets.only(top: 4), child: Text('Alasan: $reason', style: TextStyle(fontSize: 12, color: Colors.red.shade600))),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '${reporter != '-' ? 'Oleh: $reporter' : ''}${reporter != '-' && time.isNotEmpty ? ' · ' : ''}$date $time',
+                          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ]),
+              ),
+            );
+          } else {
+            // Raw material waste card
+            final qtyVal = item['qty'] as double;
+            final qtyStr = qtyVal == qtyVal.roundToDouble() ? qtyVal.round().toString() : qtyVal.toStringAsFixed(2);
+
+            return Card(
+              elevation: 0, margin: const EdgeInsets.only(bottom: 8),
+              color: cs.surfaceBright,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.red.shade200)),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(10)),
+                      child: Icon(Icons.science_outlined, size: 20, color: Colors.red.shade700),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(4)),
+                        child: Text('Bahan Mentah', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade800)),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(item['bahan_name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ])),
+                    Text('-${fmtPrice(item['loss'] as double)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red.shade700)),
+                  ]),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 52),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('$qtyStr ${item['unit']} terbuang', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                      if (reason.isNotEmpty)
+                        Padding(padding: const EdgeInsets.only(top: 2), child: Text('Alasan: $reason', style: TextStyle(fontSize: 12, color: Colors.red.shade600))),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '${reporter != '-' ? 'Oleh: $reporter' : ''}${reporter != '-' && time.isNotEmpty ? ' · ' : ''}$date $time',
+                          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ]),
+              ),
+            );
+          }
         },
       )),
     ]);

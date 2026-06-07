@@ -402,7 +402,14 @@ class SyncService {
         String dateCol = table == 'users' ? 'created_at' : (table == 'inventory_ledger' ? 'timestamp' : 'updated_at');
         List<Map<String, Object?>> rows;
         if (table == 'inventory_ledger') {
-          rows = await db.query(table, where: "datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT')", whereArgs: [lastPushLocal]);
+          // Full re-push (after restore): send ALL types including SALE, WASTE, REFUND
+          // Incremental push: only RESTOCK + ADJUSTMENT (SALE/WASTE/REFUND go via pushTransactions)
+          final isFullPush = lastPush == '1970-01-01T00:00:00.000Z';
+          if (isFullPush) {
+            rows = await db.query(table, where: "datetime($dateCol) > datetime(?)", whereArgs: [lastPushLocal]);
+          } else {
+            rows = await db.query(table, where: "datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT')", whereArgs: [lastPushLocal]);
+          }
         } else if (table == 'transaction_details') {
           // transaction_details has no updated_at; pull all details for changed transactions
           if (changes.containsKey('transactions')) {
