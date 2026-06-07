@@ -8,38 +8,36 @@ class LaporanPage extends StatefulWidget {
   State<LaporanPage> createState() => _LaporanPageState();
 }
 
-class _LaporanPageState extends State<LaporanPage> {
-  List<dynamic> transactions = [];
-  int total = 0;
-  double totalSalesAmount = 0;
-  
-  String activeTab = 'day'; // 'day', 'month', 'year'
-  
-  // Day filter — date range
+class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStateMixin {
+  late TabController _tabCtrl;
+
+  // === Shared date state ===
   late DateTimeRange _dateRange;
-  // Month filter
-  late int _selectedMonth;
-  late int _selectedYear;
-  // Year filter
-  late int _selectedYearOnly;
-  
-  int? expandedId;
-  List<dynamic> expandedDetails = [];
-  
-  // Monthly/Yearly summary
-  Map<String, dynamic> _periodSummary = {};
-  List<dynamic> _periodBreakdown = [];
+
+  // === Penjualan data ===
+  List<dynamic> transactions = [];
+  double totalSalesAmount = 0;
+
+  // === Refund data ===
+  List<dynamic> refundItems = [];
+
+  // === Waste data ===
+  List<dynamic> wasteItems = [];
+
+  bool isLoading = false;
 
   @override
   void initState() {
     super.initState();
+    _tabCtrl = TabController(length: 3, vsync: this);
+    _tabCtrl.addListener(() { if (!_tabCtrl.indexIsChanging) _loadData(); });
     final now = DateTime.now();
     _dateRange = DateTimeRange(start: now, end: now);
-    _selectedMonth = now.month;
-    _selectedYear = now.year;
-    _selectedYearOnly = now.year;
     _loadData();
   }
+
+  @override
+  void dispose() { _tabCtrl.dispose(); super.dispose(); }
 
   static double _safeNum(dynamic v, [double fallback = 0.0]) {
     if (v == null) return fallback;
@@ -48,506 +46,394 @@ class _LaporanPageState extends State<LaporanPage> {
   }
 
   String _fmtDate(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  String _fmtDateDisplay(DateTime d) => '${d.day}/${d.month}/${d.year}';
 
   Future<void> _loadData() async {
+    setState(() => isLoading = true);
+    final startStr = _fmtDate(_dateRange.start);
+    final endStr = _fmtDate(_dateRange.end);
     try {
-      if (activeTab == 'day') {
-        final startStr = _fmtDate(_dateRange.start);
-        final endStr = _fmtDate(_dateRange.end);
-        final res = await Api.get('/transactions?date_start=$startStr&date_end=$endStr&limit=999');
-        final data = (res['data'] is List) ? res['data'] as List : [];
-        double sales = 0;
-        for (var tx in data) { sales += _safeNum(tx['total_amount']); }
-        if (mounted) {
-          setState(() {
-          transactions = data;
-          total = data.length;
-          totalSalesAmount = sales;
-        });
-        }
-      } else if (activeTab == 'month') {
-        final ms = _selectedMonth.toString().padLeft(2, '0');
-        final res = await Api.get('/reports/monthly?month=$ms&year=$_selectedYear');
-        if (mounted) {
-          setState(() {
-          _periodSummary = res['summary'] ?? {};
-          _periodBreakdown = res['daily'] ?? [];
-        });
-        }
-      } else {
-        // Year: aggregate all months
-        Map<String, dynamic> combinedSummary = {'total_transactions': 0, 'total_sales': 0.0};
-        List<dynamic> combinedDaily = [];
-        for (int m = 1; m <= 12; m++) {
-          final ms = m.toString().padLeft(2, '0');
-          try {
-            final r = await Api.get('/reports/monthly?month=$ms&year=$_selectedYearOnly');
-            final summ = r['summary'] ?? {};
-            final txCount = _safeNum(summ['total_transactions']).round();
-            if (txCount > 0) {
-              combinedSummary['total_transactions'] = (combinedSummary['total_transactions'] as num) + txCount;
-              combinedSummary['total_sales'] = (combinedSummary['total_sales'] as num) + _safeNum(summ['total_sales']);
-              combinedDaily.add({
-                'date': '$_selectedYearOnly-$ms',
-                'count': txCount,
-                'sales': _safeNum(summ['total_sales']),
-              });
-            }
-          } catch (_) {}
-        }
-        if (mounted) {
-          setState(() {
-          _periodSummary = combinedSummary;
-          _periodBreakdown = combinedDaily;
-        });
-        }
+      switch (_tabCtrl.index) {
+        case 0: // Penjualan
+          final res = await Api.get('/transactions?date_start=$startStr&date_end=$endStr&limit=999');
+          final data = (res['data'] is List) ? res['data'] as List : [];
+          double sales = 0;
+          for (var tx in data) { sales += _safeNum(tx['total_amount']); }
+          if (mounted) setState(() { transactions = data; totalSalesAmount = sales; });
+          break;
+        case 1: // Refund
+          final res = await Api.get('/reports/refund-history?date_start=$startStr&date_end=$endStr');
+          if (mounted) setState(() => refundItems = (res is List) ? res : []);
+          break;
+        case 2: // Waste
+          final res = await Api.get('/reports/waste-history?date_start=$startStr&date_end=$endStr');
+          if (mounted) setState(() => wasteItems = (res is List) ? res : []);
+          break;
       }
     } catch (_) {}
+    if (mounted) setState(() => isLoading = false);
   }
 
+  Future<void> _pickDate() async {
+    final result = await showDateRangePicker(
+      context: context, firstDate: DateTime(2024), lastDate: DateTime.now(),
+      initialDateRange: _dateRange,
+    );
+    if (result != null) { setState(() => _dateRange = result); _loadData(); }
+  }
+
+  // ── Detail Transaksi Dialog ──
   Future<void> _showDetailDialog(Map<String, dynamic> tx) async {
     try {
       final res = await Api.get('/transactions/${tx['id']}');
       var txData = res['transaction'] as Map<String, dynamic>? ?? tx;
       var details = res['details'] as List? ?? [];
-      
       if (!mounted) return;
       final cs = Theme.of(context).colorScheme;
-      
-      showDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (ctx) {
-          final status = txData['status']?.toString() ?? 'completed';
-          return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            child: Container(
-                width: 520,
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header with status badge
-                    Row(
-                      children: [
-                        Expanded(child: Text('Detail Transaksi #${txData['id']}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: cs.onSurface))),
-                        if (status == 'voided')
-                          Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(8)),
-                            child: Text('VOID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red.shade800)))
-                        else if (status == 'partial_refund')
-                          Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(8)),
-                            child: Text('PARTIAL REFUND', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade800))),
-                        const SizedBox(width: 8),
-                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      elevation: 0,
-                      color: cs.surfaceContainerHighest,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Text('Waktu', style: TextStyle(color: cs.onSurfaceVariant)),
-                              Text('${txData['created_at']}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                            ]),
-                            const SizedBox(height: 8),
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Text('Kasir', style: TextStyle(color: cs.onSurfaceVariant)),
-                              Text(txData['cashier_name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.w600)),
-                            ]),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('Daftar Produk', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-                    const SizedBox(height: 8),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: details.length,
-                        separatorBuilder: (ctx, idx) => Divider(color: cs.outlineVariant.withValues(alpha: 0.5)),
-                        itemBuilder: (ctx, i) {
-                          final d = details[i];
-                          final qty = (d['quantity'] as num?)?.toDouble() ?? 0;
-                          final refundedQty = (d['refunded_qty'] as num?)?.toDouble() ?? 0;
-                          final soldPrice = (d['sold_price'] as num?)?.toDouble() ?? 0;
-                          final discountPct = (d['discount_percent'] as num?)?.toDouble() ?? 0;
-                          final effectivePrice = soldPrice * (1 - discountPct / 100);
-                          final effectiveSubtotal = effectivePrice * (qty - refundedQty);
-                          final isFullyRefunded = refundedQty >= qty;
 
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6.0),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(d['product_name']?.toString() ?? '-', style: TextStyle(fontWeight: FontWeight.w600, decoration: isFullyRefunded ? TextDecoration.lineThrough : null, color: isFullyRefunded ? Colors.grey : null)),
-                                      Row(children: [
-                                        Text('${qty.round()} ${d['unit_used'] ?? 'pcs'} × ${fmtPrice(soldPrice)}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                                        if (refundedQty > 0)
-                                          Text('  (refund: ${refundedQty.round()})', style: TextStyle(fontSize: 11, color: Colors.red.shade600, fontWeight: FontWeight.bold)),
-                                      ]),
-                                    ],
-                                  ),
-                                ),
-                                Text(fmtPrice(effectiveSubtotal), style: TextStyle(fontWeight: FontWeight.bold, decoration: isFullyRefunded ? TextDecoration.lineThrough : null, color: isFullyRefunded ? Colors.grey : null)),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      elevation: 0,
-                      color: cs.surfaceContainerHighest,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            if (txData['discount_total'] != null && txData['discount_total'] > 0) ...[
-                              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                                Text('Diskon', style: TextStyle(color: cs.onSurfaceVariant)),
-                                Text('-${fmtPrice(txData['discount_total'])}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                              ]),
-                              const SizedBox(height: 8),
-                            ],
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Text('Total Akhir', style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.bold)),
-                              Text(fmtPrice(txData['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: status == 'voided' ? cs.error : cs.primary)),
-                            ]),
-                            const SizedBox(height: 8),
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Text('Bayar', style: TextStyle(color: cs.onSurfaceVariant)),
-                              Text(fmtPrice(txData['paid_amount']), style: const TextStyle(fontWeight: FontWeight.bold)),
-                            ]),
-                            const SizedBox(height: 8),
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Text('Kembali', style: TextStyle(color: cs.onSurfaceVariant)),
-                              Text(fmtPrice(txData['change_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: cs.secondary)),
-                            ]),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-        }
-      );
-    } catch (e) {
-      if (mounted) showToast(context, 'Gagal memuat detail transaksi');
-    }
-  }
-
-  void _switchTab(String tab) {
-    setState(() { activeTab = tab; expandedId = null; });
-    _loadData();
-  }
-
-  Future<void> _pickDay() async {
-    final result = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2024),
-      lastDate: DateTime.now(),
-      initialDateRange: _dateRange,
-    );
-    if (result != null) {
-      setState(() => _dateRange = result);
-      _loadData();
-    }
-  }
-
-  void _pickMonth() {
-    final cs = Theme.of(context).colorScheme;
-    showDialog(context: context, builder: (_) {
-      int tempMonth = _selectedMonth;
-      int tempYear = _selectedYear;
-      return StatefulBuilder(builder: (ctx, setDialogState) {
-        return AlertDialog(
-          title: const Text('Pilih Bulan & Tahun'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => setDialogState(() => tempYear--)),
-              Expanded(child: Text('$tempYear', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
-              IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => setDialogState(() => tempYear++)),
-            ]),
-            const SizedBox(height: 12),
-            GridView.count(crossAxisCount: 4, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 6, crossAxisSpacing: 6,
-              children: List.generate(12, (i) {
-                final m = i + 1;
-                final isSelected = m == tempMonth;
-                final names = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-                return InkWell(onTap: () => setDialogState(() => tempMonth = m),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isSelected ? cs.primary : cs.surfaceContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(names[i], style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isSelected ? cs.onPrimary : cs.onSurface)),
-                  ));
-              }),
-            ),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-            FilledButton(onPressed: () {
-              Navigator.pop(ctx);
-              setState(() { _selectedMonth = tempMonth; _selectedYear = tempYear; });
-              _loadData();
-            }, child: const Text('Terapkan')),
-          ],
+      showDialog(context: context, builder: (ctx) {
+        final status = txData['status']?.toString() ?? 'completed';
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 500, maxHeight: MediaQuery.sizeOf(context).height * 0.85),
+            child: Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [
+              // Header
+              Row(children: [
+                Expanded(child: Text('Transaksi #${txData['id']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                _statusBadge(status),
+                const SizedBox(width: 4),
+                IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.pop(ctx)),
+              ]),
+              const Divider(height: 20),
+              // Info
+              _infoRow('Waktu', '${txData['created_at']}', cs),
+              _infoRow('Kasir', txData['cashier_name'] ?? '-', cs),
+              _infoRow('Pembayaran', (txData['payment_method'] ?? '-').toString().toUpperCase(), cs),
+              const SizedBox(height: 12),
+              // Items
+              Flexible(child: ListView.separated(
+                shrinkWrap: true, itemCount: details.length,
+                separatorBuilder: (_, __) => Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                itemBuilder: (_, i) {
+                  final d = details[i];
+                  final qty = _safeNum(d['quantity']);
+                  final refQty = _safeNum(d['refunded_qty']);
+                  final price = _safeNum(d['sold_price']);
+                  final disc = _safeNum(d['discount_percent']);
+                  final effectivePrice = price * (1 - disc / 100);
+                  final sub = effectivePrice * (qty - refQty);
+                  final fullyRefunded = refQty >= qty;
+                  return Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Row(children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(d['product_name']?.toString() ?? '-', style: TextStyle(fontWeight: FontWeight.w600, decoration: fullyRefunded ? TextDecoration.lineThrough : null, color: fullyRefunded ? Colors.grey : null)),
+                      Text('${qty.round()} × ${fmtPrice(price)}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                      if (refQty > 0) Text('Refund: ${refQty.round()} pcs', style: TextStyle(fontSize: 11, color: Colors.red.shade600, fontWeight: FontWeight.bold)),
+                    ])),
+                    Text(fmtPrice(sub), style: TextStyle(fontWeight: FontWeight.bold, color: fullyRefunded ? Colors.grey : cs.primary)),
+                  ]));
+                },
+              )),
+              const Divider(height: 20),
+              // Totals
+              _infoRow('Total', fmtPrice(txData['total_amount']), cs, bold: true, color: status == 'voided' ? cs.error : cs.primary),
+              if (_safeNum(txData['discount_total']) > 0)
+                _infoRow('Diskon', '-${fmtPrice(txData['discount_total'])}', cs, color: Colors.green),
+              _infoRow('Bayar', fmtPrice(txData['paid_amount']), cs),
+              _infoRow('Kembali', fmtPrice(txData['change_amount']), cs, color: cs.secondary),
+            ])),
+          ),
         );
       });
-    });
+    } catch (_) { if (mounted) showToast(context, 'Gagal memuat detail'); }
   }
 
-  void _pickYear() {
-    showDialog(context: context, builder: (_) {
-      int tempYear = _selectedYearOnly;
-      return StatefulBuilder(builder: (ctx, setDialogState) {
-        return AlertDialog(
-          title: const Text('Pilih Tahun'),
-          content: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => setDialogState(() => tempYear--)),
-            Text('$tempYear', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 28)),
-            IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => setDialogState(() => tempYear++)),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-            FilledButton(onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _selectedYearOnly = tempYear);
-              _loadData();
-            }, child: const Text('Terapkan')),
-          ],
-        );
-      });
-    });
+  Widget _statusBadge(String status) {
+    if (status == 'voided') return _badge('VOID', Colors.red);
+    if (status == 'partial_refund') return _badge('REFUND', Colors.orange);
+    return const SizedBox.shrink();
   }
+
+  Widget _badge(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+    child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+  );
+
+  Widget _infoRow(String label, String value, ColorScheme cs, {bool bold = false, Color? color}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      Text(label, style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+      Text(value, style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.bold : FontWeight.w600, color: color)),
+    ]),
+  );
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isMobile = MediaQuery.sizeOf(context).width < 768;
-    final months = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // Tab Bar + Date Picker
-      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        Container(
-          decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5))),
-          padding: const EdgeInsets.all(4),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            _tabBtn('Harian', 'day', cs),
-            _tabBtn('Bulanan', 'month', cs),
-            _tabBtn('Tahunan', 'year', cs),
-          ]),
+    return Column(children: [
+      // Top bar: Tabs + Date picker
+      Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(children: [
+        Expanded(child: TabBar(
+          controller: _tabCtrl,
+          labelColor: cs.primary, unselectedLabelColor: cs.onSurfaceVariant,
+          indicatorSize: TabBarIndicatorSize.label,
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          tabs: const [Tab(text: 'Penjualan'), Tab(text: 'Refund'), Tab(text: 'Waste')],
+        )),
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          onPressed: _pickDate,
+          icon: const Icon(Icons.date_range, size: 16),
+          label: Text(
+            _dateRange.start == _dateRange.end
+              ? _fmtDateDisplay(_dateRange.start)
+              : '${_fmtDateDisplay(_dateRange.start)} — ${_fmtDateDisplay(_dateRange.end)}',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+          style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
         ),
-        // Smart date picker button
-        if (activeTab == 'day')
-          FilledButton.icon(
-            onPressed: _pickDay,
-            icon: const Icon(Icons.date_range, size: 16),
-            label: Text(_dateRange.start == _dateRange.end
-              ? '${_dateRange.start.day}/${_dateRange.start.month}/${_dateRange.start.year}'
-              : '${_dateRange.start.day}/${_dateRange.start.month} — ${_dateRange.end.day}/${_dateRange.end.month}/${_dateRange.end.year}',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-            style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-          )
-        else if (activeTab == 'month')
-          FilledButton.icon(
-            onPressed: _pickMonth,
-            icon: const Icon(Icons.calendar_month, size: 16),
-            label: Text('${months[_selectedMonth]} $_selectedYear', style: const TextStyle(fontWeight: FontWeight.bold)),
-            style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-          )
-        else
-          FilledButton.icon(
-            onPressed: _pickYear,
-            icon: const Icon(Icons.date_range, size: 16),
-            label: Text('$_selectedYearOnly', style: const TextStyle(fontWeight: FontWeight.bold)),
-            style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-          ),
-      ]),
-      const SizedBox(height: 16),
-
-      // DAILY view
-      if (activeTab == 'day') ...[
-        // Summary bar
-        Wrap(spacing: 12, runSpacing: 8, children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(color: cs.secondaryContainer.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(12)),
-            child: Text('$total transaksi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.secondary)),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(color: cs.primaryContainer.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(12)),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text('Total: ', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-              Text(fmtPrice(totalSalesAmount), style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.primary)),
-            ]),
-          ),
-        ]),
-        const SizedBox(height: 16),
-        if (transactions.isEmpty)
-          Center(child: Padding(padding: const EdgeInsets.all(32), child: Text('Tidak ada transaksi', style: TextStyle(color: cs.onSurfaceVariant))))
-        else
-          Expanded(child: isMobile ? _buildDailyMobileList(cs) : _buildDailyDesktopTable(cs)),
-      ],
-
-      // MONTHLY / YEARLY view
-      if (activeTab != 'day') ...[
-        Row(children: [
-          Expanded(child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: cs.primaryContainer.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(16)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('TOTAL PENJUALAN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
-              const SizedBox(height: 4),
-              FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
-                child: Text(fmtPrice(_periodSummary['total_sales'] ?? 0), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: cs.primary))),
-            ]))),
-          const SizedBox(width: 12),
-          Expanded(child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: cs.secondaryContainer.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(16)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('JUMLAH TRANSAKSI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
-              const SizedBox(height: 4),
-              Text('${_periodSummary['total_transactions'] ?? 0}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: cs.secondary)),
-            ]))),
-        ]),
-        const SizedBox(height: 16),
-        if (_periodBreakdown.isEmpty)
-          Center(child: Padding(padding: const EdgeInsets.all(32), child: Text('Tidak ada data', style: TextStyle(color: cs.onSurfaceVariant))))
-        else
-          Expanded(child: _buildPeriodTable(cs)),
-      ],
+      ])),
+      // Content
+      Expanded(child: isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : TabBarView(controller: _tabCtrl, physics: const NeverScrollableScrollPhysics(), children: [
+            _buildPenjualanTab(cs),
+            _buildRefundTab(cs),
+            _buildWasteTab(cs),
+          ]),
+      ),
     ]);
   }
 
-  Widget _tabBtn(String label, String val, ColorScheme cs) {
-    final active = activeTab == val;
-    return InkWell(onTap: () => _switchTab(val), borderRadius: BorderRadius.circular(8),
-      child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(color: active ? cs.primary : Colors.transparent, borderRadius: BorderRadius.circular(8)),
-        child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: active ? cs.onPrimary : cs.onSurfaceVariant))));
+  // ══════════════════════════════════════════
+  // TAB 1: PENJUALAN
+  // ══════════════════════════════════════════
+  Widget _buildPenjualanTab(ColorScheme cs) {
+    if (transactions.isEmpty) return _emptyState('Tidak ada transaksi', Icons.receipt_long);
+    final isMobile = MediaQuery.sizeOf(context).width < 768;
+    return Column(children: [
+      // Summary chips
+      Row(children: [
+        _summaryChip('${transactions.length} transaksi', cs.secondaryContainer, cs.secondary),
+        const SizedBox(width: 8),
+        _summaryChip('Total: ${fmtPrice(totalSalesAmount)}', cs.primaryContainer, cs.primary),
+      ]),
+      const SizedBox(height: 12),
+      Expanded(child: isMobile ? _penjualanMobileList(cs) : _penjualanDesktopTable(cs)),
+    ]);
   }
 
-  // --- Period Table (Monthly/Yearly breakdown) ---
-  Widget _buildPeriodTable(ColorScheme cs) {
-    return Container(decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outlineVariant)),
-      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: ListView(children: [
-        DataTable(
-          headingRowColor: WidgetStatePropertyAll(cs.surfaceContainer),
-          columns: [
-            DataColumn(label: Text(activeTab == 'month' ? 'Tanggal' : 'Bulan', style: const TextStyle(fontWeight: FontWeight.bold))),
-            const DataColumn(label: Text('Transaksi', style: TextStyle(fontWeight: FontWeight.bold))),
-            const DataColumn(label: Text('Penjualan', style: TextStyle(fontWeight: FontWeight.bold))),
-          ],
-          rows: _periodBreakdown.map((d) => DataRow(cells: [
-            DataCell(Text(d['date']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600))),
-            DataCell(Text('${d['count'] ?? 0}')),
-            DataCell(Text(fmtPrice(d['sales'] ?? 0), style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary))),
-          ])).toList(),
-        )
-      ])));
-  }
+  Widget _summaryChip(String text, Color bg, Color fg) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    decoration: BoxDecoration(color: bg.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(10)),
+    child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: fg)),
+  );
 
-  // --- Daily Desktop Table ---
-  Widget _buildDailyDesktopTable(ColorScheme cs) {
-    return Container(decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outlineVariant)),
-      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: ListView(children: [
+  Widget _penjualanDesktopTable(ColorScheme cs) {
+    return Container(
+      decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(14), border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5))),
+      child: ClipRRect(borderRadius: BorderRadius.circular(14), child: ListView(children: [
         DataTable(
           headingRowColor: WidgetStatePropertyAll(cs.surfaceContainer),
+          columnSpacing: 20,
           columns: const [
             DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Waktu')),
-            DataColumn(label: Text('Kasir')),
-            DataColumn(label: Text('Total')),
-            DataColumn(label: Text('Diskon')),
-            DataColumn(label: Text('Bayar')),
-            DataColumn(label: Text('Kembali')),
+            DataColumn(label: Text('Waktu', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Kasir', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Metode', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
           ],
-          rows: _buildDailyRows(cs),
-        )
-      ])));
+          rows: transactions.map((tx) {
+            final ca = (tx['created_at'] ?? '').toString();
+            final time = ca.length > 10 ? ca.substring(11, 16) : ca;
+            final status = tx['status']?.toString() ?? 'completed';
+            return DataRow(
+              color: WidgetStateProperty.resolveWith((s) {
+                if (status == 'voided') return Colors.red.shade50.withValues(alpha: 0.3);
+                if (status == 'partial_refund') return Colors.orange.shade50.withValues(alpha: 0.3);
+                return null;
+              }),
+              cells: [
+                DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text('#${tx['id']}', style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: cs.onSurfaceVariant)))),
+                DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(time))),
+                DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(tx['cashier_name'] ?? '-'))),
+                DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(fmtPrice(tx['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: status == 'voided' ? cs.error : cs.primary)))),
+                DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text((tx['payment_method'] ?? '-').toString().toUpperCase(), style: const TextStyle(fontSize: 12)))),
+                DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: _statusBadge(status))),
+              ],
+            );
+          }).toList(),
+        ),
+      ])),
+    );
   }
 
-  List<DataRow> _buildDailyRows(ColorScheme cs) {
-    List<DataRow> rows = [];
-    for (var tx in transactions) {
-      final ca = (tx['created_at'] ?? '').toString();
-      final time = ca.contains(' ') ? ca.split(' ')[1] : ca;
-      final txStatus = tx['status']?.toString() ?? 'completed';
-      rows.add(DataRow(
-        color: WidgetStateProperty.resolveWith((states) {
-          if (txStatus == 'voided') return Colors.red.shade50.withValues(alpha: 0.3);
-          if (txStatus == 'partial_refund') return Colors.orange.shade50.withValues(alpha: 0.3);
-          return states.contains(WidgetState.hovered) ? cs.surfaceContainer.withValues(alpha: 0.3) : null;
-        }),
-        cells: [
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('#${tx['id']}', style: TextStyle(color: cs.onSurfaceVariant, fontFamily: 'monospace')),
-            if (txStatus == 'voided') ...[const SizedBox(width: 4), Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text('VOID', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)))]
-            else if (txStatus == 'partial_refund') ...[const SizedBox(width: 4), Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)), child: const Text('REFUND', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)))],
-          ]))),
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(time))),
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(tx['cashier_name'] ?? '-'))),
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(fmtPrice(tx['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: txStatus == 'voided' ? cs.error : cs.primary, decoration: txStatus == 'voided' ? TextDecoration.lineThrough : null)),
-            if (tx['refunded_amount'] != null && tx['refunded_amount'] > 0)
-              Text('- ${fmtPrice(tx['refunded_amount'])} (Refund)', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
-          ]))),
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(tx['discount_total'] != null && tx['discount_total'] > 0 ? fmtPrice(tx['discount_total']) : '-', style: const TextStyle(color: Colors.green, fontSize: 13)),
-            if (tx['discount_total'] != null && tx['discount_total'] > 0)
-              Text('Oleh: ${tx['discount_by'] == 'system' ? 'Sistem' : tx['discount_by'] == 'stacked' ? 'Sistem+Kasir' : tx['cashier_name']}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-          ]))),
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(fmtPrice(tx['paid_amount'])))),
-          DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(fmtPrice(tx['change_amount']), style: TextStyle(color: cs.secondary)))),
-        ]
-      ));
-    }
-    return rows;
-  }
-
-  // --- Daily Mobile List ---
-  Widget _buildDailyMobileList(ColorScheme cs) {
-    return ListView.builder(itemCount: transactions.length, itemBuilder: (ctx, i) {
+  Widget _penjualanMobileList(ColorScheme cs) {
+    return ListView.builder(itemCount: transactions.length, itemBuilder: (_, i) {
       final tx = transactions[i];
       final ca = (tx['created_at'] ?? '').toString();
-      final time = ca.contains(' ') ? ca.split(' ')[1] : ca;
-
-      return Container(margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(color: cs.surfaceBright, borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant)),
-        child: InkWell(onTap: () => _showDetailDialog(tx), borderRadius: BorderRadius.circular(12), child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('#${tx['id']}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontFamily: 'monospace')),
-            Text(time, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-          ]),
-          const SizedBox(height: 4),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(tx['cashier_name'] ?? '-', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+      final time = ca.length > 10 ? ca.substring(11, 16) : ca;
+      final status = tx['status']?.toString() ?? 'completed';
+      return Card(
+        elevation: 0, margin: const EdgeInsets.only(bottom: 6),
+        color: status == 'voided' ? Colors.red.shade50 : status == 'partial_refund' ? Colors.orange.shade50 : cs.surfaceBright,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+        child: InkWell(onTap: () => _showDetailDialog(tx), borderRadius: BorderRadius.circular(12),
+          child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text('#${tx['id']}', style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: cs.onSurfaceVariant)),
+                const SizedBox(width: 6),
+                _statusBadge(status),
+              ]),
+              const SizedBox(height: 4),
+              Text(tx['cashier_name'] ?? '-', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+            ])),
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text(fmtPrice(tx['total_amount']), style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.primary)),
-              if (tx['refunded_amount'] != null && tx['refunded_amount'] > 0)
-                Text('- ${fmtPrice(tx['refunded_amount'])} (Refund)', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+              Text(fmtPrice(tx['total_amount']), style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary)),
+              Text(time, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
             ]),
-          ]),
-        ]))));
+          ]))),
+      );
     });
   }
+
+  // ══════════════════════════════════════════
+  // TAB 2: REFUND
+  // ══════════════════════════════════════════
+  Widget _buildRefundTab(ColorScheme cs) {
+    if (refundItems.isEmpty) return _emptyState('Tidak ada refund', Icons.undo);
+
+    // Group by tx_id
+    final Map<String, List<dynamic>> grouped = {};
+    for (var item in refundItems) {
+      final txId = item['tx_id']?.toString() ?? '?';
+      grouped.putIfAbsent(txId, () => []).add(item);
+    }
+
+    final totalRefundAmount = refundItems.fold<double>(0.0, (sum, item) {
+      final price = _safeNum(item['sold_price']);
+      final disc = _safeNum(item['discount_percent']);
+      final rQty = _safeNum(item['refunded_qty']);
+      return sum + (price * (1 - disc / 100) * rQty);
+    });
+
+    return Column(children: [
+      Row(children: [
+        _summaryChip('${grouped.length} transaksi refund', Colors.orange.shade100, Colors.orange.shade800),
+        const SizedBox(width: 8),
+        _summaryChip('Total: -${fmtPrice(totalRefundAmount)}', Colors.red.shade100, Colors.red.shade700),
+      ]),
+      const SizedBox(height: 12),
+      Expanded(child: ListView.builder(
+        itemCount: grouped.keys.length,
+        itemBuilder: (_, i) {
+          final txId = grouped.keys.elementAt(i);
+          final items = grouped[txId]!;
+          final first = items.first;
+          final kasir = first['cashier_name']?.toString() ?? '-';
+          final status = first['status']?.toString() ?? '';
+          final updatedAt = first['updated_at']?.toString() ?? '';
+          final time = updatedAt.length > 10 ? updatedAt.substring(11, 16) : updatedAt;
+
+          return Card(
+            elevation: 0, margin: const EdgeInsets.only(bottom: 8),
+            color: cs.surfaceBright,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.orange.shade200)),
+            child: ExpansionTile(
+              shape: const Border(),
+              tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              leading: Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(10)),
+                child: Icon(Icons.undo, size: 18, color: Colors.orange.shade700),
+              ),
+              title: Row(children: [
+                Expanded(child: Text('TX #$txId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                _statusBadge(status),
+              ]),
+              subtitle: Text('Kasir: $kasir · $time', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              children: items.map((item) {
+                final price = _safeNum(item['sold_price']);
+                final disc = _safeNum(item['discount_percent']);
+                final rQty = _safeNum(item['refunded_qty']);
+                final refundVal = price * (1 - disc / 100) * rQty;
+                return ListTile(
+                  dense: true,
+                  title: Text(item['product_name']?.toString() ?? '-', style: const TextStyle(fontSize: 13)),
+                  subtitle: Text('Qty refund: ${rQty.round()} × ${fmtPrice(price)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                  trailing: Text('-${fmtPrice(refundVal)}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700, fontSize: 13)),
+                );
+              }).toList(),
+            ),
+          );
+        },
+      )),
+    ]);
+  }
+
+  // ══════════════════════════════════════════
+  // TAB 3: WASTE
+  // ══════════════════════════════════════════
+  Widget _buildWasteTab(ColorScheme cs) {
+    if (wasteItems.isEmpty) return _emptyState('Tidak ada waste', Icons.delete_outline);
+
+    final totalLoss = wasteItems.fold<double>(0.0, (sum, w) => sum + _safeNum(w['financial_value']).abs());
+
+    return Column(children: [
+      Row(children: [
+        _summaryChip('${wasteItems.length} entri waste', Colors.red.shade100, Colors.red.shade800),
+        const SizedBox(width: 8),
+        _summaryChip('Kerugian: ${fmtPrice(totalLoss)}', Colors.red.shade100, Colors.red.shade700),
+      ]),
+      const SizedBox(height: 12),
+      Expanded(child: ListView.builder(
+        itemCount: wasteItems.length,
+        itemBuilder: (_, i) {
+          final w = wasteItems[i];
+          final name = w['bahan_name']?.toString() ?? w['bahan_baku_id']?.toString() ?? '-';
+          final unit = w['bahan_unit']?.toString() ?? '';
+          final qty = _safeNum(w['qty_change']).abs();
+          final loss = _safeNum(w['financial_value']).abs();
+          final notes = w['notes']?.toString() ?? '';
+          final timestamp = w['timestamp']?.toString() ?? '';
+          final time = timestamp.length > 10 ? timestamp.substring(11, 16) : '';
+
+          // Parse "by" from notes if available (format: "... [Oleh: name]")
+          String reporter = '-';
+          final byMatch = RegExp(r'\[(?:Oleh|Di-refund oleh|Dilaporkan oleh)[:\s]*([^\]]+)\]', caseSensitive: false).firstMatch(notes);
+          if (byMatch != null) reporter = byMatch.group(1)!.trim();
+
+          return Card(
+            elevation: 0, margin: const EdgeInsets.only(bottom: 6),
+            color: cs.surfaceBright,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.red.shade200)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              leading: Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(10)),
+                child: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade700),
+              ),
+              title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 2)} $unit · $time', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                if (reporter != '-') Text('Oleh: $reporter', style: TextStyle(fontSize: 11, color: Colors.red.shade600)),
+                if (notes.isNotEmpty) Text(notes.replaceAll(RegExp(r'\[.*?\]'), '').trim(), style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
+              ]),
+              trailing: Text('-${fmtPrice(loss)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red.shade700)),
+            ),
+          );
+        },
+      )),
+    ]);
+  }
+
+  Widget _emptyState(String msg, IconData icon) => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+    Icon(icon, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3)),
+    const SizedBox(height: 12),
+    Text(msg, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+  ]));
 }

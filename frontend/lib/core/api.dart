@@ -577,6 +577,38 @@ class Api {
         }).toList();
       }
 
+      // --- REPORTS: WASTE HISTORY (detail with date filter) ---
+      if (path == '/reports/waste-history') {
+        final dateStart = queryParams['date_start'] ?? _fmtDate(DateTime.now());
+        final dateEnd = queryParams['date_end'] ?? dateStart;
+        final rows = await db.rawQuery('''
+          SELECT il.*, b.name as bahan_name, b.unit as bahan_unit
+          FROM inventory_ledger il
+          LEFT JOIN bahan_baku b ON b.id = il.bahan_baku_id
+          WHERE il.transaction_type = 'WASTE'
+            AND DATE(il.timestamp) BETWEEN ? AND ?
+          ORDER BY il.timestamp DESC
+        ''', [dateStart, dateEnd]);
+        return rows;
+      }
+
+      // --- REPORTS: REFUND HISTORY (detail with date filter) ---
+      if (path == '/reports/refund-history') {
+        final dateStart = queryParams['date_start'] ?? _fmtDate(DateTime.now());
+        final dateEnd = queryParams['date_end'] ?? dateStart;
+        final rows = await db.rawQuery('''
+          SELECT t.id as tx_id, t.cashier_name, t.status, t.total_amount,
+                 t.created_at, t.updated_at,
+                 td.product_name, td.quantity, td.refunded_qty, td.sold_price, td.discount_percent
+          FROM transactions t
+          JOIN transaction_details td ON td.transaction_id = t.id
+          WHERE td.refunded_qty > 0
+            AND DATE(t.updated_at) BETWEEN ? AND ?
+          ORDER BY t.updated_at DESC
+        ''', [dateStart, dateEnd]);
+        return rows;
+      }
+
       // --- REPORTS: CHART 28 DAYS ---
       if (path == '/reports/chart28') {
         final past28 = DateTime.now().subtract(const Duration(days: 28)).toIso8601String().substring(0, 10);
