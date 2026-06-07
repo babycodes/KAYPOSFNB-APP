@@ -49,14 +49,14 @@ class AppTheme {
     const errorContainer = Color(0xFFFFCDD2);
     const onErrorContainer = Color(0xFF7F1D1D);
 
-    const surface = Color(0xFFFFF8F0);
-    const surfaceDim = Color(0xFFE8E0D6);
-    const surfaceBright = Color(0xFFFFFFFF);
-    const surfaceContainerLowest = Color(0xFFFFFFFF);
-    const surfaceContainerLow = Color(0xFFFFF3E8);
-    const surfaceContainer = Color(0xFFF5EDE3);
-    const surfaceContainerHigh = Color(0xFFEDE5DB);
-    const surfaceContainerHighest = Color(0xFFE5DDD3);
+    const surface = Color(0xFFF5F0E8);
+    const surfaceDim = Color(0xFFE0D8CE);
+    const surfaceBright = Color(0xFFFAF6F0);
+    const surfaceContainerLowest = Color(0xFFFCF8F2);
+    const surfaceContainerLow = Color(0xFFF2EAE0);
+    const surfaceContainer = Color(0xFFEAE2D8);
+    const surfaceContainerHigh = Color(0xFFE2DAD0);
+    const surfaceContainerHighest = Color(0xFFDAD2C8);
 
     const onSurface = Color(0xFF1A1210);
     const onSurfaceVariant = Color(0xFF5D4E44);

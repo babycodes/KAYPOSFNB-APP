@@ -1225,9 +1225,9 @@ class _KasirScreenState extends State<KasirScreen> {
                       final isPartial = txStatus == 'partial_refund';
                       return Container(margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isVoided ? Colors.red.shade50 : isPartial ? Colors.orange.shade50 : cs.surfaceContainer,
+                        color: cs.surfaceContainer,
                         borderRadius: BorderRadius.circular(12),
-                        border: isVoided ? Border.all(color: Colors.red.shade200) : isPartial ? Border.all(color: Colors.orange.shade200) : null,
+                        border: isVoided ? Border.all(color: Colors.red.shade300) : isPartial ? Border.all(color: Colors.orange.shade300) : null,
                       ),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Row(children: [
@@ -1240,7 +1240,7 @@ class _KasirScreenState extends State<KasirScreen> {
                         const SizedBox(height: 4),
                         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                           Text(tx['cashier_name'] ?? '-', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                          Text(fmtPrice(tx['total_amount'] ?? 0), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: isVoided ? cs.error : cs.primary, decoration: isVoided ? TextDecoration.lineThrough : null)),
+                          Text(fmtPrice(tx['total_amount'] ?? 0), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: isVoided ? cs.error : cs.onSurface, decoration: isVoided ? TextDecoration.lineThrough : null)),
                         ]),
                         const SizedBox(height: 4),
                         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Bayar: ${fmtPrice(tx['paid_amount'] ?? 0)}', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)), Text('Kembali: ${fmtPrice(tx['change_amount'] ?? 0)}', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant))]),
@@ -1591,7 +1591,7 @@ class _KasirScreenState extends State<KasirScreen> {
                       Row(children: [
                         Text('Transaksi #${txData['id']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         if (status == 'voided') ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)), child: const Text('VOID', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)))]
-                        else if (status == 'partial_refund') ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(6)), child: const Text('PARTIAL REFUND', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)))],
+                        else if (status == 'partial_refund') ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(6)), child: const Text('REFUND', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)))],
                       ]),
                       const SizedBox(height: 4),
                       Text('${txData['created_at'] ?? ''} • ${txData['cashier_name'] ?? ''}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),

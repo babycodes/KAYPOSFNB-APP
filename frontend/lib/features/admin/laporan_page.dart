@@ -250,11 +250,7 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
             final time = ca.length > 10 ? ca.substring(11, 16) : ca;
             final status = tx['status']?.toString() ?? 'completed';
             return DataRow(
-              color: WidgetStateProperty.resolveWith((s) {
-                if (status == 'voided') return Colors.red.shade50.withValues(alpha: 0.3);
-                if (status == 'partial_refund') return Colors.orange.shade50.withValues(alpha: 0.3);
-                return null;
-              }),
+              color: WidgetStateProperty.all(null),
               cells: [
                 DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text('#${tx['id']}', style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: cs.onSurfaceVariant)))),
                 DataCell(InkWell(onTap: () => _showDetailDialog(tx), child: Text(time))),
@@ -278,8 +274,8 @@ class _LaporanPageState extends State<LaporanPage> with SingleTickerProviderStat
       final status = tx['status']?.toString() ?? 'completed';
       return Card(
         elevation: 0, margin: const EdgeInsets.only(bottom: 6),
-        color: status == 'voided' ? Colors.red.shade50 : status == 'partial_refund' ? Colors.orange.shade50 : cs.surfaceBright,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+        color: cs.surfaceBright,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: status == 'voided' ? Colors.red.shade300 : status == 'partial_refund' ? Colors.orange.shade300 : cs.outlineVariant.withValues(alpha: 0.4))),
         child: InkWell(onTap: () => _showDetailDialog(tx), borderRadius: BorderRadius.circular(12),
           child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
