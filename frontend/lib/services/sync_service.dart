@@ -401,7 +401,7 @@ class SyncService {
         String dateCol = table == 'users' ? 'created_at' : (table == 'inventory_ledger' ? 'timestamp' : 'updated_at');
         List<Map<String, Object?>> rows;
         if (table == 'inventory_ledger') {
-          rows = await db.query(table, where: "datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT', 'STOCK_OPNAME', 'WASTE')", whereArgs: [lastPushLocal]);
+          rows = await db.query(table, where: "datetime($dateCol) > datetime(?) AND transaction_type IN ('RESTOCK', 'ADJUSTMENT')", whereArgs: [lastPushLocal]);
         } else if (table == 'settings') {
           rows = await db.query(table, where: 'updated_at IS NOT NULL AND datetime(updated_at) > datetime(?)', whereArgs: [lastPushLocal]);
         } else if (table == 'resep' || table == 'paket_items' || table == 'product_addon_categories') {
@@ -535,15 +535,22 @@ class SyncService {
                       saved++;
                       continue;
                     }
-                    // Existing: sync ALL fields including stock from Admin
-                    // This ensures Admin PC and Kasir tablet show identical data
-                    await txn.update(table, Map<String, dynamic>.from(rowData), where: 'id = ?', whereArgs: [id]);
+                    // Existing: preserve Kasir's local stock, only update metadata
+                    final updateData = Map<String, dynamic>.from(rowData);
+                    updateData.remove('stock');
+                    await txn.update(table, updateData, where: 'id = ?', whereArgs: [id]);
                     saved++;
                   } else if (table == 'inventory_ledger') {
-                    // Only insert new ledger records for history tracking
-                    // Stock is already correct from bahan_baku sync above, no delta needed
+                    // Only insert new ledger records, and apply qty_change to stock
                     if (exists.isEmpty) {
                       await txn.insert(table, Map<String, dynamic>.from(rowData));
+                      final qtyChange = (rowData['qty_change'] as num?)?.toDouble() ?? 0.0;
+                      final bbId = rowData['bahan_baku_id']?.toString();
+                      // Only apply delta if bahan_baku was NOT freshly inserted in this batch
+                      // (freshly inserted rows already have the correct stock from Admin)
+                      if (bbId != null && qtyChange != 0 && !newlyInsertedBahanBaku.contains(bbId)) {
+                        await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [qtyChange, bbId]);
+                      }
                       saved++;
                     }
                   } else if (table == 'settings') {
