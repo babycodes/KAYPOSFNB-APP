@@ -135,13 +135,13 @@ class _AdminShellState extends State<AdminShell> {
 
   Widget _buildSidebar(ColorScheme cs, AuthProvider auth, String currentPath, bool isMobile, bool showLabels) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Dark sidebar in light mode, surface-matched in dark mode
-    final sidebarBg = isDark ? cs.surfaceBright : AppTheme.sidebarDark;
-    final textColor = isDark ? cs.onSurface : AppTheme.sidebarText;
-    final textMuted = isDark ? cs.onSurfaceVariant : AppTheme.sidebarTextMuted;
-    final activeColor = isDark ? cs.primaryContainer : AppTheme.sidebarItemActive;
-    final activeTextColor = isDark ? cs.onPrimaryContainer : AppTheme.brandAmber;
-    final dividerColor = isDark ? cs.outlineVariant : const Color(0xFF3D302A);
+    // Green sidebar in light mode, coffee sidebar in dark mode
+    final sidebarBg = isDark ? cs.surfaceBright : AppTheme.sidebarLight;
+    final textColor = isDark ? cs.onSurface : AppTheme.sidebarLightText;
+    final textMuted = isDark ? cs.onSurfaceVariant : AppTheme.sidebarLightTextMuted;
+    final activeColor = isDark ? cs.primaryContainer : AppTheme.sidebarLightItemActive;
+    final activeTextColor = isDark ? cs.onPrimaryContainer : Colors.white;
+    final dividerColor = isDark ? cs.outlineVariant : const Color(0xFF2E7D32);
 
     return Container(
       decoration: BoxDecoration(
@@ -155,7 +155,7 @@ class _AdminShellState extends State<AdminShell> {
           decoration: BoxDecoration(
             gradient: isDark ? null : LinearGradient(
               begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: [AppTheme.sidebarDark, AppTheme.sidebarDarkAlt],
+              colors: [AppTheme.sidebarLight, AppTheme.sidebarLightAlt],
             ),
           ),
           child: Row(children: [
@@ -204,7 +204,7 @@ class _AdminShellState extends State<AdminShell> {
                   }
                 },
                 borderRadius: BorderRadius.circular(10),
-                hoverColor: isDark ? cs.surfaceContainerHigh : AppTheme.sidebarItemHover,
+                hoverColor: isDark ? cs.surfaceContainerHigh : AppTheme.sidebarLightItemHover,
                 splashColor: activeTextColor.withValues(alpha: 0.1),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),

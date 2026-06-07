@@ -10,14 +10,13 @@ class NoTransitionsBuilder extends PageTransitionsBuilder {
 
 class AppTheme {
   // ══════════════════════════════════════════
-  //  BRAND COLORS (FNB Warm Palette)
+  //  BRAND COLORS
   // ══════════════════════════════════════════
-  static const Color brandOrange = Color(0xFFE65100);
+  static const Color brandGreen = Color(0xFF2E7D32);
   static const Color brandAmber = Color(0xFFFFB74D);
   static const Color brandBrown = Color(0xFF3E2723);
-  static const Color brandCream = Color(0xFFFFF8F0);
 
-  // Sidebar colors (dark sidebar for premium feel)
+  // Dark sidebar (used in dark mode)
   static const Color sidebarDark = Color(0xFF2C1B14);
   static const Color sidebarDarkAlt = Color(0xFF1A1210);
   static const Color sidebarItemActive = Color(0x33FFB74D); // amber 20%
@@ -25,43 +24,52 @@ class AppTheme {
   static const Color sidebarText = Color(0xFFE0D6CC);
   static const Color sidebarTextMuted = Color(0xFF9C8A7C);
 
+  // Light sidebar (green-toned, used in light mode)
+  static const Color sidebarLight = Color(0xFF1B5E20);
+  static const Color sidebarLightAlt = Color(0xFF154D1A);
+  static const Color sidebarLightItemActive = Color(0x3CFFFFFF); // white 24%
+  static const Color sidebarLightItemHover = Color(0x14FFFFFF); // white 8%
+  static const Color sidebarLightText = Color(0xFFE8F5E9);
+  static const Color sidebarLightTextMuted = Color(0xFFA5D6A7);
+
   // ══════════════════════════════════════════
-  //  LIGHT THEME — "Warm Café"
+  //  LIGHT THEME — "Fresh Green"
   // ══════════════════════════════════════════
   static ThemeData get lightTheme {
-    const primary = Color(0xFFE65100);
+    const primary = Color(0xFF2E7D32);
     const onPrimary = Color(0xFFFFFFFF);
-    const primaryContainer = Color(0xFFFFE0B2);
-    const onPrimaryContainer = Color(0xFF4E1C00);
+    const primaryContainer = Color(0xFFC8E6C9);
+    const onPrimaryContainer = Color(0xFF1B5E20);
 
-    const secondary = Color(0xFF2E7D32);
+    const secondary = Color(0xFF00796B);
     const onSecondary = Color(0xFFFFFFFF);
-    const secondaryContainer = Color(0xFFC8E6C9);
-    const onSecondaryContainer = Color(0xFF1B5E20);
+    const secondaryContainer = Color(0xFFB2DFDB);
+    const onSecondaryContainer = Color(0xFF004D40);
 
-    const tertiary = Color(0xFF6D4C41);
+    const tertiary = Color(0xFF558B2F);
     const onTertiary = Color(0xFFFFFFFF);
-    const tertiaryContainer = Color(0xFFEFEBE9);
-    const onTertiaryContainer = Color(0xFF3E2723);
+    const tertiaryContainer = Color(0xFFDCEDC8);
+    const onTertiaryContainer = Color(0xFF33691E);
 
     const error = Color(0xFFD32F2F);
     const onError = Color(0xFFFFFFFF);
     const errorContainer = Color(0xFFFFCDD2);
     const onErrorContainer = Color(0xFF7F1D1D);
 
-    const surface = Color(0xFFF5F0E8);
-    const surfaceDim = Color(0xFFE0D8CE);
-    const surfaceBright = Color(0xFFFAF6F0);
-    const surfaceContainerLowest = Color(0xFFFCF8F2);
-    const surfaceContainerLow = Color(0xFFF2EAE0);
-    const surfaceContainer = Color(0xFFEAE2D8);
-    const surfaceContainerHigh = Color(0xFFE2DAD0);
-    const surfaceContainerHighest = Color(0xFFDAD2C8);
+    // Green-tinted surfaces with good contrast steps
+    const surface = Color(0xFFEFF5EE);         // base — light sage
+    const surfaceDim = Color(0xFFD5DDD4);       // dimmed
+    const surfaceBright = Color(0xFFF6FAF5);    // cards — slightly brighter
+    const surfaceContainerLowest = Color(0xFFF9FCF8);
+    const surfaceContainerLow = Color(0xFFE8F0E7);
+    const surfaceContainer = Color(0xFFDFE8DE);
+    const surfaceContainerHigh = Color(0xFFD6E0D5);
+    const surfaceContainerHighest = Color(0xFFCDD8CC);
 
-    const onSurface = Color(0xFF1A1210);
-    const onSurfaceVariant = Color(0xFF5D4E44);
-    const outline = Color(0xFF9C8A7C);
-    const outlineVariant = Color(0xFFE0D6CC);
+    const onSurface = Color(0xFF141E14);
+    const onSurfaceVariant = Color(0xFF435643);
+    const outline = Color(0xFF768E76);
+    const outlineVariant = Color(0xFFC2D4C1);
 
     return ThemeData(
       colorScheme: const ColorScheme(
@@ -114,9 +122,9 @@ class AppTheme {
         centerTitle: false,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Color(0xFF3E2723),
-        selectedItemColor: brandAmber,
-        unselectedItemColor: Color(0xFF9C8A7C),
+        backgroundColor: Color(0xFF1B5E20),
+        selectedItemColor: Colors.white,
+        unselectedItemColor: Color(0xFFA5D6A7),
         type: BottomNavigationBarType.fixed,
         elevation: 8,
       ),
@@ -166,7 +174,7 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        backgroundColor: brandBrown,
+        backgroundColor: const Color(0xFF1B5E20),
         contentTextStyle: const TextStyle(color: Colors.white, fontFamily: 'Inter'),
       ),
       dividerTheme: const DividerThemeData(color: outlineVariant, thickness: 0.5),

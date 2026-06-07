@@ -204,7 +204,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     end: Alignment.bottomRight,
                     colors: isDark
                         ? [cs.surface, cs.surfaceContainerLow]
-                        : [cs.surface, cs.surfaceContainerLow, const Color(0xFFFFF0E0)],
+                        : [cs.surface, cs.surfaceContainerLow, const Color(0xFFE0F0E0)],
                     stops: isDark ? [0.0, 1.0] : [0.0, 0.5, 1.0],
                   ),
                 ),
