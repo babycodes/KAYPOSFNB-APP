@@ -42,7 +42,7 @@ class Api {
           FROM categories c
           LEFT JOIN products p ON c.id = p.category_id
           GROUP BY c.id
-          ORDER BY c.name ASC
+          ORDER BY c.sort_order ASC, c.name ASC
         ''');
         final List<Map<String, dynamic>> result = [];
         for (final c in rows) {
@@ -915,10 +915,21 @@ class Api {
       if (path == '/categories') {
         final name = body?['name']?.toString().trim() ?? 'Kategori Baru';
         final icon = body?['icon']?.toString() ?? '📦';
-        final sortOrder = (body?['sort_order'] as num?)?.toInt() ?? 0;
+        int sortOrder = (body?['sort_order'] as num?)?.toInt() ?? 0;
         
         try {
           await db.transaction((txn) async {
+            // Auto-assign sort_order if 0 or not provided: use max + 1
+            if (sortOrder <= 0) {
+              final maxRow = await txn.rawQuery('SELECT COALESCE(MAX(sort_order), 0) as m FROM categories WHERE is_deleted = 0');
+              sortOrder = ((maxRow.first['m'] as num?)?.toInt() ?? 0) + 1;
+            } else {
+              // If sort_order is taken, shift existing items at that position and above
+              await txn.rawUpdate(
+                'UPDATE categories SET sort_order = sort_order + 1, updated_at = ? WHERE sort_order >= ? AND is_deleted = 0',
+                [DateTime.now().toIso8601String(), sortOrder],
+              );
+            }
             await txn.insert('categories', {
               'id': LocalDb.generateId(),
               'name': name,
@@ -1564,7 +1575,20 @@ class Api {
             Map<String, dynamic> data = {};
             if (body?['name'] != null) data['name'] = body!['name'].toString().trim();
             if (body?['icon'] != null) data['icon'] = body!['icon'].toString();
-            if (body?['sort_order'] != null) data['sort_order'] = (body!['sort_order'] as num?)?.toInt() ?? 0;
+            if (body?['sort_order'] != null) {
+              final newOrder = (body!['sort_order'] as num?)?.toInt() ?? 0;
+              // Get old sort_order
+              final oldRow = await txn.query('categories', columns: ['sort_order'], where: 'id = ?', whereArgs: [id]);
+              final oldOrder = oldRow.isNotEmpty ? ((oldRow.first['sort_order'] as num?)?.toInt() ?? 0) : 0;
+              if (newOrder != oldOrder && newOrder > 0) {
+                // Shift existing items at the target position
+                await txn.rawUpdate(
+                  'UPDATE categories SET sort_order = sort_order + 1, updated_at = ? WHERE sort_order >= ? AND id != ? AND is_deleted = 0',
+                  [DateTime.now().toIso8601String(), newOrder, id],
+                );
+              }
+              data['sort_order'] = newOrder;
+            }
             
             if (data.isNotEmpty) {
               data['updated_at'] = DateTime.now().toIso8601String();

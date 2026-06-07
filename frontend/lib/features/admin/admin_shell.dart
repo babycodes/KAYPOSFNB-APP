@@ -234,7 +234,7 @@ class _AdminShellState extends State<AdminShell> {
                 message: showLabels ? '' : 'Kirim Update Master',
                 child: InkWell(
                   onTap: () async {
-                    final confirm = await showDialog<bool>(
+                    final result = await showDialog<String>(
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: const Text('Kirim Update Master?'),
@@ -242,12 +242,19 @@ class _AdminShellState extends State<AdminShell> {
                           ? 'Ada $pushCount perubahan data master yang belum dikirim. Kirim sekarang agar Kasir dapat mengunduhnya?'
                           : 'Kirim perubahan data master (Produk, Kategori, Diskon, dll) terbaru ke server agar Kasir dapat mengunduhnya?'),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kirim')),
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, 'force'),
+                            child: Text('Kirim Ulang Semua', style: TextStyle(color: Colors.orange.shade700, fontWeight: FontWeight.bold)),
+                          ),
+                          FilledButton(onPressed: () => Navigator.pop(ctx, 'normal'), child: const Text('Kirim')),
                         ],
                       ),
                     );
-                    if (confirm == true && context.mounted) {
+                    if (result != null && context.mounted) {
+                      if (result == 'force') {
+                        await SyncService.resetPushCursor();
+                      }
                       final msg = await SyncService.pushMasterData();
                       if (!context.mounted) return;
                       SyncService.getPendingPushCount();

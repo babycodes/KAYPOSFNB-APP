@@ -345,6 +345,14 @@ class SyncService {
     }
   }
 
+  /// Resets the push cursor to epoch so ALL local data will be pushed.
+  /// Used after server data wipe, DB restore, or fresh server setup.
+  static Future<void> resetPushCursor() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('last_master_push');
+    await getPendingPushCount();
+  }
+
   static const List<String> _masterTables = [
     'categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts',
     'products', 'bahan_baku', 'addons', 'resep', 'paket_items',
