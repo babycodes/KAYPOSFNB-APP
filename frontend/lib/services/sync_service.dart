@@ -535,22 +535,15 @@ class SyncService {
                       saved++;
                       continue;
                     }
-                    // Existing: preserve Kasir's local stock, only update metadata
-                    final updateData = Map<String, dynamic>.from(rowData);
-                    updateData.remove('stock');
-                    await txn.update(table, updateData, where: 'id = ?', whereArgs: [id]);
+                    // Existing: sync ALL fields including stock from Admin
+                    // This ensures Admin PC and Kasir tablet show identical data
+                    await txn.update(table, Map<String, dynamic>.from(rowData), where: 'id = ?', whereArgs: [id]);
                     saved++;
                   } else if (table == 'inventory_ledger') {
-                    // Only insert new ledger records, and apply qty_change to stock
+                    // Only insert new ledger records for history tracking
+                    // Stock is already correct from bahan_baku sync above, no delta needed
                     if (exists.isEmpty) {
                       await txn.insert(table, Map<String, dynamic>.from(rowData));
-                      final qtyChange = (rowData['qty_change'] as num?)?.toDouble() ?? 0.0;
-                      final bbId = rowData['bahan_baku_id']?.toString();
-                      // Only apply delta if bahan_baku was NOT freshly inserted in this batch
-                      // (freshly inserted rows already have the correct stock from Admin)
-                      if (bbId != null && qtyChange != 0 && !newlyInsertedBahanBaku.contains(bbId)) {
-                        await txn.rawUpdate('UPDATE bahan_baku SET stock = stock + ? WHERE id = ?', [qtyChange, bbId]);
-                      }
                       saved++;
                     }
                   } else if (table == 'settings') {
