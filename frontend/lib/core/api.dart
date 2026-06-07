@@ -578,9 +578,19 @@ class Api {
       }
 
       // --- REPORTS: WASTE HISTORY (detail with date filter) ---
-      if (path == '/reports/waste-history') {
-        final dateStart = queryParams['date_start'] ?? _fmtDate(DateTime.now());
-        final dateEnd = queryParams['date_end'] ?? dateStart;
+      if (path.startsWith('/reports/waste-history')) {
+        final now = DateTime.now();
+        String dateStart = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        String dateEnd = dateStart;
+        if (path.contains('?')) {
+          for (final part in path.split('?').last.split('&')) {
+            final kv = part.split('=');
+            if (kv.length == 2) {
+              if (kv[0] == 'date_start') dateStart = kv[1];
+              if (kv[0] == 'date_end') dateEnd = kv[1];
+            }
+          }
+        }
         final rows = await db.rawQuery('''
           SELECT il.*, b.name as bahan_name, b.unit as bahan_unit
           FROM inventory_ledger il
@@ -593,9 +603,19 @@ class Api {
       }
 
       // --- REPORTS: REFUND HISTORY (detail with date filter) ---
-      if (path == '/reports/refund-history') {
-        final dateStart = queryParams['date_start'] ?? _fmtDate(DateTime.now());
-        final dateEnd = queryParams['date_end'] ?? dateStart;
+      if (path.startsWith('/reports/refund-history')) {
+        final now = DateTime.now();
+        String dateStart = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        String dateEnd = dateStart;
+        if (path.contains('?')) {
+          for (final part in path.split('?').last.split('&')) {
+            final kv = part.split('=');
+            if (kv.length == 2) {
+              if (kv[0] == 'date_start') dateStart = kv[1];
+              if (kv[0] == 'date_end') dateEnd = kv[1];
+            }
+          }
+        }
         final rows = await db.rawQuery('''
           SELECT t.id as tx_id, t.cashier_name, t.status, t.total_amount,
                  t.created_at, t.updated_at,
