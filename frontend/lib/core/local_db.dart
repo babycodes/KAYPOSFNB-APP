@@ -207,6 +207,64 @@ class LocalDb {
         // Module: Partial Refund support columns
         try { await db.execute("ALTER TABLE transactions ADD COLUMN status TEXT DEFAULT 'completed'"); } catch (_) {}
         try { await db.execute('ALTER TABLE transaction_details ADD COLUMN refunded_qty REAL DEFAULT 0'); } catch (_) {}
+
+        // ──────────────────────────────────────────────────
+        // Module: Cashflow (arus kas manual)
+        // ──────────────────────────────────────────────────
+        try {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS cashflow_categories (
+              id         TEXT PRIMARY KEY,
+              name       TEXT NOT NULL,
+              type       TEXT NOT NULL DEFAULT 'expense',
+              icon       TEXT DEFAULT 'category',
+              is_system  INTEGER DEFAULT 0,
+              created_at TEXT DEFAULT (datetime('now','localtime')),
+              updated_at TEXT DEFAULT (datetime('now','localtime'))
+            )
+          ''');
+          // Seed default categories if empty
+          final catCount = await db.rawQuery('SELECT COUNT(*) as c FROM cashflow_categories');
+          if ((catCount.first['c'] as num?)?.toInt() == 0) {
+            final defaults = [
+              {'name': 'Modal Awal', 'type': 'income', 'icon': 'account_balance', 'is_system': 1},
+              {'name': 'Setoran Tambahan', 'type': 'income', 'icon': 'add_circle', 'is_system': 1},
+              {'name': 'Pendapatan Lain', 'type': 'income', 'icon': 'attach_money', 'is_system': 0},
+              {'name': 'Gaji Karyawan', 'type': 'expense', 'icon': 'people', 'is_system': 1},
+              {'name': 'Listrik & Air', 'type': 'expense', 'icon': 'bolt', 'is_system': 1},
+              {'name': 'Sewa Tempat', 'type': 'expense', 'icon': 'store', 'is_system': 1},
+              {'name': 'Operasional', 'type': 'expense', 'icon': 'build', 'is_system': 0},
+              {'name': 'Perlengkapan', 'type': 'expense', 'icon': 'inventory_2', 'is_system': 0},
+              {'name': 'Lain-lain', 'type': 'expense', 'icon': 'more_horiz', 'is_system': 0},
+            ];
+            for (final cat in defaults) {
+              await db.insert('cashflow_categories', {
+                'id': generateId(),
+                ...cat,
+              });
+            }
+          }
+        } catch (_) {}
+        try {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS cashflows (
+              id             TEXT PRIMARY KEY,
+              type           TEXT NOT NULL,
+              category_id    TEXT NOT NULL,
+              category_name  TEXT DEFAULT '',
+              amount         REAL NOT NULL DEFAULT 0,
+              description    TEXT DEFAULT '',
+              recorded_by    TEXT,
+              recorded_name  TEXT,
+              date           TEXT NOT NULL,
+              created_at     TEXT DEFAULT (datetime('now','localtime')),
+              updated_at     TEXT DEFAULT (datetime('now','localtime')),
+              is_synced      INTEGER DEFAULT 0
+            )
+          ''');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_cashflows_date ON cashflows(date)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_cashflows_type ON cashflows(type)');
+        } catch (_) {}
       },
       onCreate: (db, version) async {
         // ──────────────────────────────────────────────────
