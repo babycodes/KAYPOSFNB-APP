@@ -183,20 +183,49 @@ jobs:
           $VERSION = "${{ github.event.inputs.version_tag || github.ref_name }}"
           $VERSION_NUM = $VERSION.TrimStart('v')
           
+          # Download VC++ Redistributable for bundling
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+          
           $SetupScript = @"
           [Setup]
           AppName=KAYPOSFNB
           AppVersion=$VERSION_NUM
+          AppPublisher=BabyCodes
+          AppPublisherURL=https://github.com/babycodes/KAYPOSFNB-APP
           DefaultDirName={autopf}\KAYPOSFNB
+          DefaultGroupName=KAYPOSFNB
           OutputDir=.
           OutputBaseFilename=KAYPOSFNB-$VERSION
-          Compression=lzma
+          Compression=lzma2
           SolidCompression=yes
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          PrivilegesRequired=lowest
+          SetupIconFile=windows\runner\resources\app_icon.ico
+          UninstallDisplayIcon={app}\kayposfnb.exe
+          WizardStyle=modern
+
+          [Languages]
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
+
           [Files]
           Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          Source: "vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+
           [Icons]
-          Name: "{autoprograms}\KAYPOSFNB"; Filename: "{app}\kayposfnb.exe"
-          Name: "{autodesktop}\KAYPOSFNB"; Filename: "{app}\kayposfnb.exe"
+          Name: "{group}\KAYPOSFNB"; Filename: "{app}\kayposfnb.exe"
+          Name: "{group}\Uninstall KAYPOSFNB"; Filename: "{uninstallexe}"
+          Name: "{autodesktop}\KAYPOSFNB"; Filename: "{app}\kayposfnb.exe"; Tasks: desktopicon
+
+          [Run]
+          Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Visual C++ Runtime..."; Flags: waituntilterminated skipifsilent
+          Filename: "{app}\kayposfnb.exe"; Description: "Launch KAYPOSFNB"; Flags: nowait postinstall skipifsilent
+
+          [UninstallDelete]
+          Type: filesandordirs; Name: "{app}"
           "@
           Set-Content -Path installer.iss -Value $SetupScript
           & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" installer.iss
