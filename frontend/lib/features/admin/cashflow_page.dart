@@ -252,6 +252,7 @@ class _CashflowPageState extends State<CashflowPage> with SingleTickerProviderSt
           Text(
             '${amount < 0 ? '-' : ''}${fmtPrice(amount.abs())}',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+          ),
         ])),
       ]),
     );
