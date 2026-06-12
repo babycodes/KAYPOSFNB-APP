@@ -382,7 +382,8 @@ class SyncService {
     'categories', 'kategori_bahan', 'users', 'addon_categories', 'discounts',
     'products', 'bahan_baku', 'addons', 'resep', 'paket_items',
     'product_addon_categories', 'inventory_ledger', 'settings',
-    'transactions', 'transaction_details'
+    'transactions', 'transaction_details',
+    'cashflow_categories', 'cashflows'
   ];
 
   /// ADMIN manually pushes all master data to the server for Kasir to pick up.
@@ -530,7 +531,8 @@ class SyncService {
           'bahan_baku', 'products',
           'addons',
           'resep', 'paket_items', 'product_addon_categories', 'inventory_ledger', 'settings',
-          'transactions', 'transaction_details'
+          'transactions', 'transaction_details',
+          'cashflow_categories', 'cashflows'
         ];
 
         int saved = 0;
