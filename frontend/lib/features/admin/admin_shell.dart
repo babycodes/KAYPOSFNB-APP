@@ -28,9 +28,9 @@ class _AdminShellState extends State<AdminShell> {
     {'href': '/admin/kategori-bahan', 'label': 'Kategori Inventory', 'icon': Icons.category_rounded},
     {'href': '/admin/paket', 'label': 'Menu Paket', 'icon': Icons.fastfood_rounded},
     {'href': '/admin/diskon', 'label': 'Diskon', 'icon': Icons.discount_rounded},
+    {'href': '/admin/cashflow', 'label': 'Cashflow', 'icon': Icons.account_balance_wallet_rounded},
     {'href': '/admin/kartu-stok', 'label': 'Stok Opname', 'icon': Icons.fact_check_rounded},
     {'href': '/admin/laporan', 'label': 'Laporan', 'icon': Icons.bar_chart_rounded},
-    {'href': '/admin/cashflow', 'label': 'Cashflow', 'icon': Icons.account_balance_wallet_rounded},
     {'href': '/admin/karyawan', 'label': 'Karyawan', 'icon': Icons.people_rounded},
     {'href': '/admin/settings', 'label': 'Pengaturan', 'icon': Icons.settings_rounded},
   ];
