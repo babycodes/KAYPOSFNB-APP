@@ -251,8 +251,7 @@ class _CashflowPageState extends State<CashflowPage> with SingleTickerProviderSt
           const SizedBox(height: 2),
           Text(
             '${amount < 0 ? '-' : ''}${fmtPrice(amount.abs())}',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color.shade700),
-          ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
         ])),
       ]),
     );
@@ -335,7 +334,7 @@ class _CashflowPageState extends State<CashflowPage> with SingleTickerProviderSt
                 isAuto
                   ? (isIncome ? Icons.point_of_sale_rounded : Icons.inventory_rounded)
                   : (isIncome ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded),
-                color: color.shade700,
+                color: color,
                 size: 18,
               ),
             ),
@@ -375,7 +374,7 @@ class _CashflowPageState extends State<CashflowPage> with SingleTickerProviderSt
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text(
                 '${isIncome ? '+' : '-'}${fmtPrice(amount)}',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: color.shade700),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: color),
               ),
               if (!isAuto) ...[
                 const SizedBox(height: 4),
