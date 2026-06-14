@@ -9,3 +9,9 @@ frontend/android/local.properties
 # Build artifacts
 frontend/build/
 kayposfnbserver/
+
+# Debug & temp files
+*.db
+!kayposfnbserver/prisma/dev.db
+*.log
+*.pyc
