@@ -17,6 +17,10 @@ class _CashflowPageState extends State<CashflowPage> with SingleTickerProviderSt
 
   List<Map<String, dynamic>> _entries = [];
   List<Map<String, dynamic>> _categories = [];
+  // Pre-computed lists for each tab (avoids per-frame filtering)
+  List<Map<String, dynamic>> _allItems = [];
+  List<Map<String, dynamic>> _incomeItems = [];
+  List<Map<String, dynamic>> _expenseItems = [];
   double _salesIncome = 0;
   double _restockExpense = 0;
   double _manualIncome = 0;
@@ -81,10 +85,42 @@ class _CashflowPageState extends State<CashflowPage> with SingleTickerProviderSt
       ''', [from, to]);
       _restockExpense = (restockResult.first['total'] as num?)?.toDouble() ?? 0;
 
+      // Pre-compute filtered lists for each tab
+      _rebuildFilteredLists();
     } catch (e) {
       debugPrint('Cashflow load error: $e');
     }
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  void _rebuildFilteredLists() {
+    List<Map<String, dynamic>> buildItems(String? typeFilter) {
+      final List<Map<String, dynamic>> items = [];
+      if (_salesIncome > 0 && (typeFilter == null || typeFilter == 'income')) {
+        items.add({
+          '_isAuto': true, 'type': 'income',
+          'category_name': 'Penjualan Kasir', 'amount': _salesIncome,
+          'description': 'Otomatis dari transaksi kasir',
+          'date': '${_fmtDate(_dateRange.start)} ~ ${_fmtDate(_dateRange.end)}',
+        });
+      }
+      if (_restockExpense > 0 && (typeFilter == null || typeFilter == 'expense')) {
+        items.add({
+          '_isAuto': true, 'type': 'expense',
+          'category_name': 'Restock Bahan Baku', 'amount': _restockExpense,
+          'description': 'Otomatis dari pembelian bahan',
+          'date': '${_fmtDate(_dateRange.start)} ~ ${_fmtDate(_dateRange.end)}',
+        });
+      }
+      final filtered = typeFilter == null
+        ? _entries
+        : _entries.where((e) => e['type'] == typeFilter).toList();
+      items.addAll(filtered);
+      return items;
+    }
+    _allItems = buildItems(null);
+    _incomeItems = buildItems('income');
+    _expenseItems = buildItems('expense');
   }
 
   double get _totalIncome => _salesIncome + _manualIncome;
@@ -217,9 +253,9 @@ class _CashflowPageState extends State<CashflowPage> with SingleTickerProviderSt
         child: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(controller: _tabCtrl, children: [
-              _buildEntryList(null, cs),
-              _buildEntryList('income', cs),
-              _buildEntryList('expense', cs),
+              _buildEntryList(_allItems, cs),
+              _buildEntryList(_incomeItems, cs),
+              _buildEntryList(_expenseItems, cs),
             ]),
       ),
     ]);
@@ -261,41 +297,7 @@ class _CashflowPageState extends State<CashflowPage> with SingleTickerProviderSt
   // ══════════════════════════════════════════
   //  ENTRY LIST
   // ══════════════════════════════════════════
-  Widget _buildEntryList(String? typeFilter, ColorScheme cs) {
-    // Build combined list: auto entries (sales/restock) + manual entries
-    final List<Map<String, dynamic>> allItems = [];
-
-    // Add auto-generated sales income summary as a virtual entry
-    if (_salesIncome > 0 && (typeFilter == null || typeFilter == 'income')) {
-      allItems.add({
-        '_isAuto': true,
-        'type': 'income',
-        'category_name': 'Penjualan Kasir',
-        'amount': _salesIncome,
-        'description': 'Otomatis dari transaksi kasir',
-        'date': '${_fmtDate(_dateRange.start)} ~ ${_fmtDate(_dateRange.end)}',
-        'icon': 'point_of_sale',
-      });
-    }
-
-    // Add auto restock expense
-    if (_restockExpense > 0 && (typeFilter == null || typeFilter == 'expense')) {
-      allItems.add({
-        '_isAuto': true,
-        'type': 'expense',
-        'category_name': 'Restock Bahan Baku',
-        'amount': _restockExpense,
-        'description': 'Otomatis dari pembelian bahan',
-        'date': '${_fmtDate(_dateRange.start)} ~ ${_fmtDate(_dateRange.end)}',
-        'icon': 'inventory',
-      });
-    }
-
-    // Add manual entries
-    final filtered = typeFilter == null
-      ? _entries
-      : _entries.where((e) => e['type'] == typeFilter).toList();
-    allItems.addAll(filtered);
+  Widget _buildEntryList(List<Map<String, dynamic>> allItems, ColorScheme cs) {
 
     if (allItems.isEmpty) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
