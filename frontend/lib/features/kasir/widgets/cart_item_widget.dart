@@ -75,6 +75,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
 
     final product = widget.item['product'];
     final productName = (product is Map ? product['name'] : null)?.toString() ?? 'Item';
+    final isPaket = product is Map && product['is_paket']?.toString() == '1';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -82,7 +83,15 @@ class _CartItemWidgetState extends State<CartItemWidget> {
       child: Row(children: [
         // Name + unit info
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(productName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: cs.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Row(children: [
+            if (isPaket) Container(
+              margin: const EdgeInsets.only(right: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(color: Colors.deepPurple.shade100, borderRadius: BorderRadius.circular(4)),
+              child: Text('PAKET', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.deepPurple.shade700, letterSpacing: 0.5)),
+            ),
+            Expanded(child: Text(productName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: cs.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          ]),
           if (widget.item['addon_summary'] != null && widget.item['addon_summary'].toString().isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2, bottom: 2),

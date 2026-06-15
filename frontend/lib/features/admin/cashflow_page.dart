@@ -54,8 +54,13 @@ class _CashflowPageState extends State<CashflowPage> with SingleTickerProviderSt
       final from = _fmtDate(_dateRange.start);
       final to = _fmtDate(_dateRange.end);
 
-      // Load categories
-      _categories = (await db.query('cashflow_categories', orderBy: 'type, name')).map((e) => Map<String, dynamic>.from(e)).toList();
+      // Load categories (deduplicate by name+type to prevent double dropdown items)
+      final rawCats = (await db.query('cashflow_categories', orderBy: 'type, name')).map((e) => Map<String, dynamic>.from(e)).toList();
+      final seen = <String>{};
+      _categories = rawCats.where((c) {
+        final key = '${c['type']}_${c['name']}';
+        return seen.add(key); // returns false if already in set
+      }).toList();
 
       // Load manual cashflow entries
       _entries = (await db.query('cashflows',
