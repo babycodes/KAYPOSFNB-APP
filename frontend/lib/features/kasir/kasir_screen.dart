@@ -88,7 +88,14 @@ class _KasirScreenState extends State<KasirScreen> {
 
   bool _hasRecipe(dynamic p) {
     if (p['is_paket']?.toString() == '1') {
-      return p['paket_items'] is List && (p['paket_items'] as List).isNotEmpty;
+      if (!(p['paket_items'] is List) || (p['paket_items'] as List).isEmpty) return false;
+      for (final pi in (p['paket_items'] as List)) {
+        final childId = pi['product_id']?.toString() ?? '';
+        if (!_recipes.containsKey(childId) || _recipes[childId]!.isEmpty) {
+          return false;
+        }
+      }
+      return true;
     }
     final pid = p['id']?.toString() ?? '';
     return _recipes.containsKey(pid) && _recipes[pid]!.isNotEmpty;
