@@ -63,6 +63,17 @@ class _PaketPageState extends State<PaketPage> {
     }).toList();
   }
 
+  bool _hasInvalidChildProduct(dynamic p) {
+    if (p['paket_items'] is! List) return false;
+    for (final pi in (p['paket_items'] as List)) {
+      final childProduct = products.where((prod) => prod['id'] == pi['product_id']).firstOrNull;
+      if (childProduct != null) {
+        if (childProduct['available_portions'] == null) return true;
+      }
+    }
+    return false;
+  }
+
   void _openForm([dynamic product]) {
     if (categories.isEmpty) {
       showAdminToast(context, 'Buat kategori terlebih dahulu!');
@@ -225,6 +236,13 @@ class _PaketPageState extends State<PaketPage> {
                                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                       decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(4)),
                                       child: Text('PAKET KOSONG', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+                                    ),
+                                  ] else if (_hasInvalidChildProduct(p)) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(4)),
+                                      child: Text('PRODUK INVENTORY KOSONG', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red.shade800)),
                                     ),
                                   ],
                                 ]),
