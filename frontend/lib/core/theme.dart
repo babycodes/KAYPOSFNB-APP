@@ -167,7 +167,8 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: surfaceContainer,
         selectedColor: primaryContainer,
-        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: onSurface),
+        secondaryLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: onPrimaryContainer),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         side: const BorderSide(color: outlineVariant),
       ),
@@ -331,7 +332,8 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: surfaceContainer,
         selectedColor: primaryContainer,
-        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: onSurface),
+        secondaryLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: onPrimaryContainer),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         side: const BorderSide(color: outlineVariant),
       ),

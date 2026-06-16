@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth_provider.dart';
 import '../../core/api.dart';
 import '../../core/theme.dart';
+import '../../core/theme_provider.dart';
 import '../../services/sync_service.dart';
 
 class AdminShell extends StatefulWidget {
@@ -126,6 +127,12 @@ class _AdminShellState extends State<AdminShell> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface)),
                 Text('Halo, ${auth.userName}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
               ])),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => context.read<ThemeProvider>().toggle(),
+                icon: Icon(Theme.of(context).brightness == Brightness.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: cs.onSurfaceVariant),
+                tooltip: 'Ganti Tema',
+              ),
             ]),
           ),
           Expanded(child: Padding(padding: const EdgeInsets.all(16), child: widget.child)),
