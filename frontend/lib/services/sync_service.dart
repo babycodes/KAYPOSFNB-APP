@@ -142,7 +142,8 @@ class SyncService {
         return 'Gagal: ${body['error'] ?? res.statusCode}';
       }
     } catch (e) {
-      return 'Koneksi gagal: $e';
+      debugPrint('pushTransactions error: $e');
+      return 'Server tidak tersambung. Periksa koneksi.';
     }
   }
 
@@ -307,7 +308,8 @@ class SyncService {
         return 'Gagal menarik laporan: ${res.statusCode}';
       }
     } catch (e) {
-      return 'Koneksi gagal: $e';
+      debugPrint('pullReports error: $e');
+      return 'Server tidak tersambung. Periksa koneksi.';
     }
   }
 
@@ -456,7 +458,8 @@ class SyncService {
         return 'Gagal: ${body['error'] ?? res.statusCode}';
       }
     } catch (e) {
-      return 'Koneksi gagal: $e';
+      debugPrint('pushMasterData error: $e');
+      return 'Server tidak tersambung. Periksa koneksi.';
     }
   }
 
@@ -625,7 +628,8 @@ class SyncService {
         return 'Gagal: ${res.statusCode}';
       }
     } catch (e) {
-      return 'Koneksi gagal: $e';
+      debugPrint('pullMasterData error: $e');
+      return 'Server tidak tersambung. Periksa koneksi.';
     }
   }
 }
