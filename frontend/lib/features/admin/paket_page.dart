@@ -215,11 +215,19 @@ class _PaketPageState extends State<PaketPage> {
                           Expanded(child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Row(children: [
-                                Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isActive ? cs.onSurface : cs.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                if ((p['is_paket'] as num?)?.toInt() == 1) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: Colors.deepOrange, borderRadius: BorderRadius.circular(4)), child: const Text('PAKET', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))],
-                                if (!isActive) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(4)), child: Text('NON-AKTIF', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onErrorContainer)))],
-                              ]),
+                                Row(children: [
+                                  Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isActive ? cs.onSurface : cs.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                  if ((p['is_paket'] as num?)?.toInt() == 1) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: Colors.deepOrange, borderRadius: BorderRadius.circular(4)), child: const Text('PAKET', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))],
+                                  if (!isActive) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(4)), child: Text('NON-AKTIF', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onErrorContainer)))],
+                                  if ((p['paket_items'] as List?)?.isEmpty ?? true) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(4)),
+                                      child: Text('PAKET KOSONG', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+                                    ),
+                                  ],
+                                ]),
                               const SizedBox(height: 4),
                               Wrap(spacing: 6, runSpacing: 4, children: [
                                 Container(

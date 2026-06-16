@@ -219,10 +219,18 @@ class _ProdukPageState extends State<ProdukPage> {
                           Expanded(child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Row(children: [
-                                Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isActive ? cs.onSurface : cs.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                if (!isActive) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(4)), child: Text('NON-AKTIF', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onErrorContainer)))],
-                              ]),
+                                Row(children: [
+                                  Flexible(child: Text(p['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isActive ? cs.onSurface : cs.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                  if (!isActive) ...[const SizedBox(width: 6), Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(4)), child: Text('NON-AKTIF', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onErrorContainer)))],
+                                  if (p['available_portions'] == null) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(4)),
+                                      child: Text('INVENTORY KOSONG', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+                                    ),
+                                  ],
+                                ]),
                               const SizedBox(height: 4),
                               Wrap(spacing: 6, runSpacing: 4, children: [
                                 Container(
