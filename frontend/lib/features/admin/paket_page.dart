@@ -880,6 +880,7 @@ class PaketItemsModal extends StatefulWidget {
 class _PaketItemsModalState extends State<PaketItemsModal> {
   List<dynamic> _items = [];
   List<dynamic> _allProducts = [];
+  List<dynamic> _rawProducts = [];
   bool _isLoading = true;
   dynamic _selectedProductId;
   final _qtyCtrl = TextEditingController(text: '1');
@@ -900,8 +901,9 @@ class _PaketItemsModalState extends State<PaketItemsModal> {
       if (mounted) {
         setState(() {
           _items = futures[0] as List;
+          _rawProducts = futures[1] as List;
           // Filter out the paket itself and other pakets from selection
-          _allProducts = (futures[1] as List).where((p) {
+          _allProducts = _rawProducts.where((p) {
             final id = p['id'];
             final isPaket = (p['is_paket'] as num?)?.toInt() == 1;
             return id != widget.product['id'] && !isPaket && p['is_active'] == 1;
@@ -1038,11 +1040,24 @@ class _PaketItemsModalState extends State<PaketItemsModal> {
                   itemCount: _items.length,
                   itemBuilder: (context, i) {
                     final item = _items[i];
+                    final p = _rawProducts.where((prod) => prod['id'] == item['product_id']).firstOrNull;
+                    final isInvalid = p != null && p['available_portions'] == null;
+                    
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: const Icon(Icons.fastfood),
-                        title: Text('${item['qty']}x ${item['product_name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        title: Row(children: [
+                          Flexible(child: Text('${item['qty']}x ${item['product_name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          if (isInvalid) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(4)),
+                              child: Text('INVENTORY KOSONG', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red.shade800)),
+                            ),
+                          ],
+                        ]),
                         subtitle: Text(fmtPrice((item['product_price'] as num?)?.toDouble() ?? 0)),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
