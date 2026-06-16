@@ -13,6 +13,7 @@ class ProdukPage extends StatefulWidget {
 class _ProdukPageState extends State<ProdukPage> {
   List<dynamic> products = [];
   List<dynamic> categories = [];
+  List<dynamic> inventoryItems = [];
   bool isLoading = true;
   String activeTab = 'active'; // 'active' or 'inactive'
   String searchQuery = '';
@@ -28,12 +29,14 @@ class _ProdukPageState extends State<ProdukPage> {
     try {
       final futures = await Future.wait([
         Api.get('/products/all'),
-        Api.get('/categories')
+        Api.get('/categories'),
+        Api.get('/bahan-baku')
       ]);
       if (mounted) {
         setState(() {
         products = futures[0] as List;
         categories = futures[1] as List;
+        inventoryItems = futures[2] as List;
         isLoading = false;
       });
       }
@@ -64,8 +67,8 @@ class _ProdukPageState extends State<ProdukPage> {
   }
 
   void _openForm([dynamic product]) {
-    if (categories.isEmpty) {
-      showAdminToast(context, 'Buat kategori terlebih dahulu!');
+    if (categories.isEmpty || inventoryItems.isEmpty) {
+      showAdminToast(context, 'Kategori dan Inventory harus dibuat minimal satu terlebih dahulu!');
       return;
     }
     showDialog(context: context, builder: (_) => ProdukFormDialog(

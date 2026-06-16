@@ -86,10 +86,20 @@ class _KasirScreenState extends State<KasirScreen> {
     return s + price * qty;
   });
 
-  List<dynamic> get comboProducts => products.where((p) => p['is_paket']?.toString() == '1').toList();
+  bool _hasRecipe(dynamic p) {
+    if (p['is_paket']?.toString() == '1') {
+      return p['paket_items'] is List && (p['paket_items'] as List).isNotEmpty;
+    }
+    final pid = p['id']?.toString() ?? '';
+    return _recipes.containsKey(pid) && _recipes[pid]!.isNotEmpty;
+  }
+
+  List<dynamic> get comboProducts => products.where((p) => p['is_paket']?.toString() == '1' && _hasRecipe(p)).toList();
 
   List<dynamic> get filteredProducts => products.where((p) {
     bool matchCat = false;
+    if (!_hasRecipe(p)) return false;
+
     if (selectedCategory == -999) {
       try { matchCat = _getProductDiscount(p) > 0; } catch (_) { matchCat = false; }
     } else if (selectedCategory == -998) {
